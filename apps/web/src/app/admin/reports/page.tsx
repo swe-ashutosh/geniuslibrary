@@ -591,11 +591,11 @@ export default function AdminReportsPage() {
               onChange={(e) => setSelectedShift(e.target.value)}
               className="px-3 py-1.5 rounded-xl border border-[#E5E7EB] bg-[#F8F7F4] dark:border-zinc-700 dark:bg-zinc-800 text-xs font-bold text-[#0A2E5C] dark:text-white"
             >
-              <option value="all">All Shifts Combined</option>
-              <option value="morning">Morning Shift (06 AM - 12 PM)</option>
-              <option value="afternoon">Afternoon Shift (12 PM - 06 PM)</option>
-              <option value="evening">Evening Shift (06 PM - 10 PM)</option>
-              <option value="fullday">Full Day Shift</option>
+              <option value="all">All Shifts &amp; Plans</option>
+              <option value="standard">Standard (3 Hours Pass)</option>
+              <option value="prime">Pro / Prime (6 Hours Pass)</option>
+              <option value="reserve">Reserved Dedicated Desks</option>
+              <option value="night">Night Shift Ultra (10 PM - 06 AM)</option>
             </select>
 
             <button
@@ -1016,7 +1016,7 @@ export default function AdminReportsPage() {
                         {a.seatNumber ? `Desk #${a.seatNumber}` : "General Hall"}
                       </td>
                       <td className="py-3 px-4 text-zinc-600 dark:text-zinc-300">
-                        {a.shiftName || "Morning Shift"}
+                        {a.shiftName || "Standard (3 Hours Pass)"}
                       </td>
                       <td className="py-3 px-4 text-emerald-700 dark:text-emerald-400 font-bold">
                         {a.checkIn}

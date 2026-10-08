@@ -151,24 +151,24 @@ export default function AdminAttendancePage() {
   const [isQrScannerOpen, setIsQrScannerOpen] = useState(false);
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
   const [isDateFilterOpen, setIsDateFilterOpen] = useState(false);
-  const [selectedKpiShift, setSelectedKpiShift] = useState<"auto" | "morning" | "afternoon" | "evening" | "fullday">("auto");
+  const [selectedKpiShift, setSelectedKpiShift] = useState<"auto" | "standard" | "prime" | "reserved" | "night">("auto");
 
   // Helper to categorize shift strings into canonical shift buckets
-  const getStudentShiftCategory = (shiftStr: string = ""): "morning" | "afternoon" | "evening" | "fullday" => {
+  const getStudentShiftCategory = (shiftStr: string = ""): "standard" | "prime" | "reserved" | "night" => {
     const s = (shiftStr || "").toLowerCase();
-    if (s.includes("full") || s.includes("24") || s.includes("all day") || s.includes("unlimited")) {
-      return "fullday";
+    if (s.includes("night") || s.includes("ultra")) {
+      return "night";
     }
-    if (s.includes("afternoon") || s.includes("noon") || s.includes("12:00 pm") || s.includes("12-5") || s.includes("12-6") || s.includes("10-2")) {
-      return "afternoon";
+    if (s.includes("reserve") || s.includes("mini") || s.includes("big") || s.includes("locker") || s.includes("elite")) {
+      return "reserved";
     }
-    if (s.includes("evening") || s.includes("2-6") || s.includes("5-10") || s.includes("6-11") || s.includes("06:00 pm") || s.includes("05:00 pm")) {
-      return "evening";
+    if ((s.includes("6") || s.includes("prime") || s.includes("pro") || s.includes("afternoon") || s.includes("evening")) && !s.includes("big")) {
+      return "prime";
     }
-    if (s.includes("morning") || s.includes("6-10") || s.includes("6-12") || s.includes("06:00 am") || s.includes("am")) {
-      return "morning";
+    if (s.includes("3") || s.includes("standard") || s.includes("morning") || s.includes("noon")) {
+      return "standard";
     }
-    return "morning";
+    return "standard";
   };
 
   // Selected date filter (Defaults to Today YYYY-MM-DD)
@@ -395,8 +395,6 @@ export default function AdminAttendancePage() {
     const matchesShift =
       selectedShiftFilter === "all" ||
       selectedShiftFilter === stdCategory ||
-      (selectedShiftFilter === "noon" && stdCategory === "afternoon") ||
-      (selectedShiftFilter === "afternoon" && stdCategory === "afternoon") ||
       std.shift.toLowerCase().includes(selectedShiftFilter.toLowerCase());
 
     const matchesStatus =
@@ -452,78 +450,74 @@ export default function AdminAttendancePage() {
     : "0.0";
 
   // Shift Stats using canonical classifier
-  const morningStudents = studentAttendanceList.filter(s => getStudentShiftCategory(s.shift) === "morning");
-  const morningPresent = morningStudents.filter(s => s.isPresent || s.isCompleted).length;
+  const standardStudents = studentAttendanceList.filter(s => getStudentShiftCategory(s.shift) === "standard");
+  const standardPresent = standardStudents.filter(s => s.isPresent || s.isCompleted).length;
 
-  const afternoonStudents = studentAttendanceList.filter(s => getStudentShiftCategory(s.shift) === "afternoon");
-  const afternoonPresent = afternoonStudents.filter(s => s.isPresent || s.isCompleted).length;
+  const primeStudents = studentAttendanceList.filter(s => getStudentShiftCategory(s.shift) === "prime");
+  const primePresent = primeStudents.filter(s => s.isPresent || s.isCompleted).length;
 
-  // Keep noon alias for backward compatibility
-  const noonStudents = afternoonStudents;
-  const noonPresent = afternoonPresent;
+  const reservedStudents = studentAttendanceList.filter(s => getStudentShiftCategory(s.shift) === "reserved");
+  const reservedPresent = reservedStudents.filter(s => s.isPresent || s.isCompleted).length;
 
-  const eveningStudents = studentAttendanceList.filter(s => getStudentShiftCategory(s.shift) === "evening");
-  const eveningPresent = eveningStudents.filter(s => s.isPresent || s.isCompleted).length;
-
-  const fullDayStudents = studentAttendanceList.filter(s => getStudentShiftCategory(s.shift) === "fullday");
-  const fullDayPresent = fullDayStudents.filter(s => s.isPresent || s.isCompleted).length;
+  const nightStudents = studentAttendanceList.filter(s => getStudentShiftCategory(s.shift) === "night");
+  const nightPresent = nightStudents.filter(s => s.isPresent || s.isCompleted).length;
 
   // Real-time dynamic shift detector based on current hour & minute
   const getActiveShiftInfo = () => {
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    let autoShiftId: "morning" | "afternoon" | "evening" | "fullday" = "morning";
-    if (currentMinutes >= 360 && currentMinutes < 720) {
-      // 06:00 AM - 12:00 PM: Morning Shift
-      autoShiftId = "morning";
-    } else if (currentMinutes >= 720 && currentMinutes < 1080) {
-      // 12:00 PM - 06:00 PM: Afternoon Shift (Active now!)
-      autoShiftId = "afternoon";
-    } else if (currentMinutes >= 1080 && currentMinutes < 1380) {
-      // 06:00 PM - 11:00 PM: Evening Shift
-      autoShiftId = "evening";
+    let autoShiftId: "standard" | "prime" | "reserved" | "night" = "standard";
+    if (currentMinutes >= 1320 || currentMinutes < 360) {
+      // 10:00 PM - 06:00 AM: Night Shift Ultra
+      autoShiftId = "night";
+    } else if (currentMinutes >= 360 && currentMinutes < 780) {
+      // 06:00 AM - 01:00 PM: Standard 3 Hours Pass
+      autoShiftId = "standard";
+    } else if (currentMinutes >= 780 && currentMinutes < 1200) {
+      // 01:00 PM - 08:00 PM: Pro / Prime 6 Hours Pass
+      autoShiftId = "prime";
     } else {
-      // 11:00 PM - 06:00 AM: Night / 24x7 Shift
-      autoShiftId = "fullday";
+      // 08:00 PM - 10:00 PM: Reserved Seating & Evening Pass
+      autoShiftId = "reserved";
     }
 
     const shiftDefinitions = {
-      morning: {
-        id: "morning" as const,
-        name: "Morning Shift",
-        timeRange: "06:00 AM - 12:00 PM",
-        badge: "6 AM - 12 PM",
-        students: morningStudents,
-        present: morningPresent,
-        nextShiftId: "afternoon" as const,
+      standard: {
+        id: "standard" as const,
+        name: "Standard (3 Hours Pass)",
+        timeRange: "Flexible 24/7 (Any 3 Hours)",
+        badge: "3 Hrs • 24/7",
+        students: standardStudents,
+        present: standardPresent,
+        nextShiftId: "prime" as const,
       },
-      afternoon: {
-        id: "afternoon" as const,
-        name: "Afternoon Shift",
-        timeRange: "12:00 PM - 06:00 PM",
-        badge: "12 PM - 6 PM",
-        students: afternoonStudents,
-        present: afternoonPresent,
-        nextShiftId: "evening" as const,
+      prime: {
+        id: "prime" as const,
+        name: "Pro / Prime (6 Hours Pass)",
+        timeRange: "Flexible 24/7 (Any 6 Hours)",
+        badge: "6 Hrs • 24/7",
+        students: primeStudents,
+        present: primePresent,
+        nextShiftId: "reserved" as const,
       },
-      evening: {
-        id: "evening" as const,
-        name: "Evening Shift",
-        timeRange: "06:00 PM - 11:00 PM",
-        badge: "6 PM - 11 PM",
-        students: eveningStudents,
-        present: eveningPresent,
-        nextShiftId: "fullday" as const,
+      reserved: {
+        id: "reserved" as const,
+        name: "Reserved Dedicated Desks",
+        timeRange: "24/7 Dedicated (Mini / Big / Locker)",
+        badge: "24/7 Fixed",
+        students: reservedStudents,
+        present: reservedPresent,
+        nextShiftId: "night" as const,
       },
-      fullday: {
-        id: "fullday" as const,
-        name: "Full Day / Night",
-        timeRange: "24/7 Access Plan",
-        badge: "24 Hours",
-        students: fullDayStudents,
-        present: fullDayPresent,
-        nextShiftId: "morning" as const,
+      night: {
+        id: "night" as const,
+        name: "Night Shift Ultra",
+        timeRange: "10:00 PM - 06:00 AM (8 Hours)",
+        badge: "10 PM - 6 AM",
+        students: nightStudents,
+        present: nightPresent,
+        nextShiftId: "standard" as const,
       },
     };
 
@@ -757,7 +751,7 @@ export default function AdminAttendancePage() {
   };
 
   const getShiftDisplay = (shift?: string) => {
-    if (!shift) return { name: "Evening Shift", timing: "06:00 PM - 10:00 PM" };
+    if (!shift) return { name: "Standard (3 Hours Pass)", timing: "Flexible 24/7" };
     const s = shift.toLowerCase();
     
     // Check if shift string already has format "Name (Time - Time)"
@@ -766,19 +760,37 @@ export default function AdminAttendancePage() {
       return { name: match[1].trim(), timing: match[2].trim() };
     }
 
+    if (s.includes("3") || s.includes("standard")) {
+      return { name: "Standard (3 Hours Pass)", timing: "Flexible 24/7 (Any 3 Hrs)" };
+    }
+    if ((s.includes("6") || s.includes("prime") || s.includes("pro")) && !s.includes("big")) {
+      return { name: "Pro / Prime (6 Hours Pass)", timing: "Flexible 24/7 (Any 6 Hrs)" };
+    }
+    if (s.includes("mini") || (s.includes("reserve") && !s.includes("big") && !s.includes("locker"))) {
+      return { name: "Elite / Reserve Mini", timing: "24/7 Fixed Dedicated Desk" };
+    }
+    if (s.includes("big")) {
+      return { name: "Prime / Reserve Big", timing: "24/7 Premium Large Desk" };
+    }
+    if (s.includes("locker")) {
+      return { name: "Max / Reserve Locker", timing: "24/7 Desk + Personal Locker" };
+    }
+    if (s.includes("night") || s.includes("ultra")) {
+      return { name: "Night Shift Ultra", timing: "10:00 PM – 06:00 AM" };
+    }
     if (s.includes("morning")) {
-      return { name: "Morning Shift", timing: "06:00 AM - 12:00 PM" };
+      return { name: "Morning Shift (Legacy)", timing: "06:00 AM - 12:00 PM" };
     }
-    if (s.includes("afternoon")) {
-      return { name: "Afternoon Shift", timing: "12:00 PM - 06:00 PM" };
+    if (s.includes("afternoon") || s.includes("noon")) {
+      return { name: "Afternoon Shift (Legacy)", timing: "12:00 PM - 06:00 PM" };
     }
-    if (s.includes("evening") || s.includes("night")) {
-      return { name: "Evening Shift", timing: "06:00 PM - 10:00 PM" };
+    if (s.includes("evening")) {
+      return { name: "Evening Shift (Legacy)", timing: "06:00 PM - 10:00 PM" };
     }
-    if (s.includes("full") || s.includes("all day") || s.includes("24")) {
-      return { name: "Full Day Access", timing: "06:00 AM - 10:00 PM" };
+    if (s.includes("full") || s.includes("24")) {
+      return { name: "Full Day Access", timing: "24/7 Open Access" };
     }
-    return { name: shift, timing: "06:00 PM - 10:00 PM" };
+    return { name: shift, timing: "24/7 Flexible Access" };
   };
 
   const getInitials = (name: string) => {
@@ -937,10 +949,10 @@ export default function AdminAttendancePage() {
               title="Change displayed shift"
             >
               <option value="auto">● Live (Auto)</option>
-              <option value="morning">Morning</option>
-              <option value="afternoon">Afternoon</option>
-              <option value="evening">Evening</option>
-              <option value="fullday">Full Day</option>
+              <option value="standard">Standard (3H)</option>
+              <option value="prime">Prime (6H)</option>
+              <option value="reserved">Reserved (24/7)</option>
+              <option value="night">Night Ultra</option>
             </select>
           </div>
           <div className="mt-1 flex items-baseline gap-1 sm:gap-2">
@@ -1064,11 +1076,11 @@ export default function AdminAttendancePage() {
                           onChange={(e) => setSelectedShiftFilter(e.target.value)}
                           className="w-full p-2 rounded-xl border border-zinc-200 bg-[#F3F4F6] text-xs font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
                         >
-                          <option value="all">All Shifts</option>
-                          <option value="morning">Morning (6:00 AM - 12:00 PM)</option>
-                          <option value="afternoon">Afternoon (12:00 PM - 06:00 PM)</option>
-                          <option value="evening">Evening (06:00 PM - 11:00 PM)</option>
-                          <option value="fullday">Full Day / 24x7</option>
+                          <option value="all">All Shifts &amp; Plans</option>
+                          <option value="standard">Standard (3 Hours Pass)</option>
+                          <option value="prime">Pro / Prime (6 Hours Pass)</option>
+                          <option value="reserved">Reserved Dedicated Desks</option>
+                          <option value="night">Night Shift Ultra (10 PM - 6 AM)</option>
                         </select>
                       </div>
 
@@ -1275,11 +1287,11 @@ export default function AdminAttendancePage() {
             <div className="flex items-center gap-1.5 pt-3 pb-1 overflow-x-auto text-xs">
               <span className="text-[11px] font-bold text-zinc-400 shrink-0 mr-1">Filter Shift:</span>
               {[
-                { id: "all", label: "All Shifts" },
-                { id: "morning", label: "Morning (6-10 AM)" },
-                { id: "noon", label: "Noon (10-2 PM)" },
-                { id: "evening", label: "Evening (2-6 PM)" },
-                { id: "full", label: "Full Day" },
+                { id: "all", label: "All Plans" },
+                { id: "standard", label: "Standard (3H Pass)" },
+                { id: "prime", label: "Prime (6H Pass)" },
+                { id: "reserved", label: "Reserved Desks (24/7)" },
+                { id: "night", label: "Night Shift Ultra (10PM-6AM)" },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -1777,11 +1789,11 @@ export default function AdminAttendancePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                  <tr className={shiftKpi.autoShiftId === "morning" ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}>
+                  <tr className={shiftKpi.autoShiftId === "standard" ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}>
                     <td className="py-2.5 font-bold text-[#0A2E5C] dark:text-white">
                       <div className="flex items-center justify-between gap-1.5">
-                        <span>Morning (06:00 AM - 12:00 PM)</span>
-                        {shiftKpi.autoShiftId === "morning" && (
+                        <span>Standard (3 Hours Pass - 24/7)</span>
+                        {shiftKpi.autoShiftId === "standard" && (
                           <span className="relative flex h-2 w-2 shrink-0">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -1789,18 +1801,18 @@ export default function AdminAttendancePage() {
                         )}
                       </div>
                     </td>
-                    <td className="py-2.5 text-center text-zinc-600 dark:text-zinc-300">{morningStudents.length}</td>
-                    <td className="py-2.5 text-center text-emerald-600 font-bold">{morningPresent}</td>
-                    <td className="py-2.5 text-center text-rose-600 font-bold">{Math.max(0, morningStudents.length - morningPresent)}</td>
+                    <td className="py-2.5 text-center text-zinc-600 dark:text-zinc-300">{standardStudents.length}</td>
+                    <td className="py-2.5 text-center text-emerald-600 font-bold">{standardPresent}</td>
+                    <td className="py-2.5 text-center text-rose-600 font-bold">{Math.max(0, standardStudents.length - standardPresent)}</td>
                     <td className="py-2.5 text-right font-mono text-zinc-500">
-                      {morningStudents.length > 0 ? ((morningPresent / morningStudents.length) * 100).toFixed(1) : "0.0"}%
+                      {standardStudents.length > 0 ? ((standardPresent / standardStudents.length) * 100).toFixed(1) : "0.0"}%
                     </td>
                   </tr>
-                  <tr className={shiftKpi.autoShiftId === "afternoon" ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}>
+                  <tr className={shiftKpi.autoShiftId === "prime" ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}>
                     <td className="py-2.5 font-bold text-[#0A2E5C] dark:text-white">
                       <div className="flex items-center justify-between gap-1.5">
-                        <span>Afternoon (12:00 PM - 06:00 PM)</span>
-                        {shiftKpi.autoShiftId === "afternoon" && (
+                        <span>Pro / Prime (6 Hours Pass - 24/7)</span>
+                        {shiftKpi.autoShiftId === "prime" && (
                           <span className="relative flex h-2 w-2 shrink-0">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -1808,18 +1820,18 @@ export default function AdminAttendancePage() {
                         )}
                       </div>
                     </td>
-                    <td className="py-2.5 text-center text-zinc-600 dark:text-zinc-300">{afternoonStudents.length}</td>
-                    <td className="py-2.5 text-center text-emerald-600 font-bold">{afternoonPresent}</td>
-                    <td className="py-2.5 text-center text-rose-600 font-bold">{Math.max(0, afternoonStudents.length - afternoonPresent)}</td>
+                    <td className="py-2.5 text-center text-zinc-600 dark:text-zinc-300">{primeStudents.length}</td>
+                    <td className="py-2.5 text-center text-emerald-600 font-bold">{primePresent}</td>
+                    <td className="py-2.5 text-center text-rose-600 font-bold">{Math.max(0, primeStudents.length - primePresent)}</td>
                     <td className="py-2.5 text-right font-mono text-zinc-500">
-                      {afternoonStudents.length > 0 ? ((afternoonPresent / afternoonStudents.length) * 100).toFixed(1) : "0.0"}%
+                      {primeStudents.length > 0 ? ((primePresent / primeStudents.length) * 100).toFixed(1) : "0.0"}%
                     </td>
                   </tr>
-                  <tr className={shiftKpi.autoShiftId === "evening" ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}>
+                  <tr className={shiftKpi.autoShiftId === "reserved" ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}>
                     <td className="py-2.5 font-bold text-[#0A2E5C] dark:text-white">
                       <div className="flex items-center justify-between gap-1.5">
-                        <span>Evening (06:00 PM - 11:00 PM)</span>
-                        {shiftKpi.autoShiftId === "evening" && (
+                        <span>Reserved Dedicated Desks (24/7)</span>
+                        {shiftKpi.autoShiftId === "reserved" && (
                           <span className="relative flex h-2 w-2 shrink-0">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -1827,18 +1839,18 @@ export default function AdminAttendancePage() {
                         )}
                       </div>
                     </td>
-                    <td className="py-2.5 text-center text-zinc-600 dark:text-zinc-300">{eveningStudents.length}</td>
-                    <td className="py-2.5 text-center text-emerald-600 font-bold">{eveningPresent}</td>
-                    <td className="py-2.5 text-center text-rose-600 font-bold">{Math.max(0, eveningStudents.length - eveningPresent)}</td>
+                    <td className="py-2.5 text-center text-zinc-600 dark:text-zinc-300">{reservedStudents.length}</td>
+                    <td className="py-2.5 text-center text-emerald-600 font-bold">{reservedPresent}</td>
+                    <td className="py-2.5 text-center text-rose-600 font-bold">{Math.max(0, reservedStudents.length - reservedPresent)}</td>
                     <td className="py-2.5 text-right font-mono text-zinc-500">
-                      {eveningStudents.length > 0 ? ((eveningPresent / eveningStudents.length) * 100).toFixed(1) : "0.0"}%
+                      {reservedStudents.length > 0 ? ((reservedPresent / reservedStudents.length) * 100).toFixed(1) : "0.0"}%
                     </td>
                   </tr>
-                  <tr className={shiftKpi.autoShiftId === "fullday" ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}>
+                  <tr className={shiftKpi.autoShiftId === "night" ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}>
                     <td className="py-2.5 font-bold text-[#0A2E5C] dark:text-white">
                       <div className="flex items-center justify-between gap-1.5">
-                        <span>Full Day / 24x7</span>
-                        {shiftKpi.autoShiftId === "fullday" && (
+                        <span>Night Shift Ultra (10 PM - 06 AM)</span>
+                        {shiftKpi.autoShiftId === "night" && (
                           <span className="relative flex h-2 w-2 shrink-0">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -1846,11 +1858,11 @@ export default function AdminAttendancePage() {
                         )}
                       </div>
                     </td>
-                    <td className="py-2.5 text-center text-zinc-600 dark:text-zinc-300">{fullDayStudents.length}</td>
-                    <td className="py-2.5 text-center text-emerald-600 font-bold">{fullDayPresent}</td>
-                    <td className="py-2.5 text-center text-rose-600 font-bold">{Math.max(0, fullDayStudents.length - fullDayPresent)}</td>
+                    <td className="py-2.5 text-center text-zinc-600 dark:text-zinc-300">{nightStudents.length}</td>
+                    <td className="py-2.5 text-center text-emerald-600 font-bold">{nightPresent}</td>
+                    <td className="py-2.5 text-center text-rose-600 font-bold">{Math.max(0, nightStudents.length - nightPresent)}</td>
                     <td className="py-2.5 text-right font-mono text-zinc-500">
-                      {fullDayStudents.length > 0 ? ((fullDayPresent / fullDayStudents.length) * 100).toFixed(1) : "0.0"}%
+                      {nightStudents.length > 0 ? ((nightPresent / nightStudents.length) * 100).toFixed(1) : "0.0"}%
                     </td>
                   </tr>
                 </tbody>

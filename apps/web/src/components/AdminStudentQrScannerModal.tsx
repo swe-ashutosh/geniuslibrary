@@ -424,7 +424,7 @@ export function AdminStudentQrScannerModal({
               email: p.email || "",
               phone: p.phone || "",
               course: p.course || "General Studies",
-              shift: p.shift || "Morning Shift",
+              shift: p.shift || "Standard (3 Hours Pass)",
               seatNumber: p.seat_number || p.seatNumber || null,
               status: p.status || "active",
               feeStatus: totalDue > 0 ? "Due" : "Paid",
@@ -601,7 +601,7 @@ export function AdminStudentQrScannerModal({
             email: profile.email || "",
             phone: profile.phone || "",
             course: profile.course || "General Studies",
-            shift: profile.shift || "Morning Shift",
+            shift: profile.shift || "Standard (3 Hours Pass)",
             seatNumber: profile.seat_number || "01",
             status: profile.status || "active",
             feeStatus: "Paid",
@@ -617,7 +617,7 @@ export function AdminStudentQrScannerModal({
             email: parsedPayload.email || "",
             phone: parsedPayload.phone || "",
             course: parsedPayload.course || "General Studies",
-            shift: parsedPayload.shift || "Morning Shift",
+            shift: parsedPayload.shift || "Standard (3 Hours Pass)",
             seatNumber: parsedPayload.seat || "01",
             status: "active",
             feeStatus: "Paid",
@@ -735,7 +735,7 @@ export function AdminStudentQrScannerModal({
         studentId: selectedStudent.id,
         studentName: selectedStudent.fullName,
         seatNumber: deskToUse,
-        shiftName: selectedStudent.shift || "Morning Shift",
+        shiftName: selectedStudent.shift || "Standard (3 Hours Pass)",
       });
 
       const now = new Date();
@@ -747,7 +747,7 @@ export function AdminStudentQrScannerModal({
         studentId: selectedStudent.id,
         studentName: selectedStudent.fullName,
         seatNumber: deskToUse,
-        shiftName: selectedStudent.shift || "Morning Shift",
+        shiftName: selectedStudent.shift || "Standard (3 Hours Pass)",
         checkIn: timeStr,
         checkOut: null,
         status: "present",
@@ -1264,7 +1264,7 @@ export function AdminStudentQrScannerModal({
                               </span>
                               <span>•</span>
                               <span className="text-[#0B5ED7] dark:text-[#FFC107] font-bold">
-                                {student.shift || "Morning Shift"}
+                                {student.shift || "Standard (3 Hours Pass)"}
                               </span>
                               <span>•</span>
                               <span className="text-zinc-700 dark:text-zinc-300 font-semibold">
@@ -1326,7 +1326,7 @@ export function AdminStudentQrScannerModal({
                         Student ID: {selectedStudent.studentCode || selectedStudent.id} • {selectedStudent.phone || "No phone"}
                       </p>
                       <p className="text-[11px] text-zinc-300 mt-0.5">
-                        {selectedStudent.course || "UPSC / Civil Services"} • Shift: <strong className="text-white">{selectedStudent.shift || "Morning Shift"}</strong> • Desk: <strong className="text-white">#{selectedStudent.seatNumber || "A-07"}</strong>
+                        {selectedStudent.course || "UPSC / Civil Services"} • Shift: <strong className="text-white">{selectedStudent.shift || "Standard (3 Hours Pass)"}</strong> • Desk: <strong className="text-white">#{selectedStudent.seatNumber || "A-07"}</strong>
                       </p>
                     </div>
                   </div>
@@ -1590,7 +1590,7 @@ export function AdminStudentQrScannerModal({
                               {log.date}
                             </p>
                             <p className="text-[10px] text-zinc-400">
-                              Desk: #{log.seatNumber || selectedStudent.seatNumber || "01"} • {log.shiftName || selectedStudent.shift || "Morning Shift"}
+                              Desk: #{log.seatNumber || selectedStudent.seatNumber || "01"} • {log.shiftName || selectedStudent.shift || "24/7 Access"}
                             </p>
                           </div>
                         </div>
