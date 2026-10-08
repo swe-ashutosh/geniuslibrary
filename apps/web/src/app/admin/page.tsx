@@ -49,10 +49,10 @@ export default function AdminDashboardOverview() {
   const [dueFees, setDueFees] = useState<any[]>([]);
   const [recentLogs, setRecentLogs] = useState<any[]>([]);
   const [shiftOverview, setShiftOverview] = useState([
-    { name: 'Morning Shift', time: '06:00 AM - 12:00 PM', enrolled: 0, present: 0 },
-    { name: 'Afternoon Shift', time: '12:00 PM - 06:00 PM', enrolled: 0, present: 0 },
-    { name: 'Evening Shift', time: '06:00 PM - 10:00 PM', enrolled: 0, present: 0 },
-    { name: 'Full Day Access', time: '06:00 AM - 10:00 PM', enrolled: 0, present: 0 },
+    { name: 'Standard (3 Hours Pass)', time: '24/7 Flexible (₹300)', enrolled: 0, present: 0 },
+    { name: 'Pro / Prime (6 Hours Pass)', time: '24/7 Flexible (₹500)', enrolled: 0, present: 0 },
+    { name: 'Reserved Dedicated Desks', time: '24/7 Access (₹500 - ₹700)', enrolled: 0, present: 0 },
+    { name: 'Night Shift Ultra', time: '10:00 PM - 06:00 AM (₹500)', enrolled: 0, present: 0 },
   ]);
 
   const [dueFeesViewMode, setDueFeesViewMode] = useState<"table" | "grid">("table");
@@ -278,7 +278,9 @@ export default function AdminDashboardOverview() {
         const allStudentsList = activeProfiles.map((p: any) => ({
           id: p.id,
           name: p.full_name || "Student Member",
-          shift: p.shift || p.shift_id || "Morning Shift",
+          shift: p.shift || p.shift_id || "Standard (3 Hours Pass)",
+          membership_plan: p.membership_plan || "General",
+          seat_number: p.seat_number || null,
         }));
 
         // Find which students checked in today
@@ -292,35 +294,36 @@ export default function AdminDashboardOverview() {
           return presentIds.has(std.id) || (std.name && presentNames.has(std.name.toLowerCase()));
         };
 
-        const morningStds = allStudentsList.filter((s) => {
+        const standard3HrStds = allStudentsList.filter((s) => {
           const sh = (s.shift || "").toLowerCase();
-          return sh.includes("morning") || sh.includes("6-10") || sh.includes("6-12");
+          return sh.includes("3") || sh.includes("standard") || sh.includes("morning") || sh.includes("noon");
         });
-        const morningPres = morningStds.filter(isStudentPresent).length;
+        const standard3HrPres = standard3HrStds.filter(isStudentPresent).length;
 
-        const afternoonStds = allStudentsList.filter((s) => {
+        const prime6HrStds = allStudentsList.filter((s) => {
           const sh = (s.shift || "").toLowerCase();
-          return sh.includes("afternoon") || sh.includes("noon") || sh.includes("10-2") || sh.includes("12-6");
+          return (sh.includes("6") || sh.includes("prime") || sh.includes("pro") || sh.includes("afternoon") || sh.includes("evening")) && !sh.includes("big");
         });
-        const afternoonPres = afternoonStds.filter(isStudentPresent).length;
+        const prime6HrPres = prime6HrStds.filter(isStudentPresent).length;
 
-        const eveningStds = allStudentsList.filter((s) => {
+        const reservedStds = allStudentsList.filter((s) => {
           const sh = (s.shift || "").toLowerCase();
-          return sh.includes("evening") || sh.includes("2-6") || sh.includes("6-10 pm");
+          const pl = (s.membership_plan || "").toLowerCase();
+          return sh.includes("reserve") || sh.includes("mini") || sh.includes("big") || sh.includes("locker") || pl.includes("reserve") || Boolean(s.seat_number);
         });
-        const eveningPres = eveningStds.filter(isStudentPresent).length;
+        const reservedPres = reservedStds.filter(isStudentPresent).length;
 
-        const fullDayStds = allStudentsList.filter((s) => {
+        const nightStds = allStudentsList.filter((s) => {
           const sh = (s.shift || "").toLowerCase();
-          return sh.includes("full");
+          return sh.includes("night") || sh.includes("ultra") || sh.includes("full");
         });
-        const fullDayPres = fullDayStds.filter(isStudentPresent).length;
+        const nightPres = nightStds.filter(isStudentPresent).length;
 
         setShiftOverview([
-          { name: 'Morning Shift', time: '06:00 AM - 12:00 PM', enrolled: morningStds.length, present: morningPres },
-          { name: 'Afternoon Shift', time: '12:00 PM - 06:00 PM', enrolled: afternoonStds.length, present: afternoonPres },
-          { name: 'Evening Shift', time: '06:00 PM - 10:00 PM', enrolled: eveningStds.length, present: eveningPres },
-          { name: 'Full Day Access', time: '06:00 AM - 10:00 PM', enrolled: fullDayStds.length, present: fullDayPres },
+          { name: 'Standard (3 Hours Pass)', time: '24/7 Flexible (₹300)', enrolled: standard3HrStds.length, present: standard3HrPres },
+          { name: 'Pro / Prime (6 Hours Pass)', time: '24/7 Flexible (₹500)', enrolled: prime6HrStds.length, present: prime6HrPres },
+          { name: 'Reserved Dedicated Desks', time: '24/7 Access (₹500 - ₹700)', enrolled: reservedStds.length, present: reservedPres },
+          { name: 'Night Shift Ultra', time: '10:00 PM - 06:00 AM (₹500)', enrolled: nightStds.length, present: nightPres },
         ]);
 
         // -------------------------------------------------------------
@@ -1031,10 +1034,10 @@ export default function AdminDashboardOverview() {
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-[#0A2E5C] dark:text-[#FFC107]" />
-              <h3 className="text-sm font-bold text-[#0A2E5C] dark:text-white">Active Shifts Overview</h3>
+              <h3 className="text-sm font-bold text-[#0A2E5C] dark:text-white">Active 24/7 Plans Overview</h3>
             </div>
             <Link href="/admin/attendance" className="text-[9px] font-bold text-[#0B5ED7] dark:text-[#FFC107] hover:underline flex items-center gap-0.5">
-              4 Shifts →
+              Plans & Attendance →
             </Link>
           </div>
 

@@ -972,10 +972,12 @@ app.get('/api/shifts', async (c) => {
     return c.json({
       success: true,
       shifts: [
-        { id: 'shift-morning', name: 'Morning Shift', startTime: '06:00 AM', endTime: '12:00 PM', fee: 600, totalSeats: 100, availableSeats: 100, isActive: true },
-        { id: 'shift-afternoon', name: 'Afternoon Shift', startTime: '12:00 PM', endTime: '06:00 PM', fee: 600, totalSeats: 100, availableSeats: 100, isActive: true },
-        { id: 'shift-evening', name: 'Evening Shift', startTime: '06:00 PM', endTime: '10:00 PM', fee: 500, totalSeats: 100, availableSeats: 100, isActive: true },
-        { id: 'shift-fullday', name: 'Full Day Access', startTime: '06:00 AM', endTime: '10:00 PM', fee: 1100, totalSeats: 100, availableSeats: 100, isActive: true },
+        { id: 'standard-3hr', name: 'Standard (3 Hours Pass)', startTime: '24/7 Flexible', endTime: '3 Hours Daily', fee: 300, totalSeats: 100, availableSeats: 100, isActive: true },
+        { id: 'prime-6hr', name: 'Pro / Prime (6 Hours Pass)', startTime: '24/7 Flexible', endTime: '6 Hours Daily', fee: 500, totalSeats: 100, availableSeats: 100, isActive: true },
+        { id: 'reserve-mini', name: 'Elite / Reserve Mini', startTime: '24/7 Dedicated', endTime: '24/7 Access', fee: 500, totalSeats: 100, availableSeats: 100, isActive: true },
+        { id: 'reserve-big', name: 'Prime / Reserve Big', startTime: '24/7 Dedicated', endTime: '24/7 Access', fee: 600, totalSeats: 100, availableSeats: 100, isActive: true },
+        { id: 'reserve-locker', name: 'Max / Reserve Locker', startTime: '24/7 Dedicated', endTime: '24/7 Access + Locker', fee: 700, totalSeats: 100, availableSeats: 100, isActive: true },
+        { id: 'night-ultra', name: 'Night Shift Ultra', startTime: '10:00 PM', endTime: '06:00 AM', fee: 500, totalSeats: 100, availableSeats: 100, isActive: true },
       ],
       note: err.message,
     });

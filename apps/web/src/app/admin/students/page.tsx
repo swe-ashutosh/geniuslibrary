@@ -66,13 +66,12 @@ interface StudentProfile {
 }
 
 const SHIFT_OPTIONS = [
-  { id: "morning", name: "Morning Shift (06:00 AM - 10:00 AM)", price: 600, duration: "4 Hours" },
-  { id: "noon", name: "Noon Shift (10:00 AM - 02:00 PM)", price: 600, duration: "4 Hours" },
-  { id: "evening", name: "Evening Shift (02:00 PM - 06:00 PM)", price: 500, duration: "4 Hours" },
-  { id: "night", name: "Night Shift (06:00 PM - 10:00 PM)", price: 600, duration: "4 Hours" },
-  { id: "8hr_morning", name: "8 Hours (Morning: 06:00 AM - 02:00 PM)", price: 800, duration: "8 Hours" },
-  { id: "8hr_evening", name: "8 Hours (Evening: 02:00 PM - 10:00 PM)", price: 800, duration: "8 Hours" },
-  { id: "full_day", name: "Full Day (06:00 AM - 10:00 PM)", price: 1100, duration: "16 Hours" },
+  { id: "standard_3hr", name: "Standard (3 Hours Pass) - Flexible 24/7", price: 300, duration: "3 Hours Daily" },
+  { id: "prime_6hr", name: "Pro / Prime (6 Hours Pass) - Flexible 24/7", price: 500, duration: "6 Hours Daily" },
+  { id: "reserve_mini", name: "Elite / Reserve Mini (24/7 Dedicated Seat)", price: 500, duration: "24/7 Access" },
+  { id: "reserve_big", name: "Prime / Reserve Big (24/7 Premium Large Desk)", price: 600, duration: "24/7 Access" },
+  { id: "reserve_locker", name: "Max / Reserve Locker (24/7 Seat + Locker)", price: 700, duration: "24/7 Access" },
+  { id: "night_ultra", name: "Night Shift Ultra (10:00 PM - 06:00 AM)", price: 500, duration: "8 Hours Night" },
 ];
 
 export function getStudentFeeSchedule(std: { fee_status?: string; due_amount?: number; created_at?: string }) {

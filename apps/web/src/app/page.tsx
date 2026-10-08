@@ -168,7 +168,7 @@ const FAQS = [
   {
     question: "What are the shift timings and is the library open 24 hours?",
     answer:
-      "Yes, " + BRAND_CONFIG.fullName + " is operational 24 hours a day, 365 days a year. We offer four convenient flexible shifts: Morning Shift (06:00 AM – 12:00 PM), Afternoon Shift (12:00 PM – 05:00 PM), Evening Shift (05:00 PM – 10:00 PM), and the 24/7 Unlimited Access Plan.",
+      "Yes, " + BRAND_CONFIG.fullName + " is operational 24 hours a day, 365 days a year. We do not have rigid morning or evening constraints. We offer flexible hourly packages: Standard 3 Hours (₹300/mo) and Pro/Prime 6 Hours (₹500/mo), Special Night Shift Ultra (₹500/mo), and 24/7 Dedicated Reserved Seating: Elite Mini (₹500/mo), Prime Big (₹600/mo), and Max Locker (₹700/mo).",
   },
   {
     question: "What facilities are provided to students at the library?",
@@ -178,7 +178,7 @@ const FAQS = [
   {
     question: `What are the monthly fees for ${BRAND_CONFIG.shortName}?`,
     answer:
-      BRAND_CONFIG.fullName + " offers affordable monthly student subscriptions starting from just ₹400/month with zero admission fee and zero security deposit. Every student receives a dedicated seat and access to all amenities.",
+      BRAND_CONFIG.fullName + " offers affordable monthly student subscriptions starting from just ₹300/month with zero admission fee and zero security deposit. Every student receives high-speed Wi-Fi, power backup, and full access to library amenities.",
   },
   {
     question: "Do I get a permanent fixed desk for my shift?",
@@ -511,102 +511,265 @@ export default function HomePage() {
       </section>
 
       {/* ------------------------------------------------------------- */}
-      {/* 4. SHIFTS & PRICING PLANS (AEO Optimized) */}
+      {/* 4. MEMBERSHIP PLANS & PRICING (24/7 Open • Zero Rigid Shifts) */}
       {/* ------------------------------------------------------------- */}
       <section
         id="shifts"
-        aria-label="Flexible Study Shifts and Subscription Plans"
+        aria-label="24/7 Flexible Study Plans and Dedicated Seating Subscriptions"
         className="py-16 bg-[#F8FAFC] dark:bg-[#141A24]"
       >
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto mb-12">
             <span className="text-xs font-bold uppercase tracking-widest text-[#0B5ED7]">
-              Affordable & Transparent
+              Open 24/7 • No Rigid Shifts • Zero Admission Fee
             </span>
             <h2 className="text-3xl font-extrabold text-[#0A2E5C] dark:text-white mt-1">
-              Flexible Study Shifts &amp; Pricing
+              Membership Plans &amp; Pricing
             </h2>
             <p className="text-xs sm:text-sm text-[#6B7280] dark:text-zinc-400 mt-1">
-              Zero admission fee, zero security deposit. Pick the timing that matches your study routine.
+              Operational 24 hours a day, 365 days a year. No morning or evening restrictions, choose flexible hourly passes or dedicated 24/7 reserved seating.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {BRAND_CONFIG.shifts.map((shift) => {
-              const isBest = shift.id === "shift-full";
-              return (
-                <div
-                  key={shift.id}
-                  className={`relative flex flex-col justify-between rounded-2xl border p-6 transition-all ${
-                    isBest
-                      ? "border-[#FFC107] bg-white shadow-xl shadow-[#FFC107]/10 dark:bg-[#0A2E5C] ring-2 ring-[#FFC107]"
-                      : "border-[#E5E7EB] bg-white shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] hover:shadow-md"
-                  }`}
-                >
-                  {isBest && (
-                    <span className="absolute -top-3 right-6 rounded-full bg-[#0A2E5C] px-3 py-0.5 text-[11px] font-bold text-[#FFC107] border border-[#FFC107] shadow-xs">
-                      🔥 Most Popular
-                    </span>
-                  )}
+          {/* 1. Shift-Based Plans (Hourly Packages) */}
+          <div className="mb-10">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="px-2.5 py-1 rounded-lg bg-blue-100 text-[#0B5ED7] dark:bg-blue-950/60 dark:text-blue-300 text-xs font-black uppercase tracking-wider">
+                1. Shift-Based Plans
+              </span>
+              <h3 className="text-lg font-bold text-[#0A2E5C] dark:text-white">
+                Hourly Packages (Flexible 24/7 Daily Slots)
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {BRAND_CONFIG.shifts
+                .filter((s) => s.category === "Shift-Based Plans (Hourly Packages)")
+                .map((shift) => (
+                  <div
+                    key={shift.id}
+                    className="relative flex flex-col justify-between rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] hover:shadow-md transition-all"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs uppercase font-bold text-[#0B5ED7]">{shift.tag}</span>
+                        <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                          24/7 Open Access
+                        </span>
+                      </div>
 
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs uppercase font-bold text-[#0B5ED7]">{shift.tag}</span>
-                      <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-                        Desks Available
-                      </span>
+                      <h4 className="text-lg font-bold text-[#0A2E5C] dark:text-white mt-2">
+                        {shift.name}
+                      </h4>
+                      <p className="text-xs text-[#6B7280] dark:text-zinc-400 mt-1">
+                        Timing: <strong>{shift.time}</strong>
+                      </p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-300 mt-1 font-medium">
+                        <strong>Best for:</strong> {shift.bestFor}
+                      </p>
+
+                      <div className="mt-4 flex items-baseline gap-1">
+                        <span className="text-3xl font-black text-[#0A2E5C] dark:text-white">
+                          ₹{shift.fee}
+                        </span>
+                        <span className="text-xs text-[#0B5ED7]">/month</span>
+                      </div>
+
+                      <ul className="mt-5 space-y-2 border-t border-[#E5E7EB]/60 pt-4 text-xs text-[#6B7280] dark:text-zinc-300">
+                        <li className="flex items-center gap-2">
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                          Flexible daily study hours
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                          High-Speed Optical Wi-Fi &amp; Full AC
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                          100% Inverter &amp; Generator Power Backup
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                          RO Water &amp; Silent Study Atmosphere
+                        </li>
+                      </ul>
                     </div>
 
-                    <h3 className="text-lg font-bold text-[#0A2E5C] dark:text-white mt-2">
-                      {shift.name}
-                    </h3>
-                    <p className="text-xs text-[#6B7280] dark:text-zinc-400 mt-1">
-                      Timing: <strong>{shift.time}</strong>
-                    </p>
-
-                    <div className="mt-4 flex items-baseline gap-1">
-                      <span className="text-3xl font-black text-[#0A2E5C] dark:text-white">
-                        ₹{shift.fee}
-                      </span>
-                      <span className="text-xs text-[#0B5ED7]">/month</span>
+                    <div className="mt-6">
+                      <Link
+                        href="/login/?role=student"
+                        className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold transition bg-[#F8FAFC] text-[#0A2E5C] border border-[#E5E7EB] hover:bg-[#E5E7EB]/30 dark:bg-zinc-800 dark:text-zinc-200"
+                      >
+                        <span>Choose {shift.name}</span>
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </Link>
                     </div>
-
-                    <ul className="mt-5 space-y-2 border-t border-[#E5E7EB]/60 pt-4 text-xs text-[#6B7280] dark:text-zinc-300">
-                      <li className="flex items-center gap-2">
-                        <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-                        Dedicated Assigned Desk
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-                        High-Speed Wi-Fi & AC
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-                        Continuous Inverter Backup
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-                        RO Water & Silent Hall
-                      </li>
-                    </ul>
                   </div>
+                ))}
+            </div>
+          </div>
 
-                  <div className="mt-6">
-                    <Link
-                      href="/login/?role=student"
-                      className={`w-full inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold transition ${
+          {/* 2. Reserved Seat Plans (Dedicated Seating) */}
+          <div className="mb-10">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="px-2.5 py-1 rounded-lg bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 text-xs font-black uppercase tracking-wider">
+                2. Reserved Seat Plans
+              </span>
+              <h3 className="text-lg font-bold text-[#0A2E5C] dark:text-white">
+                Dedicated Seating (24/7 Fixed Permanent Desk)
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {BRAND_CONFIG.shifts
+                .filter((s) => s.category === "Reserved Seat Plans (Dedicated Seating)")
+                .map((shift) => {
+                  const isBest = shift.id === "plan-reserve-big";
+                  const isLocker = shift.id === "plan-reserve-locker";
+                  return (
+                    <div
+                      key={shift.id}
+                      className={`relative flex flex-col justify-between rounded-2xl border p-6 transition-all ${
                         isBest
-                          ? "bg-[#0A2E5C] text-[#FFC107] border border-[#FFC107] hover:bg-[#141A24]"
-                          : "bg-[#F8FAFC] text-[#0A2E5C] border border-[#E5E7EB] hover:bg-[#E5E7EB]/30 dark:bg-zinc-800 dark:text-zinc-200"
+                          ? "border-[#FFC107] bg-white shadow-xl shadow-[#FFC107]/10 dark:bg-[#0A2E5C] ring-2 ring-[#FFC107]"
+                          : isLocker
+                          ? "border-purple-300 dark:border-purple-800 bg-white shadow-xs dark:bg-[#0A2E5C]"
+                          : "border-[#E5E7EB] bg-white shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] hover:shadow-md"
                       }`}
                     >
-                      <span>Reserve {shift.name.split(" ")[0]} Shift</span>
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </Link>
+                      {isBest && (
+                        <span className="absolute -top-3 right-6 rounded-full bg-[#0A2E5C] px-3 py-0.5 text-[11px] font-bold text-[#FFC107] border border-[#FFC107] shadow-xs">
+                          🔥 Most Popular
+                        </span>
+                      )}
+                      {isLocker && (
+                        <span className="absolute -top-3 right-6 rounded-full bg-purple-900 px-3 py-0.5 text-[11px] font-bold text-purple-200 border border-purple-400 shadow-xs">
+                          💎 Desk + Personal Locker
+                        </span>
+                      )}
+
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs uppercase font-bold text-[#0B5ED7]">{shift.tag}</span>
+                          <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                            Fixed Reserved
+                          </span>
+                        </div>
+
+                        <h4 className="text-lg font-bold text-[#0A2E5C] dark:text-white mt-2">
+                          {shift.name}
+                        </h4>
+                        <p className="text-xs text-[#6B7280] dark:text-zinc-400 mt-1">
+                          Timing: <strong>{shift.time}</strong>
+                        </p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-300 mt-1 font-medium">
+                          <strong>Feature:</strong> {shift.bestFor}
+                        </p>
+
+                        <div className="mt-4 flex items-baseline gap-1">
+                          <span className="text-3xl font-black text-[#0A2E5C] dark:text-white">
+                            ₹{shift.fee}
+                          </span>
+                          <span className="text-xs text-[#0B5ED7]">/month</span>
+                        </div>
+
+                        <ul className="mt-5 space-y-2 border-t border-[#E5E7EB]/60 pt-4 text-xs text-[#6B7280] dark:text-zinc-300">
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                            Permanent Dedicated Seat Assigned
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                            {isLocker ? "Private Lockable Cabinet / Locker" : "Personal Charging Socket & Lamp"}
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                            Unrestricted 24x7 Entry &amp; Exit
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                            Ergonomic High-Back Comfort Chair
+                          </li>
+                        </ul>
+                      </div>
+
+                      <div className="mt-6">
+                        <Link
+                          href="/login/?role=student"
+                          className={`w-full inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold transition ${
+                            isBest
+                              ? "bg-[#0A2E5C] text-[#FFC107] border border-[#FFC107] hover:bg-[#141A24]"
+                              : "bg-[#F8FAFC] text-[#0A2E5C] border border-[#E5E7EB] hover:bg-[#E5E7EB]/30 dark:bg-zinc-800 dark:text-zinc-200"
+                          }`}
+                        >
+                          <span>Reserve {shift.name}</span>
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          {/* 3. Special Shift */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-300 text-xs font-black uppercase tracking-wider">
+                3. Special Shift
+              </span>
+              <h3 className="text-lg font-bold text-[#0A2E5C] dark:text-white">
+                Night Shift Ultra (Late Night Silent Study)
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {BRAND_CONFIG.shifts
+                .filter((s) => s.category === "Special Shift")
+                .map((shift) => (
+                  <div
+                    key={shift.id}
+                    className="relative flex flex-col justify-between rounded-2xl border border-indigo-200 dark:border-indigo-900 bg-white p-6 shadow-xs dark:bg-[#0A2E5C] hover:shadow-md transition-all md:col-span-2"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs uppercase font-extrabold text-indigo-600 dark:text-indigo-400">{shift.tag}</span>
+                          <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                            High Security • CCTV Guarded
+                          </span>
+                        </div>
+                        <h4 className="text-xl font-bold text-[#0A2E5C] dark:text-white mt-1">
+                          {shift.name}
+                        </h4>
+                        <p className="text-xs text-[#6B7280] dark:text-zinc-400 mt-1">
+                          Timing: <strong>{shift.time}</strong>
+                        </p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-300 mt-1 font-medium">
+                          <strong>Best for:</strong> {shift.bestFor}
+                        </p>
+                      </div>
+
+                      <div className="flex items-baseline gap-1 sm:text-right shrink-0">
+                        <span className="text-3xl font-black text-[#0A2E5C] dark:text-white">
+                          ₹{shift.fee}
+                        </span>
+                        <span className="text-xs text-[#0B5ED7]">/month</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+                      <div className="text-xs text-[#6B7280] dark:text-zinc-300">
+                        ✓ Absolute pin-drop silence, optimal temperature control, warm water kettle and round-the-clock emergency support.
+                      </div>
+                      <Link
+                        href="/login/?role=student"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl px-5 py-2.5 text-xs font-bold transition bg-[#0A2E5C] text-white hover:bg-[#141A24] shrink-0"
+                      >
+                        <span>Enroll for {shift.name}</span>
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                ))}
+            </div>
           </div>
         </div>
       </section>
@@ -922,7 +1085,7 @@ export default function HomePage() {
                   <div>
                     <h3 className="font-bold text-[#0A2E5C] dark:text-white">Operating Hours</h3>
                     <p className="text-[#6B7280] dark:text-zinc-300 font-medium">
-                      Open 24 Hours • 365 Days a Year (Morning, Afternoon, Evening, &amp; 24/7 Plans)
+                      Open 24 Hours • 365 Days a Year (Flexible Hourly Passes &amp; 24/7 Dedicated Seating)
                     </p>
                   </div>
                 </div>

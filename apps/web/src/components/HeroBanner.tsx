@@ -167,61 +167,80 @@ export function HeroBanner() {
               <div className="flex items-center justify-between border-b border-white/15 pb-4">
                 <div>
                   <span className="text-xs uppercase font-extrabold tracking-wider text-[#FFC107]">
-                    Admission Live
+                    24/7 Admission Live
                   </span>
-                  <h3 className="text-lg font-black text-white">Shift Timings &amp; Plans</h3>
+                  <h3 className="text-lg font-black text-white">Membership Plans &amp; Pricing</h3>
                 </div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
                   <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>48 Desks Total</span>
+                  <span>Open 24/7</span>
                 </div>
               </div>
 
               {/* Shift Options List */}
-              <div className="space-y-2.5">
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-2.5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition">
                   <div>
-                    <div className="text-sm font-bold text-white flex items-center gap-2">
-                      <span>Morning Shift</span>
-                      <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 font-semibold">Popular</span>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span>Standard (3 Hours Pass)</span>
+                      <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-blue-400/20 text-blue-300 font-semibold">Flexible</span>
                     </div>
-                    <div className="text-xs text-zinc-300">06:00 AM – 02:00 PM (8 Hrs)</div>
+                    <div className="text-[11px] text-zinc-300">Any 3 Hours Daily • 24/7 Access</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-black text-[#FFC107]">₹600<span className="text-xs font-normal text-zinc-400">/mo</span></div>
+                    <div className="text-sm font-black text-[#FFC107]">₹300<span className="text-xs font-normal text-zinc-400">/mo</span></div>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition">
+                <div className="flex items-center justify-between p-2.5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition">
                   <div>
-                    <div className="text-sm font-bold text-white">Evening Shift</div>
-                    <div className="text-xs text-zinc-300">02:00 PM – 10:00 PM (8 Hrs)</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-black text-[#FFC107]">₹600<span className="text-xs font-normal text-zinc-400">/mo</span></div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition">
-                  <div>
-                    <div className="text-sm font-bold text-white">Night Shift</div>
-                    <div className="text-xs text-zinc-300">10:00 PM – 06:00 AM (8 Hrs)</div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span>Pro / Prime (6 Hours Pass)</span>
+                      <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 font-semibold">Popular</span>
+                    </div>
+                    <div className="text-[11px] text-zinc-300">Any 6 Hours Daily • 24/7 Access</div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-black text-[#FFC107]">₹500<span className="text-xs font-normal text-zinc-400">/mo</span></div>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-[#FFC107]/10 border border-[#FFC107]/30 hover:bg-[#FFC107]/15 transition">
+                <div className="flex items-center justify-between p-2.5 rounded-2xl bg-[#FFC107]/10 border border-[#FFC107]/30 hover:bg-[#FFC107]/15 transition">
                   <div>
-                    <div className="text-sm font-bold text-white flex items-center gap-2">
-                      <span>24 Hours (Full Access)</span>
-                      <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-emerald-400/20 text-emerald-300 font-semibold">Best Value</span>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span>Prime / Reserve Big</span>
+                      <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-400/20 text-emerald-300 font-semibold">Most Popular</span>
                     </div>
-                    <div className="text-xs text-zinc-300">Reserved Dedicated Seat 24x7</div>
+                    <div className="text-[11px] text-zinc-300">24/7 Premium Large Reserved Desk</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-black text-[#FFC107]">₹1,000<span className="text-xs font-normal text-zinc-400">/mo</span></div>
+                    <div className="text-sm font-black text-[#FFC107]">₹600<span className="text-xs font-normal text-zinc-400">/mo</span></div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-2xl bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/15 transition">
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span>Max / Reserve Locker</span>
+                      <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-purple-400/20 text-purple-300 font-semibold">VIP</span>
+                    </div>
+                    <div className="text-[11px] text-zinc-300">24/7 Reserved Desk + Personal Locker</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-black text-[#FFC107]">₹700<span className="text-xs font-normal text-zinc-400">/mo</span></div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition">
+                  <div>
+                    <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span>Night Shift Ultra</span>
+                      <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-indigo-400/20 text-indigo-300 font-semibold">Night Owls</span>
+                    </div>
+                    <div className="text-[11px] text-zinc-300">10:00 PM – 06:00 AM (8 Hours)</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-black text-[#FFC107]">₹500<span className="text-xs font-normal text-zinc-400">/mo</span></div>
                   </div>
                 </div>
               </div>
