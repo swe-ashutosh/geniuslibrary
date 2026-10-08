@@ -1,0 +1,68 @@
+# Global Security Headers
+/*
+  X-Robots-Tag: all
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=*, microphone=(), geolocation=(self)
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+
+# HTML Pages Edge CDN Caching & Brotli Compression
+# - s-maxage=3600: Caches the HTML shells on Cloudflare's global Edge CDN for 1 hour
+# - stale-while-revalidate=86400: Serves edge cached response in sub-20ms TTFB worldwide
+# - max-age=0: Tells browser to revalidate so newly deployed app updates take effect immediately
+/
+  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400
+  CDN-Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400
+  Cloudflare-CDN-Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400
+
+/index.html
+  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400
+  CDN-Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400
+  Cloudflare-CDN-Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400
+
+/*.html
+  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400
+  CDN-Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400
+  Cloudflare-CDN-Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400
+
+/*/*.html
+  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400
+  CDN-Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400
+  Cloudflare-CDN-Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400
+
+# Next.js Static Assets (Hashed JS chunks, CSS, Media)
+# Immutable: Can be permanently cached on Edge and in Browser for maximum speed
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+  CDN-Cache-Control: public, max-age=31536000, immutable
+  Cloudflare-CDN-Cache-Control: public, max-age=31536000, immutable
+
+# Static Images & Graphics
+/*.png
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/*.jpg
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/*.jpeg
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/*.svg
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/*.ico
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+/*.webp
+  Cache-Control: public, max-age=604800, stale-while-revalidate=86400
+
+# Web App Manifest, Sitemap, and Robots
+/manifest.webmanifest
+  Cache-Control: public, max-age=86400, stale-while-revalidate=86400
+  Content-Type: application/manifest+json; charset=utf-8
+/sitemap.xml
+  Cache-Control: public, max-age=86400, stale-while-revalidate=86400
+  Content-Type: application/xml; charset=utf-8
+/robots.txt
+  Cache-Control: public, max-age=86400, stale-while-revalidate=86400
+  Content-Type: text/plain; charset=utf-8
+
+# Service Worker - ALWAYS network revalidate to guarantee instant PWA updates
+/sw.js
+  Cache-Control: public, max-age=0, no-cache, no-store, must-revalidate

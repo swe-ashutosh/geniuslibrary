@@ -1,0 +1,16 @@
+/auth/callback /auth/callback/index.html 200
+/auth/callback/ /auth/callback/index.html 200
+/auth/callback/* /auth/callback/index.html 200
+/login /login/index.html 200
+/login/ /login/index.html 200
+/signup /signup/index.html 200
+/signup/ /signup/index.html 200
+/forgot-password /forgot-password/index.html 200
+/update-password /update-password/index.html 200
+/student /student/index.html 200
+/student/* /student/index.html 200
+/admin /admin/index.html 200
+/admin/* /admin/index.html 200
+/staff /staff/index.html 200
+/staff/* /staff/index.html 200
+/manifest.json /manifest.webmanifest 200

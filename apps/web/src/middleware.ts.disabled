@@ -1,0 +1,212 @@
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const isAdminRoute = pathname.startsWith("/admin");
+  const isStudentRoute = pathname.startsWith("/student");
+  const isStaffRoute = pathname.startsWith("/staff");
+  const isAuthRoute = pathname === "/login" || pathname === "/signup";
+
+  // Fast-Path Check: Detect presence of authentication cookies
+  const allCookies = request.cookies.getAll();
+  const hasAuthCookie = allCookies.some(
+    (c) => c.name.startsWith("sb-") || c.name.includes("auth-token")
+  );
+
+  // Fast-Path 1: If visiting protected routes without any auth cookies -> instant 0ms redirect
+  if (!hasAuthCookie && (isAdminRoute || isStudentRoute || isStaffRoute)) {
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    loginUrl.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Fast-Path 2: If visiting public auth routes (/login, /signup) without auth cookies -> instant 0ms pass-through
+  if (!hasAuthCookie && isAuthRoute) {
+    return NextResponse.next();
+  }
+
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
+
+  // Attach defense-in-depth HTTP security headers
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('X-Frame-Options', 'SAMEORIGIN');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  response.headers.set('Permissions-Policy', 'camera=*, microphone=(), geolocation=(self)');
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({
+            request,
+          });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // 1. Unauthenticated users trying to access protected routes
+  if (!user && (isAdminRoute || isStudentRoute || isStaffRoute)) {
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    loginUrl.searchParams.set("redirect", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // 2. Authenticated user role verification (database-authoritative)
+  if (user) {
+    const userEmail = (user.email || "").toLowerCase();
+    const isMasterAdmin = userEmail === "geniuslibrary@gmail.com";
+
+    let isAdmin = isMasterAdmin;
+    let isStaff = isMasterAdmin;
+
+    if (!isAdmin) {
+      const { data: dbProfile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (dbProfile?.role === "admin") {
+        isAdmin = true;
+        isStaff = true;
+      }
+    }
+
+    if (!isStaff) {
+      const { data: staffMember } = await supabase
+        .from("staff_profiles")
+        .select("id, status")
+        .eq("email", userEmail)
+        .maybeSingle();
+
+      if (staffMember && staffMember.status === "active") {
+        isStaff = true;
+      }
+    }
+
+    // Non-admin attempting to access /admin routes
+    if (isAdminRoute && !isAdmin) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = isStaff ? "/staff" : "/student";
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    // Non-staff and non-admin attempting to access /staff
+    if (isStaffRoute && !isStaff) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/student";
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    // Student attempting to access /student routes: Strictly enforce active approval status!
+    if (isStudentRoute && !isAdmin && !isStaff) {
+      const { data: studentProfile } = await supabase
+        .from("profiles")
+        .select("status, phone")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const hasPhone = Boolean(studentProfile?.phone && String(studentProfile.phone).trim().length > 0);
+
+      if (!studentProfile || !hasPhone) {
+        const loginUrl = request.nextUrl.clone();
+        loginUrl.pathname = "/login";
+        loginUrl.search = `?error=not_registered&email=${encodeURIComponent(userEmail)}`;
+        return NextResponse.redirect(loginUrl);
+      }
+
+      if (studentProfile.status === "pending") {
+        const loginUrl = request.nextUrl.clone();
+        loginUrl.pathname = "/login";
+        loginUrl.search = `?error=pending_approval&email=${encodeURIComponent(userEmail)}`;
+        return NextResponse.redirect(loginUrl);
+      }
+
+      if (studentProfile.status === "suspended") {
+        const loginUrl = request.nextUrl.clone();
+        loginUrl.pathname = "/login";
+        loginUrl.search = `?error=suspended&email=${encodeURIComponent(userEmail)}`;
+        return NextResponse.redirect(loginUrl);
+      }
+
+      if (studentProfile.status !== "active") {
+        const loginUrl = request.nextUrl.clone();
+        loginUrl.pathname = "/login";
+        loginUrl.search = `?error=not_approved&email=${encodeURIComponent(userEmail)}`;
+        return NextResponse.redirect(loginUrl);
+      }
+    }
+
+    // If user is logged in and visits /login or /signup
+    if (isAuthRoute) {
+      if (request.nextUrl.searchParams.get("error")) {
+        return response;
+      }
+
+      const redirectUrl = request.nextUrl.clone();
+      if (isAdmin) {
+        redirectUrl.pathname = "/admin";
+        return NextResponse.redirect(redirectUrl);
+      } else if (isStaff) {
+        redirectUrl.pathname = "/staff";
+        return NextResponse.redirect(redirectUrl);
+      } else {
+        // Only redirect to /student if student profile is active
+        const { data: studentProfile } = await supabase
+          .from("profiles")
+          .select("status, phone")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        const hasPhone = Boolean(studentProfile?.phone && String(studentProfile.phone).trim().length > 0);
+        if (studentProfile && hasPhone && studentProfile.status === "active") {
+          redirectUrl.pathname = "/student";
+          return NextResponse.redirect(redirectUrl);
+        }
+        // If not active, let them stay on auth route
+        return response;
+      }
+    }
+  }
+
+  return response;
+}
+
+export const config = {
+  matcher: [
+    /*
+     * Match protected routes and auth routes:
+     * - /admin/:path*
+     * - /student/:path*
+     * - /staff/:path*
+     * - /login
+     * - /signup
+     */
+    "/admin/:path*",
+    "/student/:path*",
+    "/staff/:path*",
+    "/login",
+    "/signup",
+  ],
+};

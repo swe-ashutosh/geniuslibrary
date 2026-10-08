@@ -1,0 +1,25 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "geniuslibrary",
+	"account_id": "d8060f31eaf801777206f2d10af93c4e",
+	"pages_build_output_dir": "out",
+	"compatibility_date": "2026-09-18",
+	"vars": {
+		"NEXT_PUBLIC_API_URL": "https://genius-library-api.geniuslibrarymadhupur.workers.dev",
+		"NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable__1OrHuPIyPjYX1eAFF4Iiw_OALS76eP",
+		"NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable__1OrHuPIyPjYX1eAFF4Iiw_OALS76eP",
+		"NEXT_PUBLIC_SUPABASE_URL": "https://sfcaljbbtwbqjutaczdl.supabase.co",
+		"NODE_VERSION": "20"
+	},
+	"env": {
+		"production": {
+			"vars": {
+				"NEXT_PUBLIC_API_URL": "https://genius-library-api.geniuslibrarymadhupur.workers.dev",
+				"NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable__1OrHuPIyPjYX1eAFF4Iiw_OALS76eP",
+				"NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable__1OrHuPIyPjYX1eAFF4Iiw_OALS76eP",
+				"NEXT_PUBLIC_SUPABASE_URL": "https://sfcaljbbtwbqjutaczdl.supabase.co",
+				"NODE_VERSION": "20"
+			}
+		}
+	}
+}

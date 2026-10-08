@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+:root {
+  --background: #F8FAFC;
+  --foreground: #0A2E5C;
+  --color-darkNavy: #0A2E5C;
+  --color-primaryGold: #FFC107;
+  --color-primaryGold-hover: #FF8A00;
+  --color-lightGray: #E5E7EB;
+  --color-primaryBlue: #0B5ED7;
+  --color-gray: #6B7280;
+  --color-ivory: #F8FAFC;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-darkNavy: #0A2E5C;
+  --color-primaryGold: #FFC107;
+  --color-primaryGold-hover: #FF8A00;
+  --color-lightGray: #E5E7EB;
+  --color-primaryBlue: #0B5ED7;
+  --color-gray: #6B7280;
+  --color-ivory: #F8FAFC;
+  --font-serif: "Cinzel", "Playfair Display", Georgia, serif;
+  --font-sans: var(--font-geist-sans), "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
+}
+
+/* PWA Standalone Native Feel & Safe Area Padding */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Elegant Golden Glow Utilities */
+.primaryGold-glow {
+  box-shadow: 0 4px 20px -2px rgba(191, 164, 134, 0.25);
+}
+
+.darkNavy-glow {
+  box-shadow: 0 10px 30px -5px rgba(30, 38, 53, 0.4);
+}
+
+.border-primaryGold {
+  border-color: #FFC107;
+}
+
+.border-lightGray {
+  border-color: #E5E7EB;
+}
+
+/* =========================================================
+   A4 Professional Invoice Print Isolation Rules
+   Ensures ONLY the invoice is printed and no web chrome / URLs
+   ========================================================= */
+@page {
+  size: A4 portrait;
+  margin: 10mm 12mm 10mm 12mm;
+}
+
+@media print {
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* When printing directly, hide page headers, footers, navs */
+  header, nav, footer, aside, .no-print {
+    display: none !important;
+  }
+}

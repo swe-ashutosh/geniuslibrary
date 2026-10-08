@@ -1,0 +1,30 @@
+# Documentation Complete — PRD & TRD
+
+Both documents have been comprehensively rewritten to reflect the **actual production system** as it exists today, making them ready to use as a blueprint for your next client.
+
+## What's Included
+
+### [prd.md](file:///Users/jugaduji/Desktop/Project/Demo/Sanskar%20Library/prd.md) — Product Requirements Document
+- **Executive Summary** — what the platform does, who it's for
+- **3 User Personas** — Library Owner, Staff, Student
+- **5 Portal Feature Tables** — Public Website, Admin Portal (14 features), Staff Portal (8 features), Student Portal (9 features), Kiosk Mode (4 features)
+- **5 User Flow Diagrams** — Registration, Book Request, Fee Payment, Kiosk Check-in, Student Onboarding
+- **Notification System** — all 6 event types, 4 delivery mechanisms
+- **White-Label Configuration** — what to change for a new client (11 config areas)
+- **NFRs & KPIs** — performance, security, success metrics
+- **12-Step New Client Deployment Checklist**
+
+### [trd.md](file:///Users/jugaduji/Desktop/Project/Demo/Sanskar%20Library/trd.md) — Technical Requirements Document
+- **Full Technology Stack Table** — 20+ technologies with exact versions
+- **Complete File Structure** — every file and directory in the monorepo (~150 entries)
+- **Database Schema** — 8 tables with Mermaid ER diagram + column-by-column documentation
+- **API Architecture** — all 30+ API actions documented (GET queries + POST mutations)
+- **Auth & RBAC** — flow diagram, session management, role matrix, 10 security measures
+- **Real-Time Sync Architecture** — event bus diagram, 6 event types, notification pipeline
+- **PWA Architecture** — service worker, manifest, notification handlers
+- **Email System** — Resend integration, email types
+- **White-Label System** — complete config section listing with TypeScript reference
+- **Step-by-Step Deployment Guide** — 13 bash commands to set up a new client
+- **Environment Variables Table** — all 5 required env vars
+- **Supabase Setup Checklist** — auth providers, storage, OAuth redirect
+- **Performance Optimizations** — 7 optimization techniques documented

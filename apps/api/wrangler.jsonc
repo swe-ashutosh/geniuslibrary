@@ -1,0 +1,24 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "genius-library-api",
+	"account_id": "d8060f31eaf801777206f2d10af93c4e",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-13",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "genius-library-d1",
+			"database_id": "28d46e61-ca35-4a1b-aae6-2412c3fcbb89"
+		}
+	],
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1
+	},
+	"triggers": {
+		"crons": ["0 0 1 * *", "30 17 * * *", "30 18 * * *"]
+	}
+}
