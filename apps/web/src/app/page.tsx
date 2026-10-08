@@ -942,7 +942,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="relative rounded-3xl border border-[#FFC107]/30 bg-white p-8 shadow-xs transition-all hover:shadow-xl dark:border-zinc-800 dark:bg-zinc-900 group md:-trangray-y-4">
+            <div className="relative rounded-3xl border border-[#FFC107]/30 bg-white p-8 shadow-xs transition-all hover:shadow-xl dark:border-zinc-800 dark:bg-zinc-900 group md:-translate-y-4">
               <div className="flex text-[#FFC107] mb-4">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <svg key={star} className="w-5 h-5 fill-current" viewBox="0 0 24 24">

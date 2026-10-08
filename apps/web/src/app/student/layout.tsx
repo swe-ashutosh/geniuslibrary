@@ -19,6 +19,7 @@ import {
   LogOut,
   Bell,
   X,
+  Menu,
   User,
   ShieldCheck,
   ChevronDown,
@@ -87,6 +88,7 @@ export default function StudentLayout({
   const router = useRouter();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [userSidebarOpen, setUserSidebarOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [profileDetailsOpen, setProfileDetailsOpen] = useState(false);
   const [isUploadingModalAvatar, setIsUploadingModalAvatar] = useState(false);
   const [qrPassUrl, setQrPassUrl] = useState<string>("");
@@ -109,6 +111,20 @@ export default function StudentLayout({
     return () => {
       window.removeEventListener("open_student_qr_scanner", handleOpenScannerEvent);
     };
+  }, []);
+
+  // Auto-close mobile navigation drawer on route change
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
+
+  // Close mobile drawer on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -750,8 +766,17 @@ export default function StudentLayout({
         {/* HEADER NAVBAR: Desktop Searchbar & Right Side Notification, Message, User Icon */}
         <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-[#E5E7EB]/60 bg-white px-4 sm:px-6 dark:border-zinc-800 dark:bg-[#0A2E5C] relative z-30 shadow-xs">
           
-          {/* Mobile Brand Logo (Replaces Student Panel Heading) */}
-          <div className="lg:hidden flex items-center">
+          {/* Mobile Hamburger Menu + Brand Logo */}
+          <div className="lg:hidden flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 text-[#0A2E5C] dark:text-[#FFC107] border border-zinc-200/80 dark:border-zinc-700/60 transition cursor-pointer shrink-0 shadow-xs active:scale-95"
+              aria-label="Open Navigation Sidebar Menu"
+              title="Open Navigation Menu"
+            >
+              <Menu className="h-5 w-5 stroke-[2.2]" />
+            </button>
             <BrandLogo variant="navbar" size="h15" href="/student" />
           </div>
 
@@ -991,6 +1016,86 @@ export default function StudentLayout({
 
       </div>
 
+      {/* Mobile Student Navigation Drawer Overlay */}
+      {mobileNavOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-[#0A2E5C]/80 backdrop-blur-sm lg:hidden transition-opacity"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
+
+      {/* Mobile Student Navigation Drawer Sidebar */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-[60] flex w-64 flex-col bg-[#0A2E5C] text-white transition-transform duration-300 ease-in-out lg:hidden border-r border-zinc-800/80 shadow-2xl
+        ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        {/* Drawer Header */}
+        <div className="flex h-16 items-center px-5 border-b border-zinc-800/60 justify-between">
+          <BrandLogo variant="navbar" size="md" href="/student" darkBackground />
+          <button 
+            type="button"
+            onClick={() => setMobileNavOpen(false)}
+            className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
+            aria-label="Close Navigation Menu"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Student Nav Links */}
+        <div className="flex-1 overflow-y-auto px-4 py-6 scrollbar-none space-y-1.5">
+          <p className="px-3 text-[10px] font-black uppercase tracking-wider text-[#FFC107] mb-2">
+            Student Menu
+          </p>
+          {NAV_ITEMS.map((item) => {
+            const active = isNavActive(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileNavOpen(false)}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-xs font-bold transition-all ${
+                  active 
+                    ? "bg-[#141A24] text-[#FFC107] border border-[#FFC107]/40 shadow-sm font-black" 
+                    : "text-zinc-400 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <item.icon className={`h-4 w-4 ${active ? "text-[#FFC107]" : "text-zinc-400"}`} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Bottom User profile card + Logout */}
+        <div className="border-t border-zinc-800/80 p-4 space-y-2 bg-[#111620]">
+          <button
+            type="button"
+            onClick={() => {
+              setMobileNavOpen(false);
+              setUserSidebarOpen(true);
+            }}
+            className="w-full flex items-center gap-3 p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-left transition cursor-pointer"
+          >
+            <div className="h-9 w-9 rounded-full bg-[#0A2E5C] border border-[#FFC107]/50 flex items-center justify-center text-[#FFC107] font-black text-xs shrink-0">
+              {getInitials(userProfile.fullName)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-white truncate">{userProfile.fullName}</p>
+              <p className="text-[10px] text-zinc-400">View ID Pass & Profile →</p>
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-500/10 rounded-xl transition cursor-pointer"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </aside>
+
       {/* Slide-Over User Profile & Pass Sidebar Drawer */}
       {userSidebarOpen && (
         <div className="fixed inset-0 z-50 flex justify-end animate-fadeIn">
@@ -1151,8 +1256,8 @@ export default function StudentLayout({
                 {/* Vertical Smart Digital ID Card */}
                 <div className="rounded-3xl border border-[#FFC107]/40 bg-gradient-to-b from-[#0A2E5C] via-[#161C26] to-[#0E131B] p-5 text-white shadow-xl relative overflow-hidden text-center flex flex-col items-center">
                   {/* Decorative ambient background glows */}
-                  <div className="absolute -top-16 left-1/2 -trangray-x-1/2 w-48 h-48 bg-[#FFC107]/10 rounded-full blur-2xl pointer-events-none" />
-                  <div className="absolute -bottom-16 left-1/2 -trangray-x-1/2 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+                  <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-48 h-48 bg-[#FFC107]/10 rounded-full blur-2xl pointer-events-none" />
+                  <div className="absolute -bottom-16 left-1/2 -translate-x-1/2 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
 
                   {/* Pass Header */}
                   <div className="relative z-10 w-full pb-3 border-b border-white/10 flex flex-col items-center gap-0.5">

@@ -663,7 +663,7 @@ export default function AdminSettingsPage() {
 
                 <div className="flex items-center gap-2">
                   <div className="relative">
-                    <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-2.5 top-1/2 -trangray-y-1/2" />
+                    <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       placeholder="Search archive..."

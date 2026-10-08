@@ -1761,7 +1761,7 @@ function StudentsDirectoryContent() {
 
           {/* Search Input (Takes remaining width) */}
           <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-3 top-1/2 -trangray-y-1/2 h-3.5 sm:h-4 w-3.5 sm:w-4 text-zinc-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 sm:h-4 w-3.5 sm:w-4 text-zinc-400" />
             <input
               type="text"
               value={searchQuery}
@@ -1773,7 +1773,7 @@ function StudentsDirectoryContent() {
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2 sm:right-2.5 top-1/2 -trangray-y-1/2 h-4.5 w-4.5 rounded-full bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 flex items-center justify-center text-[9px] text-zinc-600 dark:text-zinc-300 transition cursor-pointer"
+                className="absolute right-2 sm:right-2.5 top-1/2 -translate-y-1/2 h-4.5 w-4.5 rounded-full bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 flex items-center justify-center text-[9px] text-zinc-600 dark:text-zinc-300 transition cursor-pointer"
                 title="Clear search query"
               >
                 ✕
@@ -2050,7 +2050,7 @@ function StudentsDirectoryContent() {
             {statusDropdownOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setStatusDropdownOpen(false)} />
-                <div className="absolute left-1/2 -trangray-x-1/2 sm:left-0 sm:trangray-x-0 top-full mt-1.5 z-50 w-52 sm:w-60 rounded-2xl border border-[#E5E7EB] bg-white p-1.5 shadow-xl dark:border-zinc-700 dark:bg-[#0A2E5C] animate-fadeIn">
+                <div className="absolute left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 top-full mt-1.5 z-50 w-52 sm:w-60 rounded-2xl border border-[#E5E7EB] bg-white p-1.5 shadow-xl dark:border-zinc-700 dark:bg-[#0A2E5C] animate-fadeIn">
                   <div className="space-y-0.5">
                     {[
                       { id: "all", label: "All Status", tag: "All" },
@@ -2988,7 +2988,7 @@ function StudentsDirectoryContent() {
                       Full Name <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -trangray-y-1/2 h-4 w-4 text-zinc-400" />
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                       <input
                         type="text"
                         required
@@ -3005,7 +3005,7 @@ function StudentsDirectoryContent() {
                       Student Mobile Number <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -trangray-y-1/2 h-4 w-4 text-zinc-400" />
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                       <input
                         type="text"
                         required
@@ -3022,7 +3022,7 @@ function StudentsDirectoryContent() {
                       Email Address <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -trangray-y-1/2 h-4 w-4 text-zinc-400" />
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                       <input
                         type="email"
                         required
@@ -3039,7 +3039,7 @@ function StudentsDirectoryContent() {
                       Target Exam / Course
                     </label>
                     <div className="relative">
-                      <BookOpen className="absolute left-3 top-1/2 -trangray-y-1/2 h-4 w-4 text-zinc-400" />
+                      <BookOpen className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                       <input
                         type="text"
                         value={editStudentForm.course || ""}
@@ -3064,7 +3064,7 @@ function StudentsDirectoryContent() {
                       Parent's Full Name
                     </label>
                     <div className="relative">
-                      <Users className="absolute left-3 top-1/2 -trangray-y-1/2 h-4 w-4 text-zinc-400" />
+                      <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                       <input
                         type="text"
                         value={editStudentForm.parent_name || ""}
@@ -3080,7 +3080,7 @@ function StudentsDirectoryContent() {
                       Parent's Mobile Number
                     </label>
                     <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -trangray-y-1/2 h-4 w-4 text-zinc-400" />
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
                       <input
                         type="text"
                         value={editStudentForm.parent_phone || ""}
@@ -4067,7 +4067,7 @@ function StudentsDirectoryContent() {
                       Mobile Number (10 Digits) <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -trangray-y-1/2 text-xs font-bold text-zinc-400 font-mono">+91</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400 font-mono">+91</span>
                       <input
                         type="tel"
                         required
@@ -4130,7 +4130,7 @@ function StudentsDirectoryContent() {
                   <div>
                     <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1">Parent Mobile</label>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -trangray-y-1/2 text-xs font-bold text-zinc-400 font-mono">+91</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400 font-mono">+91</span>
                       <input
                         type="tel"
                         maxLength={10}
@@ -4267,7 +4267,7 @@ function StudentsDirectoryContent() {
                       <button
                         type="button"
                         onClick={() => setShowEnrollPassword(!showEnrollPassword)}
-                        className="absolute right-3 top-1/2 -trangray-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
                       >
                         {showEnrollPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
@@ -4492,7 +4492,7 @@ function StudentsDirectoryContent() {
 
       {/* 10. FLOATING BULK ACTIONS TOOLBAR (WHEN CHECKBOXES SELECTED) */}
       {selectedStudents.length > 0 && (
-        <div className="fixed bottom-20 sm:bottom-6 left-1/2 -trangray-x-1/2 z-50 animate-bounce-short">
+        <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 animate-bounce-short">
           <div className="flex items-center gap-2 sm:gap-3 bg-[#0A2E5C] text-white px-3.5 sm:px-5 py-2.5 sm:py-3 rounded-2xl shadow-2xl border border-[#0B5ED7]/50 backdrop-blur-md">
             <span className="flex items-center gap-1.5 text-xs font-black text-[#FFC107]">
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>

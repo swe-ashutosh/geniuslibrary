@@ -1011,7 +1011,7 @@ export default function StudentDashboard() {
             <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 group-hover:scale-105 transition-transform">
               <Award className="h-5 w-5" />
             </div>
-            <span className="text-[10px] font-bold text-amber-600 group-hover:trangray-x-0.5 transition-transform flex items-center gap-0.5">
+            <span className="text-[10px] font-bold text-amber-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
               Scorecard <ChevronRight className="h-3 w-3" />
             </span>
           </div>
@@ -1128,7 +1128,7 @@ export default function StudentDashboard() {
             <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 group-hover:scale-105 transition-transform">
               <CheckSquare className="h-5 w-5" />
             </div>
-            <span className="text-[10px] font-bold text-purple-600 group-hover:trangray-x-0.5 transition-transform flex items-center gap-0.5">
+            <span className="text-[10px] font-bold text-purple-600 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
               Tasks <ChevronRight className="h-3 w-3" />
             </span>
           </div>

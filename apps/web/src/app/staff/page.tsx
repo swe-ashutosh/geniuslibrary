@@ -1034,8 +1034,8 @@ export default function StaffPortal() {
       {/* 1. SIDEBAR (MATCHING ADMIN PANEL SIDEBAR WITH BRAND COLORS) */}
       {/* ========================================================================= */}
       <aside className={`
-        fixed inset-y-0 left-0 z-[60] flex w-64 flex-col bg-[#0A2E5C] text-white transition-transform duration-300 ease-in-out lg:static lg:trangray-x-0 border-r border-zinc-800/80
-        ${mobileMenuOpen ? 'trangray-x-0' : '-trangray-x-full'}
+        fixed inset-y-0 left-0 z-[60] flex w-64 flex-col bg-[#0A2E5C] text-white transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 border-r border-zinc-800/80 shadow-2xl lg:shadow-none
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Brand Logo Header */}
         <div className="flex h-20 items-center px-6 border-b border-zinc-800/60 justify-between">
@@ -1182,11 +1182,12 @@ export default function StaffPortal() {
           <div className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
             {/* Mobile Hamburger Menu Button */}
             <button 
-              className="lg:hidden flex h-9 w-9 items-center justify-center rounded-xl text-zinc-700 hover:bg-[#F3F4F6] dark:text-zinc-300 dark:hover:bg-zinc-800 transition cursor-pointer shrink-0"
+              className="lg:hidden flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 text-[#0A2E5C] dark:text-[#FFC107] border border-zinc-200/80 dark:border-zinc-700/60 transition cursor-pointer shrink-0 shadow-xs active:scale-95"
               onClick={() => setMobileMenuOpen(true)}
-              aria-label="Open Sidebar"
+              aria-label="Open Navigation Sidebar Menu"
+              title="Open Navigation Menu"
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-5 w-5 stroke-[2.2]" />
             </button>
 
             {/* Title & Subtitle */}
@@ -1313,7 +1314,7 @@ export default function StaffPortal() {
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                     <Users className="h-4 w-4" />
                   </div>
-                  <ChevronRight className="h-3.5 w-3.5 text-zinc-400 group-hover:text-[#0B5ED7] group-hover:trangray-x-0.5 transition-transform" />
+                  <ChevronRight className="h-3.5 w-3.5 text-zinc-400 group-hover:text-[#0B5ED7] group-hover:translate-x-0.5 transition-transform" />
                 </div>
                 <div className="mt-3">
                   <p className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">Total Students</p>
@@ -1879,7 +1880,7 @@ export default function StaffPortal() {
               {/* Filter controls */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="relative flex-1 max-w-sm">
-                  <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-3 top-1/2 -trangray-y-1/2" />
+                  <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     value={attSearch}
@@ -2789,7 +2790,7 @@ export default function StaffPortal() {
                 </div>
 
                 <div className="relative">
-                  <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-3 top-1/2 -trangray-y-1/2" />
+                  <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     placeholder="Search student or roll..."

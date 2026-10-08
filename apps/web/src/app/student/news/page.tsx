@@ -184,7 +184,7 @@ export default function StudentNewsPage() {
 
         {/* Search */}
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -trangray-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
           <input
             type="text"
             placeholder="Search articles & guides..."
@@ -259,7 +259,7 @@ export default function StudentNewsPage() {
         {filteredPosts.map((post) => (
           <article 
             key={post.id}
-            className="flex flex-col rounded-3xl border border-[#E5E7EB] bg-white shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] overflow-hidden transition-all duration-300 hover:shadow-md hover:-trangray-y-1"
+            className="flex flex-col rounded-3xl border border-[#E5E7EB] bg-white shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] overflow-hidden transition-all duration-300 hover:shadow-md hover:-translate-y-1"
           >
             {/* Thumbnail */}
             <div className="relative h-44 w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">

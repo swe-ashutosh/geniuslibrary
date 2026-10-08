@@ -169,7 +169,7 @@ function ForgotPasswordForm() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#141A24] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       {/* Background Decorative */}
-      <div className="absolute top-1/3 left-1/2 -trangray-x-1/2 -trangray-y-1/2 w-[500px] h-[300px] bg-[#FFC107]/10 blur-[100px] pointer-events-none rounded-full" />
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-[#FFC107]/10 blur-[100px] pointer-events-none rounded-full" />
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center relative z-10">
         <div className="flex justify-center">

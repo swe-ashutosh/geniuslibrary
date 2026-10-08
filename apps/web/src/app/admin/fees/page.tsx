@@ -1049,7 +1049,7 @@ export default function FeesAndExpensesManagement() {
           </div>
           <div className="mt-3 pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">
             <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 group-hover:underline">View Records</span>
-            <ChevronRight className="h-3 w-3 text-emerald-400 group-hover:trangray-x-0.5 transition-transform" />
+            <ChevronRight className="h-3 w-3 text-emerald-400 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </div>
 
@@ -1078,7 +1078,7 @@ export default function FeesAndExpensesManagement() {
           </div>
           <div className="mt-3 pt-2 border-t border-rose-200/40 dark:border-rose-900/40 flex items-center justify-between">
             <span className="text-[9px] font-bold text-rose-700 dark:text-rose-400 group-hover:underline">Dues Ledger</span>
-            <ChevronRight className="h-3 w-3 text-rose-600 group-hover:trangray-x-0.5 transition-transform" />
+            <ChevronRight className="h-3 w-3 text-rose-600 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </div>
 
@@ -1107,7 +1107,7 @@ export default function FeesAndExpensesManagement() {
           </div>
           <div className="mt-3 pt-2 border-t border-sky-200/40 dark:border-sky-900/40 flex items-center justify-between">
             <span className="text-[9px] font-bold text-sky-700 dark:text-sky-400 group-hover:underline">Verify Claims</span>
-            <ChevronRight className="h-3 w-3 text-sky-600 group-hover:trangray-x-0.5 transition-transform" />
+            <ChevronRight className="h-3 w-3 text-sky-600 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </div>
 
@@ -1136,7 +1136,7 @@ export default function FeesAndExpensesManagement() {
           </div>
           <div className="mt-3 pt-2 border-t border-red-200/40 dark:border-red-900/40 flex items-center justify-between">
             <span className="text-[9px] font-bold text-red-700 dark:text-red-400 group-hover:underline">Nudge Defaulters</span>
-            <ChevronRight className="h-3 w-3 text-red-600 group-hover:trangray-x-0.5 transition-transform" />
+            <ChevronRight className="h-3 w-3 text-red-600 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </div>
 
@@ -1165,7 +1165,7 @@ export default function FeesAndExpensesManagement() {
           </div>
           <div className="mt-3 pt-2 border-t border-amber-200/40 dark:border-amber-900/40 flex items-center justify-between">
             <span className="text-[9px] font-bold text-amber-700 dark:text-amber-400 group-hover:underline">Expenses History</span>
-            <ChevronRight className="h-3 w-3 text-amber-600 group-hover:trangray-x-0.5 transition-transform" />
+            <ChevronRight className="h-3 w-3 text-amber-600 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </div>
 
@@ -1194,7 +1194,7 @@ export default function FeesAndExpensesManagement() {
           </div>
           <div className="mt-3 pt-2 border-t border-purple-200/40 dark:border-purple-900/40 flex items-center justify-between">
             <span className="text-[9px] font-bold text-purple-700 dark:text-purple-400 group-hover:underline">Profit Breakdown</span>
-            <ChevronRight className="h-3 w-3 text-purple-600 group-hover:trangray-x-0.5 transition-transform" />
+            <ChevronRight className="h-3 w-3 text-purple-600 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </div>
 
@@ -1242,7 +1242,7 @@ export default function FeesAndExpensesManagement() {
 
             {/* Search Input */}
             <div className="relative min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -trangray-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
               <input 
                 type="text"
                 placeholder="Search student or phone..."
@@ -1284,7 +1284,7 @@ export default function FeesAndExpensesManagement() {
           {/* Mobile Toolbar: Search + Filter Icon Button + View Switcher */}
           <div className="flex sm:hidden items-center gap-2 w-full">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -trangray-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
               <input 
                 type="text"
                 placeholder="Search..."
@@ -1617,7 +1617,7 @@ export default function FeesAndExpensesManagement() {
 
             {/* Search Input */}
             <div className="relative min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -trangray-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
               <input 
                 type="text"
                 placeholder="Search invoice or student..."
@@ -1659,7 +1659,7 @@ export default function FeesAndExpensesManagement() {
           {/* Mobile Toolbar: Search + Filter Icon Button + View Switcher */}
           <div className="flex sm:hidden items-center gap-2 w-full">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -trangray-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
               <input 
                 type="text"
                 placeholder="Search..."

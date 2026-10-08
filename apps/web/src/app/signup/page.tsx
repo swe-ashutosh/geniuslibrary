@@ -549,7 +549,7 @@ function SignupForm() {
   if (isSubmitted) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#141A24] flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-        <div className="fixed top-1/3 left-1/2 -trangray-x-1/2 -trangray-y-1/2 w-[500px] h-[300px] bg-[#FFC107]/10 blur-[100px] pointer-events-none rounded-full" />
+        <div className="fixed top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-[#FFC107]/10 blur-[100px] pointer-events-none rounded-full" />
 
         <div className="sm:mx-auto sm:w-full sm:max-w-md text-center relative z-10 px-4">
           <div className="rounded-3xl border border-[#E5E7EB] bg-white p-8 sm:p-10 shadow-xl shadow-[#0A2E5C]/5 backdrop-blur-md dark:border-zinc-800 dark:bg-[#0A2E5C]">
@@ -619,7 +619,7 @@ function SignupForm() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#141A24] flex flex-col justify-center pt-8 sm:pt-12 pb-40 sm:pb-24 px-3 sm:px-6 lg:px-8">
       {/* Background Decorative */}
-      <div className="fixed top-1/3 left-1/2 -trangray-x-1/2 -trangray-y-1/2 w-[500px] h-[300px] bg-[#FFC107]/10 blur-[100px] pointer-events-none rounded-full" />
+      <div className="fixed top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-[#FFC107]/10 blur-[100px] pointer-events-none rounded-full" />
 
       <div className="sm:mx-auto sm:w-full sm:max-w-3xl text-center relative z-10">
         <div className="flex justify-center">

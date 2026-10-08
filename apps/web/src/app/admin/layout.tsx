@@ -117,6 +117,20 @@ export default function AdminLayout({
   const [searchQuery, setSearchQuery] = useState("");
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
 
+  // Auto-close mobile drawer on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  // Auto-close on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -415,8 +429,8 @@ export default function AdminLayout({
       {/* 1. SIDEBAR (MATCHING IMAGE 1 WITH BRAND COLORS) */}
       {/* ========================================================================= */}
       <aside className={`
-        fixed inset-y-0 left-0 z-[60] flex w-64 flex-col bg-[#0A2E5C] text-white transition-transform duration-300 ease-in-out lg:static lg:trangray-x-0 border-r border-zinc-800/80
-        ${mobileMenuOpen ? 'trangray-x-0' : '-trangray-x-full'}
+        fixed inset-y-0 left-0 z-[60] flex w-64 flex-col bg-[#0A2E5C] text-white transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 border-r border-zinc-800/80 shadow-2xl lg:shadow-none
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Brand Logo Header */}
         <div className="flex h-20 items-center px-6 border-b border-zinc-800/60 justify-between">
@@ -517,11 +531,12 @@ export default function AdminLayout({
           <div className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0 max-w-xl">
             {/* Mobile Hamburger Menu Button */}
             <button 
-              className="lg:hidden flex h-9 w-9 items-center justify-center rounded-xl text-zinc-700 hover:bg-[#F3F4F6] dark:text-zinc-300 dark:hover:bg-zinc-800 transition cursor-pointer shrink-0"
+              className="lg:hidden flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800/90 dark:hover:bg-zinc-700 text-[#0A2E5C] dark:text-[#FFC107] border border-zinc-200/80 dark:border-zinc-700/60 transition cursor-pointer shrink-0 shadow-xs active:scale-95"
               onClick={() => setMobileMenuOpen(true)}
-              aria-label="Open Sidebar"
+              aria-label="Open Navigation Sidebar Menu"
+              title="Open Navigation Menu"
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-5 w-5 stroke-[2.2]" />
             </button>
 
             {/* Mobile Fixed Brand Logo */}

@@ -425,7 +425,7 @@ export default function AdminResultsPage() {
       {/* Filter & Search Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl bg-white p-3 shadow-xs border border-[#E5E7EB] dark:border-zinc-800 dark:bg-[#0A2E5C]">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -trangray-y-1/2 h-4 w-4 text-zinc-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
           <input
             type="text"
             value={searchQuery}

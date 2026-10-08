@@ -26,7 +26,7 @@ export default function Error({
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#141A24] flex flex-col items-center justify-center p-4 sm:p-6 text-center selection:bg-[#FFC107] selection:text-[#0A2E5C]">
       {/* Background glow */}
-      <div className="absolute top-1/3 left-1/2 -trangray-x-1/2 -trangray-y-1/2 w-[500px] h-[300px] bg-[#FFC107]/10 blur-[120px] pointer-events-none rounded-full" />
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] bg-[#FFC107]/10 blur-[120px] pointer-events-none rounded-full" />
 
       <div className="relative z-10 max-w-lg w-full rounded-3xl border border-[#E5E7EB] bg-white p-7 sm:p-9 shadow-2xl dark:border-zinc-800 dark:bg-[#0A2E5C] text-center">
         {/* Brand Header */}

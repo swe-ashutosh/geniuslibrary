@@ -314,7 +314,7 @@ export function AdminStampCalibrationModal({
 
       {/* SUCCESS TOAST NOTICE */}
       {saveSuccessNotice && (
-        <div className="absolute top-20 left-1/2 -trangray-x-1/2 z-40 px-5 py-2.5 rounded-2xl bg-emerald-500 text-black font-black text-xs shadow-2xl flex items-center gap-2 animate-bounce">
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-40 px-5 py-2.5 rounded-2xl bg-emerald-500 text-black font-black text-xs shadow-2xl flex items-center gap-2 animate-bounce">
           <Check className="h-4 w-4 stroke-[3]" />
           <span>{saveSuccessNotice}</span>
         </div>
@@ -341,7 +341,7 @@ export function AdminStampCalibrationModal({
               <div className="absolute h-44 w-44 sm:h-52 sm:w-52 rounded-full border border-dashed border-amber-500/20 animate-ping opacity-30" />
               <div className="relative flex h-36 w-36 sm:h-44 sm:w-44 items-center justify-center rounded-full border-2 border-dashed border-amber-500/50 bg-zinc-950/60 shadow-[0_0_40px_rgba(245,158,11,0.15)]">
                 {/* 3 Conductive Pin Nodes */}
-                <div className="absolute top-5 left-1/2 -trangray-x-1/2 w-4 h-4 rounded-full bg-amber-500/60 border border-amber-400 shadow-sm" />
+                <div className="absolute top-5 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-amber-500/60 border border-amber-400 shadow-sm" />
                 <div className="absolute bottom-6 left-6 w-4 h-4 rounded-full bg-amber-500/60 border border-amber-400 shadow-sm" />
                 <div className="absolute bottom-6 right-6 w-4 h-4 rounded-full bg-amber-500/60 border border-amber-400 shadow-sm" />
 

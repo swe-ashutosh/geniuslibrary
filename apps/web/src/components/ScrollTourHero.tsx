@@ -255,8 +255,8 @@ export function ScrollTourHero() {
           <div 
             className={`w-full max-w-xl transition-all duration-500 ${
               scrollProgress < 0.22 
-                ? "opacity-100 trangray-y-0 scale-100" 
-                : "opacity-0 trangray-y-8 scale-95 hidden"
+                ? "opacity-100 translate-y-0 scale-100" 
+                : "opacity-0 translate-y-8 scale-95 hidden"
             }`}
           >
             <div className="bg-black/80 sm:bg-black/65 backdrop-blur-xl p-4 sm:p-6 rounded-3xl border border-white/15 shadow-2xl text-center">
@@ -287,8 +287,8 @@ export function ScrollTourHero() {
           <div 
             className={`w-full max-w-xl transition-all duration-500 ${
               scrollProgress >= 0.22 && scrollProgress < 0.48 
-                ? "opacity-100 trangray-y-0 scale-100" 
-                : "opacity-0 trangray-y-8 scale-95 hidden"
+                ? "opacity-100 translate-y-0 scale-100" 
+                : "opacity-0 translate-y-8 scale-95 hidden"
             }`}
           >
             <div className="bg-black/80 sm:bg-black/65 backdrop-blur-xl p-4 sm:p-6 rounded-3xl border border-white/15 shadow-2xl text-center">
@@ -310,8 +310,8 @@ export function ScrollTourHero() {
           <div 
             className={`w-full max-w-xl transition-all duration-500 ${
               scrollProgress >= 0.48 && scrollProgress < 0.70 
-                ? "opacity-100 trangray-y-0 scale-100" 
-                : "opacity-0 trangray-y-8 scale-95 hidden"
+                ? "opacity-100 translate-y-0 scale-100" 
+                : "opacity-0 translate-y-8 scale-95 hidden"
             }`}
           >
             <div className="bg-black/80 sm:bg-black/65 backdrop-blur-xl p-4 sm:p-6 rounded-3xl border border-white/15 shadow-2xl text-center">
@@ -333,8 +333,8 @@ export function ScrollTourHero() {
           <div 
             className={`w-full max-w-xl transition-all duration-500 ${
               scrollProgress >= 0.70 && scrollProgress < 0.88 
-                ? "opacity-100 trangray-y-0 scale-100" 
-                : "opacity-0 trangray-y-8 scale-95 hidden"
+                ? "opacity-100 translate-y-0 scale-100" 
+                : "opacity-0 translate-y-8 scale-95 hidden"
             }`}
           >
             <div className="bg-black/80 sm:bg-black/65 backdrop-blur-xl p-4 sm:p-6 rounded-3xl border border-white/15 shadow-2xl text-center">
@@ -356,8 +356,8 @@ export function ScrollTourHero() {
           <div 
             className={`w-full max-w-xl transition-all duration-500 ${
               scrollProgress >= 0.88 
-                ? "opacity-100 trangray-y-0 scale-100 pointer-events-auto" 
-                : "opacity-0 trangray-y-8 scale-95 hidden pointer-events-none"
+                ? "opacity-100 translate-y-0 scale-100 pointer-events-auto" 
+                : "opacity-0 translate-y-8 scale-95 hidden pointer-events-none"
             }`}
           >
             <div className="bg-black/85 sm:bg-black/75 backdrop-blur-xl p-4 sm:p-6 rounded-3xl border border-white/20 shadow-2xl text-center">

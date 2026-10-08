@@ -600,7 +600,7 @@ export default function CommunicationsPortalPage() {
 
             {/* Search Input */}
             <div className="relative">
-              <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-3 top-1/2 -trangray-y-1/2" />
+              <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder={leftTab === "groups" ? "Filter broadcast groups..." : "Search student by name, roll, phone..."}

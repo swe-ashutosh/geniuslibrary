@@ -625,7 +625,7 @@ export default function AdminDashboardOverview() {
               </span>
               {/* Toggle switch track (OFF/Closed) */}
               <span className="w-7 h-4 flex items-center bg-rose-300 dark:bg-rose-800 rounded-full p-0.5 transition-colors">
-                <span className="bg-white w-3 h-3 rounded-full shadow-xs transform trangray-x-0 transition-transform" />
+                <span className="bg-white w-3 h-3 rounded-full shadow-xs transform translate-x-0 transition-transform" />
               </span>
             </button>
           ) : (
@@ -649,7 +649,7 @@ export default function AdminDashboardOverview() {
               <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400">active</span>
               {/* Toggle switch track (ON/Active) */}
               <span className="w-7 h-4 flex items-center bg-emerald-500 rounded-full p-0.5 transition-colors">
-                <span className="bg-white w-3 h-3 rounded-full shadow-xs transform trangray-x-3 transition-transform" />
+                <span className="bg-white w-3 h-3 rounded-full shadow-xs transform translate-x-3 transition-transform" />
               </span>
             </button>
           )}
@@ -805,7 +805,7 @@ export default function AdminDashboardOverview() {
               <Users className="h-4 w-4" />
             </div>
             <span className="text-[10px] font-bold text-zinc-400 dark:text-zinc-500 group-hover:text-[#0B5ED7] transition-colors">
-              <ChevronRight className="h-3.5 w-3.5 inline group-hover:trangray-x-0.5 transition-transform" />
+              <ChevronRight className="h-3.5 w-3.5 inline group-hover:translate-x-0.5 transition-transform" />
             </span>
           </div>
           <div className="mt-3">
@@ -815,7 +815,7 @@ export default function AdminDashboardOverview() {
           </div>
           <div className="mt-3 pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">
             <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 group-hover:underline">Manage Profiles</span>
-            <ChevronRight className="h-3 w-3 text-indigo-400 group-hover:trangray-x-0.5 transition-transform" />
+            <ChevronRight className="h-3 w-3 text-indigo-400 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </Link>
 
@@ -839,7 +839,7 @@ export default function AdminDashboardOverview() {
           </div>
           <div className="mt-3 pt-2 border-t border-amber-200/40 dark:border-amber-900/40 flex items-center justify-between">
             <span className="text-[9px] font-bold text-amber-700 dark:text-amber-400 group-hover:underline">Verify Students</span>
-            <ChevronRight className="h-3 w-3 text-amber-600 group-hover:trangray-x-0.5 transition-transform" />
+            <ChevronRight className="h-3 w-3 text-amber-600 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </Link>
 
@@ -866,7 +866,7 @@ export default function AdminDashboardOverview() {
           </div>
           <div className="mt-3 pt-2 border-t border-emerald-200/40 dark:border-emerald-900/40 flex items-center justify-between">
             <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 group-hover:underline">Verify Claims</span>
-            <ChevronRight className="h-3 w-3 text-emerald-600 group-hover:trangray-x-0.5 transition-transform" />
+            <ChevronRight className="h-3 w-3 text-emerald-600 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </Link>
 
@@ -896,7 +896,7 @@ export default function AdminDashboardOverview() {
           </div>
           <div className="mt-3 pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">
             <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 group-hover:underline">Daily Register</span>
-            <ChevronRight className="h-3 w-3 text-emerald-600 group-hover:trangray-x-0.5 transition-transform" />
+            <ChevronRight className="h-3 w-3 text-emerald-600 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </Link>
 
@@ -926,7 +926,7 @@ export default function AdminDashboardOverview() {
           </div>
           <div className="mt-3 pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">
             <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400 group-hover:underline">Seat Matrix</span>
-            <ChevronRight className="h-3 w-3 text-purple-400 group-hover:trangray-x-0.5 transition-transform" />
+            <ChevronRight className="h-3 w-3 text-purple-400 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </Link>
 
@@ -962,7 +962,7 @@ export default function AdminDashboardOverview() {
           </div>
           <div className="mt-3 pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">
             <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 group-hover:underline">Results & Answer Keys</span>
-            <ChevronRight className="h-3 w-3 text-amber-400 group-hover:trangray-x-0.5 transition-transform" />
+            <ChevronRight className="h-3 w-3 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
           </div>
         </Link>
 
@@ -1082,7 +1082,7 @@ export default function AdminDashboardOverview() {
             href="/admin/results"
             className="text-xs font-bold text-[#0B5ED7] dark:text-[#FFC107] hover:underline flex items-center gap-1 group"
           >
-            Manage Results Desk <ChevronRight className="h-3.5 w-3.5 group-hover:trangray-x-0.5 transition-transform" />
+            Manage Results Desk <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
           </Link>
         </div>
 
@@ -1195,7 +1195,7 @@ export default function AdminDashboardOverview() {
               href="/admin/fees"
               className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1 group"
             >
-              View All <ChevronRight className="h-3.5 w-3.5 group-hover:trangray-x-0.5 transition-transform" />
+              View All <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </div>
         </div>

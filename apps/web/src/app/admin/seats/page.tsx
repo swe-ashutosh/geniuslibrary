@@ -530,7 +530,7 @@ export default function SeatManagementPage() {
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 lg:flex-initial sm:justify-end">
             {/* 1. Searchbar */}
             <div className="relative w-full sm:w-52 lg:w-60">
-              <Search className="absolute left-3 top-1/2 -trangray-y-1/2 h-3.5 w-3.5 text-zinc-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
               <input
                 type="text"
                 placeholder="Search desk # or student..."
@@ -541,7 +541,7 @@ export default function SeatManagementPage() {
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -trangray-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs cursor-pointer"
                 >
                   ✕
                 </button>

@@ -229,7 +229,7 @@ export function FullscreenStampAttendance({
             <div className="absolute h-40 w-40 sm:h-48 sm:w-48 rounded-full border border-dashed border-zinc-800/80 animate-ping opacity-30" />
             <div className="relative flex h-32 w-32 sm:h-40 sm:w-40 items-center justify-center rounded-full border-2 border-dashed border-zinc-700/60 bg-zinc-950/40">
               {/* 3 Conductive Pin Targets */}
-              <div className="absolute top-4 left-1/2 -trangray-x-1/2 w-3 h-3 rounded-full bg-zinc-700/40 border border-zinc-600/30" />
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-zinc-700/40 border border-zinc-600/30" />
               <div className="absolute bottom-6 left-6 w-3 h-3 rounded-full bg-zinc-700/40 border border-zinc-600/30" />
               <div className="absolute bottom-6 right-6 w-3 h-3 rounded-full bg-zinc-700/40 border border-zinc-600/30" />
               
