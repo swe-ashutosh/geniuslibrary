@@ -2281,7 +2281,7 @@ export async function getAdminContactInfo(): Promise<{ phone: string; rawPhone: 
   try {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
-    const adminEmail = BRAND_CONFIG.adminEmail || 'geniuslibrary@gmail.com';
+    const adminEmail = BRAND_CONFIG.adminEmail || 'geniuslibrarymadhupur@gmail.com';
     const { data } = await supabase
       .from('profiles')
       .select('phone, full_name, email')
@@ -2313,7 +2313,7 @@ export async function getAdminContactInfo(): Promise<{ phone: string; rawPhone: 
 export async function updateAdminContactInfo(params: { phone: string; name?: string; email?: string }): Promise<boolean> {
   const cleanDigits = params.phone.replace(/\D/g, '').slice(-10);
   const normalizedPhone = cleanDigits ? `+91 ${cleanDigits}` : params.phone;
-  const adminEmail = params.email || BRAND_CONFIG.adminEmail || 'geniuslibrary@gmail.com';
+  const adminEmail = params.email || BRAND_CONFIG.adminEmail || 'geniuslibrarymadhupur@gmail.com';
 
   try {
     const { createClient } = await import('@/lib/supabase/client');

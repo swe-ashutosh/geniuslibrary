@@ -36,10 +36,10 @@ export const WL = {
   /** Full name used in titles, emails, invoices, legal text */
   fullName: "Genius Library",
   /** SEO <title> for the landing page */
-  seoTitle: "Genius Library | Best Library in Madhupur, Sonbhadra",
+  seoTitle: "Genius Library Madhupur | Best 24/7 Digital Library & Study Center in Sonbhadra",
   /** SEO meta description */
   description:
-    "An institutional digital repository blending traditional cultural values with modern smart education. 24/7 AC Study Hall, High-Speed Optical Fiber, Dedicated Power Desks, and Intelligent RFID/QR Access.",
+    "Genius Library (Abhishek Genius Library) in Madhupur, Sonbhadra – Best 24/7 digital self-study library & reading center. High-speed Wi-Fi, AC study hall, 100% power backup, reserved desks & locker facilities. Call: +91 8423448899 | Email: geniuslibrarymadhupur@gmail.com",
   /** Footer "about us" paragraph */
   aboutText:
     "Genius Library bridges the literary warmth of quiet study spaces with next-generation automation and digital convenience.",
@@ -48,9 +48,9 @@ export const WL = {
   /** Full postal address */
   address: "Madhupur, Sonbhadra, Uttar Pradesh - 231216",
   /** Display phone */
-  phone: "+91 9935066685",
+  phone: "+91 8423448899",
   /** Phone digits only (tel: links, WhatsApp) */
-  rawPhone: "9935066685",
+  rawPhone: "8423448899",
   /** Default prefilled WhatsApp enquiry message */
   whatsappMessage: "Hello! I want to check seat availability at Genius Library Madhupur.",
   /** Public contact email */
@@ -62,7 +62,7 @@ export const WL = {
   /** Primary custom domain (API CORS fallback, redirect checks) */
   primaryDomain: "https://geniuslibrary.com",
   /** pages.dev subdomain to auto-redirect to siteUrl (empty = disabled) */
-  pagesDevSubdomain: "geniuslibrary",
+  pagesDevSubdomain: "",
   /** App version shown in settings */
   appVersion: "1.0.0",
 
@@ -73,12 +73,10 @@ export const WL = {
   seoKeywords: [
     "genius library",
     "the genius library",
-    "genius library",
-    "genius library",
+    "abhishek genius library",
+    "abhishek genius library madhupur",
     "genius library madhupur",
     "the genius library madhupur",
-    "genius library madhupur",
-    "genius library madhupur",
     "best library in madhupur",
     "library in madhupur",
     "best library in sonbhadra",
@@ -86,22 +84,24 @@ export const WL = {
     "best library in madhupur sonbhadra",
     "library in madhupur sonbhadra",
     "genius library sonbhadra",
-    "genius library sonbhadra",
     "digital library in sonbhadra",
     "self study library near me",
     "24 hours library in sonbhadra",
+    "24/7 library madhupur",
     "reading room madhupur",
     "study center in madhupur sonbhadra",
     "study center in robertsganj sonbhadra",
     "जीनियस लाइब्रेरी",
     "जीनियस लाइब्रेरी मधुपुर",
     "सोनभद्र लाइब्रेरी",
+    "अभिषेक जीनियस लाइब्रेरी",
   ],
   alternateNames: [
     "Abhishek Genius Library",
     "Genius Library",
     "Genius Library Madhupur",
     "जीनियस लाइब्रेरी",
+    "अभिषेक जीनियस लाइब्रेरी",
   ],
 
   // ═══════════════════════════════════════════════════════════════
@@ -276,7 +276,7 @@ export const WL = {
     youtube: "",
     facebook: "",
     x: "",
-    whatsapp: "",
+    whatsapp: "https://wa.me/918423448899",
   },
 
   /** Default fallback texts for push notifications */

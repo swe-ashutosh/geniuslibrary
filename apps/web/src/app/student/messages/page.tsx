@@ -98,9 +98,9 @@ const DEFAULT_CONTACTS: ChatContact[] = [
     name: "Library Administration (Chief Admin)",
     role: "admin",
     roleLabel: "Chief Admin",
-    shiftInfo: "06:00 AM - 11:00 PM (Daily)",
+    shiftInfo: "24/7 Available (Madhupur Desk)",
     avatarText: "AD",
-    phone: "+91 9935066685",
+    phone: BRAND_CONFIG.phone || "+91 8423448899",
     description: "Admissions, Monthly Fees, Verification & Policy Inquiries"
   },
   {
@@ -108,9 +108,9 @@ const DEFAULT_CONTACTS: ChatContact[] = [
     name: "Rajesh Sharma (Senior Librarian)",
     role: "prime_staff",
     roleLabel: "Prime Staff",
-    shiftInfo: "Morning Shift (06:00 AM - 02:00 PM)",
+    shiftInfo: "Day Shift (08:00 AM - 04:00 PM)",
     avatarText: "RS",
-    phone: "+91 9935066685",
+    phone: BRAND_CONFIG.phone || "+91 8423448899",
     description: "Gate Attendance, Book Circulation & Seat Allocation"
   },
   {
@@ -118,9 +118,9 @@ const DEFAULT_CONTACTS: ChatContact[] = [
     name: "Vikas Patel (Library Assistant)",
     role: "sub_staff",
     roleLabel: "Sub Staff",
-    shiftInfo: "Evening Shift (02:00 PM - 10:00 PM)",
+    shiftInfo: "Night Shift (04:00 PM - 12:00 AM)",
     avatarText: "VP",
-    phone: "+91 9935066685",
+    phone: BRAND_CONFIG.phone || "+91 8423448899",
     description: "Reading Room Help, Book Finding & Desk Assistance"
   }
 ];

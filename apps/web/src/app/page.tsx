@@ -42,12 +42,12 @@ import {
 export const metadata: Metadata = {
   metadataBase: new URL(BRAND_CONFIG.siteUrl),
   title: BRAND_CONFIG.seoTitle,
-  description:
-    BRAND_CONFIG.fullName +
-    " (" + BRAND_CONFIG.hindiName + ") in " + BRAND_CONFIG.location +
-    ", Uttar Pradesh. Best self-study library with 300 Mbps dual fiber, 24/7 AC study hall, dedicated desks with individual charging points, 100% power backup, and regular offline mock tests & answer keys for UPSC, PCS, SSC, NEET, and JEE aspirants.",
+  description: BRAND_CONFIG.description,
   keywords: BRAND_CONFIG.seoKeywords,
-  authors: [{ name: BRAND_CONFIG.fullName }],
+  authors: [
+    { name: BRAND_CONFIG.fullName },
+    { name: "Abhishek Genius Library" },
+  ],
   creator: BRAND_CONFIG.fullName,
   publisher: BRAND_CONFIG.fullName,
   category: "Education & Public Study Facility",
@@ -60,22 +60,20 @@ export const metadata: Metadata = {
     url: BRAND_CONFIG.siteUrl,
     siteName: BRAND_CONFIG.fullName,
     title: BRAND_CONFIG.seoTitle,
-    description:
-      "Premier self-study digital library in Madhupur, Sonbhadra. 24/7 AC Hall, 300 Mbps Fiber, Dedicated Reserved Desks, RO Water & Power Backup.",
+    description: BRAND_CONFIG.description,
     images: [
       {
         url: "/library-hall.jpg",
         width: 1200,
         height: 630,
-        alt: BRAND_CONFIG.fullName + " Modern Study Hall in " + BRAND_CONFIG.location,
+        alt: BRAND_CONFIG.fullName + " Modern 24/7 Study Hall in " + BRAND_CONFIG.location,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: BRAND_CONFIG.fullName + " - " + BRAND_CONFIG.location,
-    description:
-      "Sonbhadra's premier 24/7 digital study hall for competitive exam aspirants. Dedicated desks, high-speed fiber, and silent reading zones.",
+    title: BRAND_CONFIG.seoTitle,
+    description: BRAND_CONFIG.description,
     images: ["/library-hall.jpg"],
   },
   robots: {
@@ -232,11 +230,19 @@ export default function HomePage() {
       ...BRAND_CONFIG.alternateNames,
       "Best Library in " + BRAND_CONFIG.location,
     ],
-    description:
-      "Premier 24/7 automated self-study digital library and reading centre in Madhupur, Sonbhadra, Uttar Pradesh. Providing 300 Mbps optical fiber Wi-Fi, dedicated study cubicles, 100% power backup, and regular offline mock test assessments with answer keys.",
+    description: BRAND_CONFIG.description,
     url: BRAND_CONFIG.siteUrl,
     telephone: "+91" + BRAND_CONFIG.rawPhone,
-    priceRange: "₹₹ (Affordable Monthly Student Subscriptions)",
+    email: BRAND_CONFIG.email,
+    contactPoint: {
+      "@type": "ContactPoint",
+      telephone: "+91" + BRAND_CONFIG.rawPhone,
+      contactType: "customer support",
+      email: BRAND_CONFIG.email,
+      availableLanguage: ["Hindi", "English"],
+      areaServed: "IN",
+    },
+    priceRange: "₹300 - ₹700",
     currenciesAccepted: "INR",
     paymentAccepted: "Cash, UPI, PhonePe, Google Pay, Net Banking",
     image: BRAND_CONFIG.siteUrl + "/library-hall.jpg",

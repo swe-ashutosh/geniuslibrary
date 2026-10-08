@@ -557,7 +557,7 @@ function LoginForm() {
               </div>
               <div className="flex items-center gap-1.5 text-[10.5px] text-zinc-500 dark:text-zinc-400">
                 <Phone className="h-3.5 w-3.5 text-[#0B5ED7]" />
-                <span>Desk Hotline: +91 9935066685 (Madhupur, Sonbhadra)</span>
+                <span>Desk Hotline: {BRAND_CONFIG.phone || "+91 8423448899"} (Madhupur, Sonbhadra)</span>
               </div>
             </div>
 
@@ -627,7 +627,7 @@ function LoginForm() {
               </div>
               <div className="flex items-center gap-1.5 text-[10.5px] text-zinc-500 dark:text-zinc-400">
                 <Phone className="h-3.5 w-3.5 text-[#0B5ED7]" />
-                <span>Desk Hotline: +91 9935066685 (Madhupur, Sonbhadra)</span>
+                <span>Desk Hotline: {BRAND_CONFIG.phone || "+91 8423448899"} (Madhupur, Sonbhadra)</span>
               </div>
             </div>
 
@@ -686,7 +686,7 @@ function LoginForm() {
               <p className="text-rose-900 dark:text-rose-200 font-semibold">
                 Please contact the library desk at Madhupur, Sonbhadra to resolve any pending fee dues or policy compliance issues.
               </p>
-              <p className="text-[11px] text-zinc-500">Contact: +91 9935066685</p>
+              <p className="text-[11px] text-zinc-500">Contact: {BRAND_CONFIG.phone || "+91 8423448899"}</p>
             </div>
 
             <button

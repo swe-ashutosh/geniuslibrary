@@ -101,7 +101,7 @@ export default function ContactSupportPage() {
               For immediate assistance regarding desk availability or quick queries, WhatsApp is the fastest way to reach our desk manager.
             </p>
             <Link 
-              href={BRAND_CONFIG.social.whatsapp}
+              href={BRAND_CONFIG.social.whatsapp || (BRAND_CONFIG.rawPhone ? `https://wa.me/91${BRAND_CONFIG.rawPhone.replace(/\D/g, '').slice(-10)}?text=${encodeURIComponent(BRAND_CONFIG.whatsappMessage)}` : "#")}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#0B5ED7] px-6 py-4 text-lg font-bold text-white transition hover:bg-[#FFC107] shadow-md hover:shadow-xl"

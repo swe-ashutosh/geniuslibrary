@@ -585,7 +585,7 @@ export default function AdminWhatsAppBotPage() {
                 {reopenTime && <p>⏰ *Kab Khulegi:* {reopenTime}</p>}
                 {closeCustomNote && <p>📝 *Note:* {closeCustomNote}</p>}
                 <p>📅 *Date:* {new Date().toLocaleDateString("en-IN")}</p>
-                <p>📞 *Helpdesk:* {BRAND_CONFIG.phone || "+91 9935066685"}</p>
+                <p>📞 *Helpdesk:* {BRAND_CONFIG.phone || "+91 8423448899"}</p>
                 <p className="text-zinc-400 font-mono">🔖 *Ref Token:* #SDL-OFF-M93K-1-842</p>
               </div>
               <p className="text-zinc-500 italic text-[11px] pt-1">
@@ -726,7 +726,7 @@ export default function AdminWhatsAppBotPage() {
                   type="text"
                   value={customPhone}
                   onChange={(e) => setCustomPhone(e.target.value)}
-                  placeholder="e.g. 9935066685 ya +91 9935066685"
+                  placeholder={`e.g. ${BRAND_CONFIG.rawPhone || "8423448899"} ya ${BRAND_CONFIG.phone || "+91 8423448899"}`}
                   className="w-full p-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 text-xs text-zinc-900 dark:text-white"
                 />
               </div>

@@ -482,7 +482,7 @@ export function enqueueCloseLibraryBroadcast(params: {
   if (typeof window === "undefined" || !params.students || params.students.length === 0) return 0;
 
   const libraryName = BRAND_CONFIG.fullName || "Genius Library";
-  const hotline = BRAND_CONFIG.phone || "+91 9935066685";
+  const hotline = BRAND_CONFIG.phone || "+91 8423448899";
   const now = new Date();
   const dateFormatted = now.toLocaleDateString("en-IN", {
     day: "2-digit",

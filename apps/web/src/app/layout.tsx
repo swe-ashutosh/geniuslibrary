@@ -33,9 +33,30 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   metadataBase: new URL(BRAND_CONFIG.siteUrl),
-  title: BRAND_CONFIG.seoTitle,
+  title: {
+    default: BRAND_CONFIG.seoTitle,
+    template: `%s | ${BRAND_CONFIG.fullName}`,
+  },
   description: BRAND_CONFIG.description,
+  keywords: BRAND_CONFIG.seoKeywords,
+  authors: [{ name: "Abhishek Genius Library", url: BRAND_CONFIG.siteUrl }],
+  creator: BRAND_CONFIG.fullName,
+  publisher: BRAND_CONFIG.fullName,
   applicationName: BRAND_CONFIG.fullName,
+  alternates: {
+    canonical: BRAND_CONFIG.siteUrl,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -49,12 +70,32 @@ export const metadata: Metadata = {
     url: BRAND_CONFIG.siteUrl,
     title: BRAND_CONFIG.seoTitle,
     description: BRAND_CONFIG.description,
+    images: [
+      {
+        url: `${BRAND_CONFIG.siteUrl}/library-hall.jpg`,
+        width: 1200,
+        height: 630,
+        alt: `${BRAND_CONFIG.fullName} - Best 24/7 Library in Madhupur, Sonbhadra`,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: BRAND_CONFIG.seoTitle,
+    description: BRAND_CONFIG.description,
+    images: [`${BRAND_CONFIG.siteUrl}/library-hall.jpg`],
   },
   formatDetection: {
     telephone: false,
+    email: false,
+    address: false,
   },
   other: {
     "mobile-web-app-capable": "yes",
+    "geo.region": "IN-UP",
+    "geo.placename": "Madhupur, Sonbhadra",
+    "geo.position": `${BRAND_CONFIG.gps.latitude};${BRAND_CONFIG.gps.longitude}`,
+    "ICBM": `${BRAND_CONFIG.gps.latitude}, ${BRAND_CONFIG.gps.longitude}`,
   },
   icons: {
     icon: [
