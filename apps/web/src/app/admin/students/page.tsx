@@ -65,14 +65,33 @@ interface StudentProfile {
   password?: string;
 }
 
-const SHIFT_OPTIONS = [
+export const GENERAL_SHIFT_OPTIONS = [
   { id: "standard_3hr", name: "Standard (3 Hours Pass) - Flexible 24/7", price: 300, duration: "3 Hours Daily" },
   { id: "prime_6hr", name: "Pro / Prime (6 Hours Pass) - Flexible 24/7", price: 500, duration: "6 Hours Daily" },
-  { id: "reserve_mini", name: "Elite / Reserve Mini (24/7 Dedicated Seat)", price: 500, duration: "24/7 Access" },
-  { id: "reserve_big", name: "Prime / Reserve Big (24/7 Premium Large Desk)", price: 600, duration: "24/7 Access" },
-  { id: "reserve_locker", name: "Max / Reserve Locker (24/7 Seat + Locker)", price: 700, duration: "24/7 Access" },
   { id: "night_ultra", name: "Night Shift Ultra (10:00 PM - 06:00 AM)", price: 500, duration: "8 Hours Night" },
 ];
+
+export const RESERVED_SHIFT_OPTIONS = [
+  { id: "reserve_mini", name: "Elite / Reserve Mini (24/7 Dedicated Seat)", price: 500, duration: "24/7 Dedicated" },
+  { id: "reserve_big", name: "Prime / Reserve Big (24/7 Premium Large Desk)", price: 600, duration: "24/7 Dedicated" },
+  { id: "reserve_locker", name: "Max / Reserve Locker (24/7 Seat + Locker)", price: 700, duration: "24/7 Dedicated" },
+];
+
+export const TRIAL_PASS_OPTIONS = [
+  { id: "trial_3day", name: "3-Day Free Trial Pass - Flexible 24/7", price: 0, duration: "3 Days Access" },
+];
+
+export const SHIFT_OPTIONS = [
+  ...GENERAL_SHIFT_OPTIONS,
+  ...RESERVED_SHIFT_OPTIONS,
+  ...TRIAL_PASS_OPTIONS,
+];
+
+export function getShiftOptionsForPlan(plan?: string) {
+  if (plan === "Reserved Seat") return RESERVED_SHIFT_OPTIONS;
+  if (plan === "Trial Pass") return TRIAL_PASS_OPTIONS;
+  return GENERAL_SHIFT_OPTIONS;
+}
 
 export function getStudentFeeSchedule(std: { fee_status?: string; due_amount?: number; created_at?: string }) {
   const isDue = std.fee_status === "Due" || (std.due_amount !== undefined && std.due_amount > 0);
@@ -200,13 +219,13 @@ function StudentsDirectoryContent() {
     parent_name: "",
     parent_phone: "",
     course: "UPSC",
-    shift: SHIFT_OPTIONS[0].name,
+    shift: GENERAL_SHIFT_OPTIONS[0].name,
     membership_plan: "General",
     seat_number: "",
     address: "",
     status: "active",
     fee_status: "Due",
-    due_amount: 600,
+    due_amount: 300,
   });
   const [isAddingStudent, setIsAddingStudent] = useState(false);
 
@@ -254,7 +273,7 @@ function StudentsDirectoryContent() {
 
       // Calculate shift fee (all new students start as Due with this full fee)
       const selectedShiftObj = SHIFT_OPTIONS.find(s => s.name === newStudentForm.shift) || SHIFT_OPTIONS[0];
-      const initialShiftFee = selectedShiftObj.price || 600;
+      const initialShiftFee = newStudentForm.membership_plan === "Trial Pass" ? 0 : (selectedShiftObj.price || 500);
 
       // Register student in Supabase Auth using a non-session client so admin is NOT logged out
       let authUserId = newId;
@@ -282,7 +301,7 @@ function StudentsDirectoryContent() {
               parent_name: newStudentForm.parent_name?.trim() || "",
               parent_phone: newStudentForm.parent_phone?.trim() || "",
               course: newStudentForm.course || "General Studies",
-              shift: newStudentForm.shift || SHIFT_OPTIONS[0].name,
+              shift: newStudentForm.shift || GENERAL_SHIFT_OPTIONS[0].name,
               membership_plan: (newStudentForm.membership_plan as any) || "General",
               seat_number: seatNum,
               role: "student",
@@ -309,7 +328,7 @@ function StudentsDirectoryContent() {
         parent_name: newStudentForm.parent_name?.trim() || "",
         parent_phone: newStudentForm.parent_phone?.trim() ? (newStudentForm.parent_phone.trim().startsWith("+91") ? newStudentForm.parent_phone.trim() : `+91 ${newStudentForm.parent_phone.trim()}`) : "",
         course: newStudentForm.course || "General Studies",
-        shift: newStudentForm.shift || SHIFT_OPTIONS[0].name,
+        shift: newStudentForm.shift || GENERAL_SHIFT_OPTIONS[0].name,
         membership_plan: (newStudentForm.membership_plan as any) || "General",
         seat_number: seatNum || undefined,
         address: newStudentForm.address?.trim() || "Madhupur, Sonbhadra",
@@ -355,13 +374,13 @@ function StudentsDirectoryContent() {
         parent_name: "",
         parent_phone: "",
         course: "UPSC",
-        shift: SHIFT_OPTIONS[0].name,
+        shift: GENERAL_SHIFT_OPTIONS[0].name,
         membership_plan: "General",
         seat_number: "",
         address: "",
         status: "active",
         fee_status: "Due",
-        due_amount: 600,
+        due_amount: 300,
       });
       setAlertMsg({
         type: "success",
@@ -3131,10 +3150,17 @@ function StudentsDirectoryContent() {
                       key={plan.id}
                       type="button"
                       onClick={() => {
+                        const newPlan = plan.id;
+                        const options = getShiftOptionsForPlan(newPlan);
+                        const currentShift = editStudentForm.shift;
+                        const isShiftValid = options.some(o => o.name === currentShift);
+                        const nextShift = isShiftValid ? currentShift : options[0].name;
+
                         setEditStudentForm({
                           ...editStudentForm,
-                          membership_plan: plan.id as any,
-                          seat_number: plan.id === "Reserved Seat" ? (editStudentForm.seat_number || "S-01") : "",
+                          membership_plan: newPlan as any,
+                          seat_number: newPlan === "Reserved Seat" ? (editStudentForm.seat_number || "S-01") : "",
+                          shift: nextShift,
                         });
                       }}
                       className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition cursor-pointer ${editStudentForm.membership_plan === plan.id
@@ -3177,16 +3203,20 @@ function StudentsDirectoryContent() {
                 {/* Shift Selector */}
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1">
-                    Preferred Shift Timing
+                    {editStudentForm.membership_plan === "Reserved Seat"
+                      ? "Reserved Seat Plan & Pricing"
+                      : editStudentForm.membership_plan === "Trial Pass"
+                      ? "Trial Pass Duration"
+                      : "Preferred Shift Timing"}
                   </label>
                   <select
-                    value={editStudentForm.shift || SHIFT_OPTIONS[0].name}
+                    value={editStudentForm.shift || getShiftOptionsForPlan(editStudentForm.membership_plan)[0]?.name}
                     onChange={(e) => setEditStudentForm({ ...editStudentForm, shift: e.target.value })}
                     className="w-full rounded-xl border border-zinc-200 bg-white p-2.5 text-xs font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-[#FFC107] focus:outline-none cursor-pointer"
                   >
-                    {SHIFT_OPTIONS.map((opt) => (
+                    {getShiftOptionsForPlan(editStudentForm.membership_plan).map((opt) => (
                       <option key={opt.id} value={opt.name}>
-                        {opt.name} (₹{opt.price}/mo)
+                        {opt.name} {opt.price > 0 ? `(₹${opt.price}/mo)` : "(FREE)"}
                       </option>
                     ))}
                   </select>
@@ -4066,8 +4096,10 @@ function StudentsDirectoryContent() {
                     <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1">
                       Mobile Number (10 Digits) <span className="text-rose-500">*</span>
                     </label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400 font-mono">+91</span>
+                    <div className="relative flex items-center">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                        <span className="text-xs font-bold text-zinc-400 font-mono select-none">+91</span>
+                      </div>
                       <input
                         type="tel"
                         required
@@ -4129,8 +4161,10 @@ function StudentsDirectoryContent() {
 
                   <div>
                     <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1">Parent Mobile</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400 font-mono">+91</span>
+                    <div className="relative flex items-center">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                        <span className="text-xs font-bold text-zinc-400 font-mono select-none">+91</span>
+                      </div>
                       <input
                         type="tel"
                         maxLength={10}
@@ -4173,10 +4207,17 @@ function StudentsDirectoryContent() {
                       key={plan.id}
                       type="button"
                       onClick={() => {
+                        const newPlan = plan.id;
+                        const options = getShiftOptionsForPlan(newPlan);
+                        const currentShift = newStudentForm.shift;
+                        const isShiftValid = options.some(o => o.name === currentShift);
+                        const nextShift = isShiftValid ? currentShift : options[0].name;
+
                         setNewStudentForm({
                           ...newStudentForm,
-                          membership_plan: plan.id as any,
-                          seat_number: plan.id === "Reserved Seat" ? (newStudentForm.seat_number || "S-01") : "",
+                          membership_plan: newPlan as any,
+                          seat_number: newPlan === "Reserved Seat" ? (newStudentForm.seat_number || "S-01") : "",
+                          shift: nextShift,
                         });
                       }}
                       className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition cursor-pointer ${
@@ -4217,16 +4258,20 @@ function StudentsDirectoryContent() {
                 {/* Shift Selector */}
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1">
-                    Preferred Shift Timing
+                    {newStudentForm.membership_plan === "Reserved Seat"
+                      ? "Reserved Seat Plan & Pricing"
+                      : newStudentForm.membership_plan === "Trial Pass"
+                      ? "Trial Pass Duration"
+                      : "Preferred Shift Timing"}
                   </label>
                   <select
-                    value={newStudentForm.shift || SHIFT_OPTIONS[0].name}
+                    value={newStudentForm.shift || getShiftOptionsForPlan(newStudentForm.membership_plan)[0]?.name}
                     onChange={(e) => setNewStudentForm({ ...newStudentForm, shift: e.target.value })}
                     className="w-full rounded-xl border border-zinc-200 bg-white p-2.5 text-xs font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-[#FFC107] focus:outline-none cursor-pointer"
                   >
-                    {SHIFT_OPTIONS.map((opt) => (
+                    {getShiftOptionsForPlan(newStudentForm.membership_plan).map((opt) => (
                       <option key={opt.id} value={opt.name}>
-                        {opt.name} (₹{opt.price}/mo)
+                        {opt.name} {opt.price > 0 ? `(₹${opt.price}/mo)` : "(FREE)"}
                       </option>
                     ))}
                   </select>
@@ -4282,7 +4327,7 @@ function StudentsDirectoryContent() {
                 <div className="mt-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-2.5 text-amber-800 dark:text-amber-200">
                   <Info className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                   <p className="text-[11px] leading-relaxed">
-                    <strong>Standard Fee Policy:</strong> All newly enrolled students start with <strong>Fee Status: Due (₹{(SHIFT_OPTIONS.find(s => s.name === (newStudentForm.shift || SHIFT_OPTIONS[0].name))?.price || 600)})</strong>. Admin can mark fees as Paid anytime from the <strong>Fees</strong> section, or the student can log in and submit payment via UPI.
+                    <strong>Standard Fee Policy:</strong> All newly enrolled students start with <strong>Fee Status: Due (₹{newStudentForm.membership_plan === "Trial Pass" ? 0 : (SHIFT_OPTIONS.find(s => s.name === (newStudentForm.shift || SHIFT_OPTIONS[0].name))?.price || 500)})</strong>. Admin can mark fees as Paid anytime from the <strong>Fees</strong> section, or the student can log in and submit payment via UPI.
                   </p>
                 </div>
               </div>

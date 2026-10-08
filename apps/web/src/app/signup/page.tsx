@@ -43,13 +43,95 @@ import { checkSignupRateLimit, recordSignupAttempt } from "@/lib/security";
 
 type MembershipPlan = "General" | "Reserved Seat" | "Trial Pass";
 
-const SHIFT_OPTIONS = [
-  { id: "morning", name: "Morning Shift", time: "06:00 AM - 12:00 PM", generalPrice: 600, reservedPrice: 900 },
-  { id: "afternoon", name: "Afternoon Shift", time: "12:00 PM - 06:00 PM", generalPrice: 600, reservedPrice: 900 },
-  { id: "evening", name: "Evening Shift", time: "06:00 PM - 10:00 PM", generalPrice: 500, reservedPrice: 800 },
-  { id: "8hr", name: "8 Hours Study Pass", time: "06:00 AM - 02:00 PM", generalPrice: 800, reservedPrice: 1100 },
-  { id: "full_day", name: "Full Day Unlimited", time: "06:00 AM - 10:00 PM", generalPrice: 1100, reservedPrice: 1400 },
+export interface ShiftPlanOption {
+  id: string;
+  name: string;
+  time: string;
+  price: number;
+  duration: string;
+  category: "general" | "reserved" | "trial" | "night";
+  description: string;
+}
+
+export const GENERAL_SHIFTS: ShiftPlanOption[] = [
+  {
+    id: "standard_3hr",
+    name: "Standard (3 Hours Pass)",
+    time: "Flexible 24/7",
+    price: 300,
+    duration: "3 Hours / Day",
+    category: "general",
+    description: "Short study sessions, quick revision, flexible 24/7 access",
+  },
+  {
+    id: "prime_6hr",
+    name: "Pro / Prime (6 Hours Pass)",
+    time: "Flexible 24/7",
+    price: 500,
+    duration: "6 Hours / Day",
+    category: "general",
+    description: "Regular students, half-day focused seating & calm environment",
+  },
+  {
+    id: "night_ultra",
+    name: "Night Shift Ultra",
+    time: "10:00 PM - 06:00 AM",
+    price: 500,
+    duration: "8 Hours Night",
+    category: "night",
+    description: "Late-night focused study for exam aspirants and night owls",
+  },
 ];
+
+export const RESERVED_SHIFTS: ShiftPlanOption[] = [
+  {
+    id: "reserve_mini",
+    name: "Elite / Reserve Mini",
+    time: "24/7 Dedicated Seat",
+    price: 500,
+    duration: "24/7 Full Access",
+    category: "reserved",
+    description: "Standard reserved dedicated desk for consistent daily focus",
+  },
+  {
+    id: "reserve_big",
+    name: "Prime / Reserve Big",
+    time: "24/7 Premium Large Desk",
+    price: 600,
+    duration: "24/7 Full Access",
+    category: "reserved",
+    description: "Extra space, premium large reserved seating for maximum comfort",
+  },
+  {
+    id: "reserve_locker",
+    name: "Max / Reserve Locker",
+    time: "24/7 Seat + Locker",
+    price: 700,
+    duration: "24/7 Full Access",
+    category: "reserved",
+    description: "Personal reserved desk + dedicated locker facility for books & belongings",
+  },
+];
+
+export const TRIAL_SHIFTS: ShiftPlanOption[] = [
+  {
+    id: "trial_3day",
+    name: "3-Day Free Trial Pass",
+    time: "Flexible 24/7",
+    price: 0,
+    duration: "3 Days Access",
+    category: "trial",
+    description: "100% Free 3-day test-drive pass across all flexible study zones",
+  },
+];
+
+export const ALL_SHIFT_OPTIONS: ShiftPlanOption[] = [
+  ...GENERAL_SHIFTS,
+  ...RESERVED_SHIFTS,
+  ...TRIAL_SHIFTS,
+];
+
+const SHIFT_OPTIONS = ALL_SHIFT_OPTIONS;
 
 export default function SignupPage() {
   return (
@@ -90,7 +172,7 @@ function SignupForm() {
   const [address, setAddress] = useState("");
   const [course, setCourse] = useState("");
   const [membershipPlan, setMembershipPlan] = useState<"General" | "Reserved Seat" | "Trial Pass">("General");
-  const [shift, setShift] = useState("morning");
+  const [shift, setShift] = useState("standard_3hr");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   
@@ -152,12 +234,10 @@ function SignupForm() {
   }, []);
 
   // Dynamic fee calculation depending on BOTH Membership Plan & Shift
-  const currentShiftObj = SHIFT_OPTIONS.find((s) => s.id === shift) || SHIFT_OPTIONS[0];
+  const currentShiftObj = ALL_SHIFT_OPTIONS.find((s) => s.id === shift) || GENERAL_SHIFTS[0];
   const currentTotalFee = membershipPlan === "Trial Pass" 
     ? 0 
-    : membershipPlan === "Reserved Seat" 
-    ? currentShiftObj.reservedPrice 
-    : currentShiftObj.generalPrice;
+    : currentShiftObj.price;
 
   // Sync signup method if admin or email query param is detected
   useEffect(() => {
@@ -211,7 +291,7 @@ function SignupForm() {
 
             const formattedPhone = parsed.phone ? (parsed.phone.startsWith("+91") ? parsed.phone : `+91 ${parsed.phone}`) : "";
             const formattedParentPhone = parsed.parentPhone ? (parsed.parentPhone.startsWith("+91") ? parsed.parentPhone : `+91 ${parsed.parentPhone}`) : "";
-            const matchedShift = SHIFT_OPTIONS.find((s) => s.id === parsed.shift) || SHIFT_OPTIONS[0];
+            const matchedShift = ALL_SHIFT_OPTIONS.find((s) => s.id === parsed.shift) || GENERAL_SHIFTS[0];
 
             const studentName = parsed.name || user.user_metadata?.full_name || user.email?.split("@")[0] || "Student Member";
             const shiftName = `${matchedShift.name} (${matchedShift.time})`;
@@ -234,7 +314,7 @@ function SignupForm() {
                 status: "pending",
                 role: "student",
                 fee_status: "Due",
-                due_amount: parsed.membershipPlan === "Reserved Seat" ? matchedShift.reservedPrice : matchedShift.generalPrice,
+                due_amount: parsed.membershipPlan === "Trial Pass" ? 0 : matchedShift.price,
                 updated_at: new Date().toISOString(),
               });
             } catch (err) {
@@ -305,7 +385,7 @@ function SignupForm() {
     setAddress("");
     setCourse("");
     setMembershipPlan("General");
-    setShift("morning");
+    setShift("standard_3hr");
     setPassword("");
     setConfirmPassword("");
     setAvatarFile(null);
@@ -815,9 +895,11 @@ function SignupForm() {
                     Student Mobile Number <span className="text-rose-500">*</span> <span className="text-[10px] text-zinc-400 font-normal">(10 digits)</span>
                   </label>
                   <div className="relative flex items-center">
-                    <span className="absolute left-3.5 inline-flex items-center text-xs font-bold text-zinc-600 dark:text-zinc-300 pointer-events-none select-none">
-                      +91
-                    </span>
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                      <span className="text-xs font-bold font-mono text-zinc-500 dark:text-zinc-400 select-none">
+                        +91
+                      </span>
+                    </div>
                     <input
                       type="tel"
                       required
@@ -825,7 +907,7 @@ function SignupForm() {
                       value={phone}
                       onChange={(e) => setPhone(formatPhoneInput(e.target.value))}
                       placeholder="98765 43210"
-                      className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 py-2.5 pl-13 pr-3 text-xs text-[#0A2E5C] placeholder-zinc-400 focus:border-[#FFC107] focus:outline-none focus:ring-2 focus:ring-[#FFC107]/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white transition-all font-mono"
+                      className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 py-2.5 pl-13 pr-3 text-xs text-[#0A2E5C] placeholder-zinc-400 focus:border-[#FFC107] focus:outline-none focus:ring-2 focus:ring-[#FFC107]/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white transition-all font-mono font-bold"
                     />
                   </div>
                 </div>
@@ -879,9 +961,11 @@ function SignupForm() {
                     Parent's Mobile Number <span className="text-rose-500">*</span> <span className="text-[10px] text-zinc-400 font-normal">(10 digits)</span>
                   </label>
                   <div className="relative flex items-center">
-                    <span className="absolute left-3.5 inline-flex items-center text-xs font-bold text-zinc-600 dark:text-zinc-300 pointer-events-none select-none">
-                      +91
-                    </span>
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5">
+                      <span className="text-xs font-bold font-mono text-zinc-500 dark:text-zinc-400 select-none">
+                        +91
+                      </span>
+                    </div>
                     <input
                       type="tel"
                       required
@@ -889,7 +973,7 @@ function SignupForm() {
                       value={parentPhone}
                       onChange={(e) => setParentPhone(formatPhoneInput(e.target.value))}
                       placeholder="98765 43210"
-                      className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 py-2.5 pl-13 pr-3 text-xs text-[#0A2E5C] placeholder-zinc-400 focus:border-[#FFC107] focus:outline-none focus:ring-2 focus:ring-[#FFC107]/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white transition-all font-mono"
+                      className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 py-2.5 pl-13 pr-3 text-xs text-[#0A2E5C] placeholder-zinc-400 focus:border-[#FFC107] focus:outline-none focus:ring-2 focus:ring-[#FFC107]/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white transition-all font-mono font-bold"
                     />
                   </div>
                 </div>
@@ -946,7 +1030,7 @@ function SignupForm() {
                     <div className="flex items-center gap-1.5 truncate">
                       <span className="font-bold text-[#0A2E5C] dark:text-white truncate">
                         {membershipPlan === "General" && "General Desk (Flexible Seating)"}
-                        {membershipPlan === "Reserved Seat" && "Reserved Desk (+₹300 Dedicated Desk)"}
+                        {membershipPlan === "Reserved Seat" && "Reserved Dedicated Desk"}
                         {membershipPlan === "Trial Pass" && "3-Day Free Trial Pass (FREE)"}
                       </span>
                     </div>
@@ -958,8 +1042,8 @@ function SignupForm() {
                   {isPlanDropdownOpen && (
                     <div className="absolute z-[60] left-0 right-0 top-full mt-1.5 rounded-2xl border border-[#E5E7EB] bg-white dark:bg-[#0A2E5C] dark:border-zinc-700 shadow-2xl p-1.5 space-y-1 max-h-56 overflow-y-auto">
                       {[
-                        { id: "General" as MembershipPlan, name: "General Desk", sub: "Flexible seating in general study zone", tag: "Standard", icon: BookOpen },
-                        { id: "Reserved Seat" as MembershipPlan, name: "Reserved Desk", sub: "Dedicated desk + locker & power socket", tag: "+₹300/mo", icon: Crown },
+                        { id: "General" as MembershipPlan, name: "General Desk", sub: "Flexible seating in 24/7 study zone", tag: "From ₹300", icon: BookOpen },
+                        { id: "Reserved Seat" as MembershipPlan, name: "Reserved Seat", sub: "Dedicated desk (Mini / Big / Locker)", tag: "From ₹500", icon: Crown },
                         { id: "Trial Pass" as MembershipPlan, name: "3-Day Free Trial", sub: "100% Free 3-day test drive pass", tag: "FREE", icon: Sparkles },
                       ].map((plan) => {
                         const isSelected = membershipPlan === plan.id;
@@ -968,7 +1052,19 @@ function SignupForm() {
                           <div
                             key={plan.id}
                             onClick={() => {
-                              setMembershipPlan(plan.id);
+                              const newPlan = plan.id;
+                              setMembershipPlan(newPlan);
+                              if (newPlan === "Reserved Seat") {
+                                if (!RESERVED_SHIFTS.some(s => s.id === shift)) {
+                                  setShift(RESERVED_SHIFTS[0].id);
+                                }
+                              } else if (newPlan === "General") {
+                                if (!GENERAL_SHIFTS.some(s => s.id === shift)) {
+                                  setShift(GENERAL_SHIFTS[0].id);
+                                }
+                              } else if (newPlan === "Trial Pass") {
+                                setShift(TRIAL_SHIFTS[0].id);
+                              }
                               setIsPlanDropdownOpen(false);
                             }}
                             className={`p-2.5 rounded-xl cursor-pointer flex items-center justify-between gap-2 transition-all ${
@@ -1014,7 +1110,12 @@ function SignupForm() {
                 {/* Right Column: Preferred Shift Custom Dropdown */}
                 <div ref={shiftDropdownRef}>
                   <label className="block text-xs font-semibold text-[#0A2E5C] dark:text-zinc-200 mb-1.5">
-                    Preferred Shift & Timing <span className="text-rose-500">*</span>
+                    {membershipPlan === "Reserved Seat"
+                      ? "Reserved Seat Plan & Package"
+                      : membershipPlan === "Trial Pass"
+                      ? "Trial Pass Timing"
+                      : "Preferred Shift & Timing"}{" "}
+                    <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                   <button
@@ -1030,7 +1131,11 @@ function SignupForm() {
                     }`}
                   >
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-400">
-                      <Clock className="h-4 w-4 text-[#0B5ED7] dark:text-[#FFC107]" />
+                      {membershipPlan === "Reserved Seat" ? (
+                        <Crown className="h-4 w-4 text-[#0B5ED7] dark:text-[#FFC107]" />
+                      ) : (
+                        <Clock className="h-4 w-4 text-[#0B5ED7] dark:text-[#FFC107]" />
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5 truncate">
@@ -1056,15 +1161,15 @@ function SignupForm() {
 
                   {/* Custom Dropdown Popover */}
                   {isShiftDropdownOpen && (
-                    <div className="absolute z-[60] left-0 right-0 top-full mt-1.5 rounded-2xl border border-[#E5E7EB] bg-white dark:bg-[#0A2E5C] dark:border-zinc-700 shadow-2xl p-1.5 space-y-1 max-h-52 sm:max-h-60 overflow-y-auto">
-                      {SHIFT_OPTIONS.map((sh) => {
+                    <div className="absolute z-[60] left-0 right-0 top-full mt-1.5 rounded-2xl border border-[#E5E7EB] bg-white dark:bg-[#0A2E5C] dark:border-zinc-700 shadow-2xl p-1.5 space-y-1 max-h-56 sm:max-h-64 overflow-y-auto">
+                      {(membershipPlan === "Reserved Seat"
+                        ? RESERVED_SHIFTS
+                        : membershipPlan === "Trial Pass"
+                        ? TRIAL_SHIFTS
+                        : GENERAL_SHIFTS
+                      ).map((sh) => {
                         const isSelected = shift === sh.id;
-                        const shiftFee = membershipPlan === "Trial Pass"
-                          ? 0
-                          : membershipPlan === "Reserved Seat"
-                          ? sh.reservedPrice
-                          : sh.generalPrice;
-                        const priceLabel = shiftFee === 0 ? "FREE" : `₹${shiftFee}/mo`;
+                        const priceLabel = sh.price === 0 ? "FREE" : `₹${sh.price}/mo`;
 
                         return (
                           <div
@@ -1073,7 +1178,7 @@ function SignupForm() {
                               setShift(sh.id);
                               setIsShiftDropdownOpen(false);
                             }}
-                            className={`p-2 rounded-xl cursor-pointer flex items-center justify-between gap-2 transition-all ${
+                            className={`p-2.5 rounded-xl cursor-pointer flex items-center justify-between gap-2 transition-all ${
                               isSelected
                                 ? "bg-[#0A2E5C] text-white dark:bg-zinc-800"
                                 : "hover:bg-[#F8FAFC] dark:hover:bg-zinc-800/60 text-[#0A2E5C] dark:text-zinc-200"
@@ -1083,12 +1188,16 @@ function SignupForm() {
                               <div className={`h-6.5 w-6.5 rounded-lg flex items-center justify-center shrink-0 ${
                                 isSelected ? "bg-[#FFC107]/20 text-[#FFC107]" : "bg-[#F8FAFC] text-zinc-500 dark:bg-zinc-700"
                               }`}>
-                                <Clock className="h-3.5 w-3.5" />
+                                {membershipPlan === "Reserved Seat" ? (
+                                  <Crown className="h-3.5 w-3.5" />
+                                ) : (
+                                  <Clock className="h-3.5 w-3.5" />
+                                )}
                               </div>
                               <div className="min-w-0">
                                 <p className="text-xs font-bold leading-tight truncate">{sh.name}</p>
                                 <p className={`text-[10px] font-mono truncate ${isSelected ? "text-zinc-300" : "text-zinc-500 dark:text-zinc-400"}`}>
-                                  {sh.time}
+                                  {sh.time} • {sh.duration}
                                 </p>
                               </div>
                             </div>
@@ -1097,7 +1206,7 @@ function SignupForm() {
                               <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md font-mono ${
                                 isSelected
                                   ? "bg-[#FFC107] text-[#0A2E5C]"
-                                  : shiftFee === 0
+                                  : sh.price === 0
                                   ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
                                   : "bg-zinc-100 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300"
                               }`}>

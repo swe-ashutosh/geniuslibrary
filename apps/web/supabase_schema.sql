@@ -93,11 +93,11 @@ BEGIN
     -- SECURITY ENFORCEMENT: Only the master administrator email can ever receive 'admin' role
     -- All other registrations are strictly forced to 'student' and 'pending' status
     CASE 
-      WHEN NEW.email = 'geniuslibrary@gmail.com' THEN 'admin'
+      WHEN NEW.email = 'geniuslibrarymadhupur@gmail.com' THEN 'admin'
       ELSE 'student'
     END,
     CASE 
-      WHEN NEW.email = 'geniuslibrary@gmail.com' THEN 'active'
+      WHEN NEW.email = 'geniuslibrarymadhupur@gmail.com' THEN 'active'
       ELSE 'pending'
     END
   )
@@ -233,7 +233,7 @@ USING (bucket_id = 'avatars' AND (auth.uid() IS NOT NULL));
 INSERT INTO public.profiles (id, full_name, email, role, status)
 SELECT id, 'Library Admin', email, 'admin', 'active'
 FROM auth.users
-WHERE email = 'geniuslibrary@gmail.com'
+WHERE email = 'geniuslibrarymadhupur@gmail.com'
 ON CONFLICT (id) DO UPDATE SET role = 'admin', status = 'active';
 
 -- 6. Safe & Clean Deletion: When admin removes a student from profiles, also delete auth user and related records
@@ -241,7 +241,7 @@ CREATE OR REPLACE FUNCTION public.delete_student_user(target_user_id UUID)
 RETURNS void AS $$
 BEGIN
   -- Prevent accidental deletion of Admin
-  IF EXISTS (SELECT 1 FROM public.profiles WHERE id = target_user_id AND email = 'geniuslibrary@gmail.com') THEN
+  IF EXISTS (SELECT 1 FROM public.profiles WHERE id = target_user_id AND email = 'geniuslibrarymadhupur@gmail.com') THEN
     RAISE EXCEPTION 'Cannot delete primary admin account';
   END IF;
 
@@ -257,7 +257,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION public.handle_profile_deleted()
 RETURNS TRIGGER AS $$
 BEGIN
-  IF OLD.email <> 'geniuslibrary@gmail.com' THEN
+  IF OLD.email <> 'geniuslibrarymadhupur@gmail.com' THEN
     DELETE FROM auth.users WHERE id = OLD.id;
   END IF;
   RETURN OLD;

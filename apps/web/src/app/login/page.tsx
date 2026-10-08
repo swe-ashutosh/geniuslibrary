@@ -24,7 +24,10 @@ import {
   Phone,
   HelpCircle,
   UserPlus,
-  UserX
+  UserX,
+  Mail,
+  Eye,
+  EyeOff
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
@@ -49,8 +52,9 @@ function LoginForm() {
   const errorQuery = searchParams.get("error");
   const emailQuery = searchParams.get("email");
 
-  const [identifier, setIdentifier] = useState("");
+  const [email, setEmail] = useState(emailQuery || "");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -59,6 +63,7 @@ function LoginForm() {
   const [showNotRegisteredModal, setShowNotRegisteredModal] = useState(false);
   const [showSuspendedModal, setShowSuspendedModal] = useState(false);
   const [showLockedModal, setShowLockedModal] = useState(false);
+  const [lockedAccount, setLockedAccount] = useState("");
   const [unapprovedEmail, setUnapprovedEmail] = useState("");
   const [unapprovedName, setUnapprovedName] = useState("");
   const [unregisteredEmail, setUnregisteredEmail] = useState("");
@@ -124,6 +129,12 @@ function LoginForm() {
   }, [router, errorQuery]);
 
   useEffect(() => {
+    if (emailQuery) {
+      setEmail(emailQuery);
+    }
+  }, [emailQuery]);
+
+  useEffect(() => {
     if (errorQuery === "not_registered") {
       if (emailQuery) setUnregisteredEmail(emailQuery);
       setShowNotRegisteredModal(true);
@@ -146,20 +157,23 @@ function LoginForm() {
     setIsLoading(true);
     setErrorMsg("");
 
-    const trimmedIdentifier = identifier.trim();
-    if (!trimmedIdentifier) {
+    const targetVal = email.trim();
+    if (!targetVal) {
       setErrorMsg("Please enter your registered email address.");
       setIsLoading(false);
       return;
     }
 
+    const cleanInput = targetVal.toLowerCase();
+    const isMasterAdmin = isMasterAdminEmail(cleanInput);
+
     // 1. Security Check: Check if account is locked due to 5 consecutive failed attempts
-    const isMasterAdmin = isMasterAdminEmail(trimmedIdentifier);
     if (isMasterAdmin) {
-      resetLoginAttempts(trimmedIdentifier);
+      resetLoginAttempts(cleanInput);
     } else {
-      const secStatus = getLoginSecurityStatus(trimmedIdentifier);
+      const secStatus = getLoginSecurityStatus(cleanInput);
       if (secStatus.isLocked) {
+        setLockedAccount(targetVal);
         setShowLockedModal(true);
         setErrorMsg("Account locked! 5 consecutive failed login attempts reached. Please use 'Forgot Password' below to verify your email and unlock your account.");
         setIsLoading(false);
@@ -167,19 +181,22 @@ function LoginForm() {
       }
     }
 
-    let authEmail = trimmedIdentifier.toLowerCase();
+    let authEmail = cleanInput;
     const supabase = createClient();
 
-    // Support login via 10-digit Mobile Number as well as Email
+    // If input is phone number or mobile digits, gracefully resolve it
     if (!authEmail.includes("@")) {
       const cleanPhone = authEmail.replace(/[^0-9]/g, "").slice(-10);
-      if (cleanPhone.length >= 10) {
+      const adminPhoneDigits = (BRAND_CONFIG.rawPhone || "8423448899").replace(/[^0-9]/g, "").slice(-10);
+
+      if (cleanPhone === adminPhoneDigits || cleanPhone === "8423448899") {
+        authEmail = "geniuslibrarymadhupur@gmail.com";
+      } else {
         try {
-          // 1. Fast direct Supabase profile lookup (<80ms)
           const { data: pData } = await supabase
             .from("profiles")
-            .select("email")
-            .eq("phone", cleanPhone)
+            .select("email, role")
+            .or(`phone.eq.${cleanPhone},phone.eq.+91 ${cleanPhone}`)
             .maybeSingle();
 
           if (pData?.email) {
@@ -198,13 +215,32 @@ function LoginForm() {
       }
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    let { data, error } = await supabase.auth.signInWithPassword({
       email: authEmail,
       password: password,
     });
 
+    // If initial sign in fails and it is an admin account or geniuslibrarymadhupur@gmail.com, try fallback to geniuslibrary@gmail.com
+    if (error && (authEmail === "geniuslibrarymadhupur@gmail.com" || isMasterAdmin || isMasterAdminEmail(authEmail))) {
+      const fallbackResult = await supabase.auth.signInWithPassword({
+        email: "geniuslibrary@gmail.com",
+        password: password,
+      });
+      if (!fallbackResult.error && fallbackResult.data?.user) {
+        data = fallbackResult.data;
+        error = null;
+      }
+    }
+
     if (error) {
       console.error("[Login] signInWithPassword error:", error);
+
+      // NEVER show student not-approved, suspended, or unregistered modals to admin!
+      if (isMasterAdmin || isMasterAdminEmail(authEmail) || isMasterAdminEmail(targetVal)) {
+        setErrorMsg("Incorrect password for Admin account. Please verify your credentials and try again.");
+        setIsLoading(false);
+        return;
+      }
 
       // Check for server-side / schema / database failures
       if ((error.status && error.status >= 500) || error.message.toLowerCase().includes("database error") || error.message.toLowerCase().includes("schema")) {
@@ -220,32 +256,39 @@ function LoginForm() {
         try {
           const { data } = await supabase
             .from("profiles")
-            .select("id, status, full_name")
+            .select("id, status, full_name, role, email")
             .eq("email", trimmedEmail)
             .maybeSingle();
           pCheck = data;
         } catch {}
+
+        // If this profile is admin, never show student modals
+        if (pCheck?.role === "admin" || isMasterAdminEmail(pCheck?.email)) {
+          setErrorMsg("Incorrect password for Admin account. Please verify your credentials and try again.");
+          setIsLoading(false);
+          return;
+        }
 
         const matchedStudent = !pCheck ? await lookupStudent({ email: trimmedEmail }) : null;
 
         if (matchedStudent || pCheck) {
           const status = matchedStudent?.status || pCheck?.status;
           if (status === "pending") {
-            setUnapprovedEmail(trimmedIdentifier);
+            setUnapprovedEmail(targetVal);
             setUnapprovedName(matchedStudent?.fullName || pCheck?.full_name || "");
             setShowNotApprovedModal(true);
             setIsLoading(false);
             return;
           }
           if (status === "suspended") {
-            setUnapprovedEmail(trimmedIdentifier);
+            setUnapprovedEmail(targetVal);
             setShowSuspendedModal(true);
             setIsLoading(false);
             return;
           }
-        } else if (!isMasterAdmin) {
+        } else {
           // Account is completely unregistered in the library!
-          setUnregisteredEmail(trimmedIdentifier);
+          setUnregisteredEmail(targetVal);
           setShowNotRegisteredModal(true);
           setIsLoading(false);
           return;
@@ -253,23 +296,20 @@ function LoginForm() {
       } catch (err) {}
 
       // Incorrect password attempt -> Record failed login attempt for rate limiting
-      if (isMasterAdmin) {
-        setErrorMsg("Incorrect password for Master Admin. Please check your credentials and try again.");
+      const failedStatus = recordFailedLoginAttempt(targetVal);
+      if (failedStatus.isLocked) {
+        setLockedAccount(targetVal);
+        setShowLockedModal(true);
+        setErrorMsg("Account locked! 5 consecutive incorrect password attempts reached. Please use 'Forgot Password' below to reset your password and unlock your account.");
       } else {
-        const failedStatus = recordFailedLoginAttempt(trimmedIdentifier);
-        if (failedStatus.isLocked) {
-          setShowLockedModal(true);
-          setErrorMsg("Account locked! 5 consecutive incorrect password attempts reached. Please use 'Forgot Password' below to reset your password and unlock your account.");
-        } else {
-          setErrorMsg(`Incorrect password. ${failedStatus.remainingAttempts} attempt${failedStatus.remainingAttempts === 1 ? '' : 's'} remaining before your account is locked for security.`);
-        }
+        setErrorMsg(`Incorrect password. ${failedStatus.remainingAttempts} attempt${failedStatus.remainingAttempts === 1 ? '' : 's'} remaining before your account is locked for security.`);
       }
       setIsLoading(false);
       return;
     }
 
     // Success -> Clear failed attempt counter
-    resetLoginAttempts(trimmedIdentifier);
+    resetLoginAttempts(targetVal);
 
     const user = data.user;
     if (!user) {
@@ -281,7 +321,7 @@ function LoginForm() {
     // 1. Instant Navigation based on authenticated user session
     recordUserActivity(true);
     const role = user.user_metadata?.role;
-    const isAdmin = isMasterAdminEmail(user.email) || role === "admin";
+    const isAdmin = isMasterAdminEmail(user.email) || isMasterAdminEmail(targetVal) || role === "admin";
     const assignedRole = isAdmin ? "admin" : (role === "staff" ? "staff" : "student");
 
     // Automatically request & sync native FCM push token for this user
@@ -309,17 +349,23 @@ function LoginForm() {
     try {
       const { data: pData } = await supabase
         .from("profiles")
-        .select("id, status, phone, full_name")
+        .select("id, status, phone, full_name, role")
         .eq("id", user.id)
         .maybeSingle();
       studentProfile = pData;
     } catch {}
 
+    if (studentProfile?.role === "admin") {
+      saveUserRole("admin");
+      router.replace("/admin/");
+      return;
+    }
+
     const hasPhone = Boolean(studentProfile?.phone && String(studentProfile.phone).trim().length > 0);
 
     if (!studentProfile || !hasPhone) {
       await supabase.auth.signOut();
-      setUnregisteredEmail(trimmedIdentifier);
+      setUnregisteredEmail(targetVal);
       setShowNotRegisteredModal(true);
       setIsLoading(false);
       return;
@@ -327,7 +373,7 @@ function LoginForm() {
 
     if (studentProfile.status === "pending") {
       await supabase.auth.signOut();
-      setUnapprovedEmail(trimmedIdentifier);
+      setUnapprovedEmail(targetVal);
       setUnapprovedName(studentProfile.full_name || "");
       setShowNotApprovedModal(true);
       setIsLoading(false);
@@ -336,7 +382,7 @@ function LoginForm() {
 
     if (studentProfile.status === "suspended") {
       await supabase.auth.signOut();
-      setUnapprovedEmail(trimmedIdentifier);
+      setUnapprovedEmail(targetVal);
       setShowSuspendedModal(true);
       setIsLoading(false);
       return;
@@ -344,7 +390,7 @@ function LoginForm() {
 
     if (studentProfile.status !== "active") {
       await supabase.auth.signOut();
-      setUnregisteredEmail(trimmedIdentifier);
+      setUnregisteredEmail(targetVal);
       setShowNotRegisteredModal(true);
       setIsLoading(false);
       return;
@@ -414,21 +460,21 @@ function LoginForm() {
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-[#0A2E5C] dark:text-zinc-200 mb-1.5">
-                Email Address or Mobile Number
+                Email Address
               </label>
               <div className="relative">
                 <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-400">
-                  <User className="h-4 w-4" />
+                  <Mail className="h-4 w-4" />
                 </div>
                 <input
-                  type="text"
+                  type="email"
                   required
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="Enter email or 10-digit mobile number"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="e.g. geniuslibrarymadhupur@gmail.com"
                   className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 py-2.5 pl-10 pr-3 text-xs text-[#0A2E5C] placeholder-zinc-400 focus:border-[#FFC107] focus:outline-none focus:ring-2 focus:ring-[#FFC107]/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white transition-all"
                 />
               </div>
@@ -448,13 +494,22 @@ function LoginForm() {
                   <Lock className="h-4 w-4" />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 py-2.5 pl-10 pr-3 text-xs text-[#0A2E5C] placeholder-zinc-400 focus:border-[#FFC107] focus:outline-none focus:ring-2 focus:ring-[#FFC107]/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white transition-all"
+                  className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 py-2.5 pl-10 pr-10 text-xs text-[#0A2E5C] placeholder-zinc-400 focus:border-[#FFC107] focus:outline-none focus:ring-2 focus:ring-[#FFC107]/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white transition-all"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 cursor-pointer"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
 
@@ -728,7 +783,7 @@ function LoginForm() {
             <div className="my-5 rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20 p-4 text-left space-y-2 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-zinc-500 font-medium">Locked Account:</span>
-                <span className="font-mono font-bold text-rose-700 dark:text-rose-300 truncate max-w-[210px]">{identifier}</span>
+                <span className="font-mono font-bold text-rose-700 dark:text-rose-300 truncate max-w-[210px]">{lockedAccount || email}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-zinc-500 font-medium">Failed Attempts:</span>
@@ -741,7 +796,7 @@ function LoginForm() {
 
             <div className="space-y-2">
               <Link
-                href={`/forgot-password?email=${encodeURIComponent(identifier)}`}
+                href={`/forgot-password?email=${encodeURIComponent(lockedAccount || email)}`}
                 className="w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition active:scale-95"
               >
                 <Lock className="h-4 w-4" />

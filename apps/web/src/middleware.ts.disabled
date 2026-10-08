@@ -75,7 +75,7 @@ export async function middleware(request: NextRequest) {
   // 2. Authenticated user role verification (database-authoritative)
   if (user) {
     const userEmail = (user.email || "").toLowerCase();
-    const isMasterAdmin = userEmail === "geniuslibrary@gmail.com";
+    const isMasterAdmin = userEmail === "geniuslibrarymadhupur@gmail.com";
 
     let isAdmin = isMasterAdmin;
     let isStaff = isMasterAdmin;

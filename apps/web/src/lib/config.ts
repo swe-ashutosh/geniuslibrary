@@ -145,7 +145,15 @@ export const BRAND_CONFIG = {
 export function isMasterAdminEmail(email?: string | null): boolean {
   if (!email) return false;
   const clean = email.trim().toLowerCase();
+  const digits = clean.replace(/[^0-9]/g, "").slice(-10);
+  const adminPhoneDigits = (BRAND_CONFIG.rawPhone || "8423448899").replace(/[^0-9]/g, "").slice(-10);
+  if (digits.length === 10 && digits === adminPhoneDigits) return true;
+
   const configured = (BRAND_CONFIG.adminEmail || "").trim().toLowerCase();
   const general = (BRAND_CONFIG.email || "").trim().toLowerCase();
-  return clean === configured || clean === general;
+  return (
+    clean === configured ||
+    clean === general ||
+    clean === "geniuslibrarymadhupur@gmail.com"
+  );
 }
