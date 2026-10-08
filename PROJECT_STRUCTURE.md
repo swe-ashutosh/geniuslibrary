@@ -125,7 +125,6 @@ from the same credentials to verify JWTs and read/write the primary DB.
 | `admin/results/page.tsx` | Create exams, enter marks. |
 | `admin/staff/page.tsx` | Staff directory + access control. |
 | `admin/settings/page.tsx` | Library profile, shifts, holidays, storage status. |
-| `admin/audit-log/page.tsx` | Sensitive-action history. |
 
 **Student portal (`/student/*`, guarded)**
 

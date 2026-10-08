@@ -1452,14 +1452,8 @@ export default function AdminDashboardOverview() {
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
                 <Clock className="h-4 w-4" />
               </div>
-              <h3 className="text-base font-bold text-[#0A2E5C] dark:text-white">Recent System Logs</h3>
+              <h3 className="text-base font-bold text-[#0A2E5C] dark:text-white">Recent System Activity</h3>
             </div>
-            <Link
-              href="/admin/audit-log"
-              className="text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1 group"
-            >
-              View All <ChevronRight className="h-3.5 w-3.5 group-hover:trangray-x-0.5 transition-transform" />
-            </Link>
           </div>
 
           <div className="space-y-3">

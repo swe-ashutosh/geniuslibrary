@@ -20,7 +20,6 @@ import {
   BarChart2, 
   UserCog, 
   Settings, 
-  History, 
   LogOut, 
   Bell, 
   Search, 
@@ -92,7 +91,6 @@ const SIDEBAR_SECTIONS = [
     items: [
       { label: "Staff", href: "/admin/staff", icon: UserCog },
       { label: "Settings", href: "/admin/settings", icon: Settings },
-      { label: "Audit Log", href: "/admin/audit-log", icon: History },
     ]
   }
 ];
@@ -763,13 +761,6 @@ export default function AdminLayout({
                       className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-[#F3F4F6] dark:hover:bg-zinc-800 rounded-xl"
                     >
                       <UserCog className="h-3.5 w-3.5 text-[#0B5ED7]" /> Staff & Duty Roles
-                    </Link>
-                    <Link
-                      href="/admin/audit-log"
-                      onClick={() => setUserDropdownOpen(false)}
-                      className="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-[#F3F4F6] dark:hover:bg-zinc-800 rounded-xl"
-                    >
-                      <History className="h-3.5 w-3.5 text-emerald-600" /> Security Audit Log
                     </Link>
                   </div>
 
