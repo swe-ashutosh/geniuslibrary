@@ -781,10 +781,17 @@ export default function StaffPortal() {
     setIsAddingStudent(true);
     try {
       const supabase = createClient();
-      const stdId = `std-${Date.now()}`;
+      const fallbackUuid = (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
+        ? crypto.randomUUID()
+        : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === "x" ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          });
+      const stdId = fallbackUuid;
       const code = `SDL-${Date.now().toString().slice(-4)}`;
 
-      await supabase.from("profiles").upsert({
+      const { error: upsertErr } = await supabase.from("profiles").upsert({
         id: stdId,
         full_name: newStudentName.trim(),
         email: newStudentEmail.trim().toLowerCase(),
@@ -800,6 +807,10 @@ export default function StaffPortal() {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
+
+      if (upsertErr) {
+        throw new Error(upsertErr.message);
+      }
 
       // Record initial joining fee receipt
       await createFee({

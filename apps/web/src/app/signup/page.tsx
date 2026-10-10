@@ -518,7 +518,14 @@ function SignupForm() {
         return;
       }
 
-      studentId = authData?.user?.id || `std-${Date.now()}`;
+      const fallbackUuid = (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
+        ? crypto.randomUUID()
+        : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === "x" ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          });
+      studentId = authData?.user?.id || fallbackUuid;
     }
 
     // FAST SUBMISSION PIPELINE (Instant popup under 800ms)
@@ -537,7 +544,7 @@ function SignupForm() {
         generatedStudentCode = generateStudentCode([]);
       }
 
-      await supabase.from("profiles").upsert({
+      const { error: upsertErr } = await supabase.from("profiles").upsert({
         id: studentId,
         student_code: generatedStudentCode,
         full_name: name,
@@ -556,8 +563,18 @@ function SignupForm() {
         due_amount: currentTotalFee,
         updated_at: new Date().toISOString(),
       });
-    } catch (saveErr) {
-      console.warn("Student registration save warning:", saveErr);
+
+      if (upsertErr) {
+        console.error("Student registration save error:", upsertErr);
+        setIsLoading(false);
+        setErrorMsg(`Failed to save registration: ${upsertErr.message}`);
+        return;
+      }
+    } catch (saveErr: any) {
+      console.error("Student registration save exception:", saveErr);
+      setIsLoading(false);
+      setErrorMsg(`Failed to save registration: ${saveErr?.message || "Unknown error"}`);
+      return;
     }
 
     // 3. Immediately show the submitted popup! (Zero lag for user)

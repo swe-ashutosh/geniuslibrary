@@ -246,7 +246,14 @@ function StudentsDirectoryContent() {
     setIsAddingStudent(true);
     try {
       const supabase = createClient();
-      const newId = `std-${Date.now()}`;
+      const fallbackUuid = (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function")
+        ? crypto.randomUUID()
+        : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === "x" ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          });
+      let authUserId = fallbackUuid;
       const studentCode = generateStudentCode(students.map((s) => s.student_code));
       const seatNum = newStudentForm.membership_plan === "Reserved Seat" ? (newStudentForm.seat_number?.trim() || "S-01") : null;
 
@@ -276,7 +283,6 @@ function StudentsDirectoryContent() {
       const initialShiftFee = newStudentForm.membership_plan === "Trial Pass" ? 0 : (selectedShiftObj.price || 500);
 
       // Register student in Supabase Auth using a non-session client so admin is NOT logged out
-      let authUserId = newId;
       try {
         const tempAuthClient = createSupabaseClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -339,29 +345,29 @@ function StudentsDirectoryContent() {
       };
 
       // Direct save to Supabase profiles (Primary live database)
-      try {
-        await supabase.from("profiles").upsert([{
-          id: authUserId,
-          student_code: studentCode,
-          full_name: newRecord.full_name,
-          phone: newRecord.phone,
-          email: newRecord.email,
-          parent_name: newRecord.parent_name,
-          parent_phone: newRecord.parent_phone,
-          course: newRecord.course,
-          shift: newRecord.shift,
-          membership_plan: newRecord.membership_plan,
-          seat_number: seatNum,
-          address: newRecord.address,
-          status: newRecord.status,
-          fee_status: "Due",
-          due_amount: initialShiftFee,
-          role: "student",
-          created_at: newRecord.created_at,
-          updated_at: newRecord.created_at,
-        }]);
-      } catch (err) {
-        console.warn("Supabase upsert note:", err);
+      const { error: supaErr } = await supabase.from("profiles").upsert([{
+        id: authUserId,
+        student_code: studentCode,
+        full_name: newRecord.full_name,
+        phone: newRecord.phone,
+        email: newRecord.email,
+        parent_name: newRecord.parent_name,
+        parent_phone: newRecord.parent_phone,
+        course: newRecord.course,
+        shift: newRecord.shift,
+        membership_plan: newRecord.membership_plan,
+        seat_number: seatNum,
+        address: newRecord.address,
+        status: newRecord.status,
+        fee_status: "Due",
+        due_amount: initialShiftFee,
+        role: "student",
+        created_at: newRecord.created_at,
+        updated_at: newRecord.created_at,
+      }]);
+
+      if (supaErr) {
+        throw new Error(supaErr.message);
       }
 
       setStudents((prev) => [newRecord, ...prev]);

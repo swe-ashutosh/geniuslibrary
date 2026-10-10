@@ -1988,7 +1988,14 @@ export async function createStudent(student: Partial<StudentRecord>): Promise<St
   try {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
-    const studentId = student.id || `std-${Date.now()}`;
+    const fallbackUuid = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID()
+      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          const v = c === 'x' ? r : (r & 0x3) | 0x8;
+          return v.toString(16);
+        });
+    const studentId = student.id || fallbackUuid;
     const payload = {
       id: studentId,
       student_code: student.studentCode,
@@ -2009,7 +2016,11 @@ export async function createStudent(student: Partial<StudentRecord>): Promise<St
       avatar_url: student.avatarUrl || null,
       updated_at: new Date().toISOString(),
     };
-    await supabase.from('profiles').upsert(payload);
+    const { error } = await supabase.from('profiles').upsert(payload);
+    if (error) {
+      console.error('createStudent Supabase error:', error);
+      throw error;
+    }
     return {
       id: studentId,
       studentCode: payload.student_code || '',
