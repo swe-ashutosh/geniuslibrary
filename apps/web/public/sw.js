@@ -1,7 +1,7 @@
 // Ultra-Fast Edge & Offline Service Worker
 // Brand values come from /pwa-config.js (auto-generated from white-label.config.ts).
 importScripts("/pwa-config.js");
-const CACHE_NAME = "genius-library-v5";
+const CACHE_NAME = "genius-library-v6";
 
 const CRITICAL_STATIC_ASSETS = [
   "/",
@@ -113,37 +113,28 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 5. HTML Navigation (Homepage and routes) -> Stale-While-Revalidate with Instant Offline Fallback
+  // 5. HTML Navigation (Homepage and routes) -> Network-First with Instant Offline Fallback
+  // Guarantees browser always loads matching, up-to-date CSS/JS chunk hashes from new deployments
   if (event.request.mode === "navigate") {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        // Asynchronously revalidate from network to keep cache up-to-date
-        const networkFetch = fetch(event.request)
-          .then((response) => {
-            if (response && response.status === 200) {
-              const clone = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-            }
-            return response;
-          })
-          .catch(() => null);
-
-        // If cached (0ms instant return!), return immediately for silky smooth speed
-        if (cached) {
-          return cached;
-        }
-
-        // If not in cache yet, wait for network with offline fallback
-        return networkFetch.then(async (response) => {
-          if (response) return response;
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(event.request);
+          if (cached) return cached;
           const fallback = (await caches.match("/")) || (await caches.match("/index.html"));
           if (fallback) return fallback;
           return new Response("Offline - " + (self.PWA_CONFIG?.brand?.fullName || "Library"), {
             status: 503,
             headers: { "Content-Type": "text/html; charset=utf-8" },
           });
-        });
-      })
+        })
     );
     return;
   }

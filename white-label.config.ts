@@ -58,9 +58,9 @@ export const WL = {
   /** Admin email — this user automatically gets master admin rights */
   adminEmail: "geniuslibrarymadhupur@gmail.com",
   /** Production site URL (sitemap, robots, canonical, OG) */
-  siteUrl: "https://geniuslibrary.librarywale.in",
+  siteUrl: "https://genius.librarywale.in",
   /** Primary custom domain (API CORS fallback, redirect checks) */
-  primaryDomain: "https://geniuslibrary.com",
+  primaryDomain: "https://genius.librarywale.in",
   /** pages.dev subdomain to auto-redirect to siteUrl (empty = disabled) */
   pagesDevSubdomain: "",
   /** App version shown in settings */
@@ -267,7 +267,7 @@ export const WL = {
   /** Transactional email sender (Resend). Verified domain required. */
   emailFrom: {
     fromName: "Genius Library",
-    fromAddress: "noreply@geniuslibrary.librarywale.in",
+    fromAddress: "noreply@genius.librarywale.in",
   },
 
   /** Social profile URLs (empty = icon hidden in footer). WhatsApp falls back to the library phone. */

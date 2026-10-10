@@ -361,7 +361,7 @@ export default function SeatManagementPage() {
   // Open Entrance Master Standee Poster & NFC Modal
   const handleOpenMasterStandModal = async () => {
     try {
-      const payload = "https://geniuslibrary.librarywale.in/attendance";
+      const payload = "https://genius.librarywale.in/attendance";
       const dataUrl = await QRCode.toDataURL(payload, {
         width: 600,
         margin: 2,
@@ -391,7 +391,7 @@ export default function SeatManagementPage() {
         records: [
           {
             recordType: "url",
-            data: "https://geniuslibrary.librarywale.in/attendance",
+            data: "https://genius.librarywale.in/attendance",
           },
         ],
       });
@@ -1672,7 +1672,7 @@ export default function SeatManagementPage() {
                                   <div class="card-desc">Scan or tap again when leaving. Vacates your desk and updates your daily library hours.</div>
                                 </div>
                               </div>
-                              <div class="footer">www.geniuslibrary.librarywale.in • Madhupur, Jharkhand</div>
+                              <div class="footer">www.genius.librarywale.in • Madhupur, Sonbhadra</div>
                             </div>
                             <script>window.onload = function() { window.print(); }</script>
                           </body>

@@ -272,7 +272,7 @@ export function AdminStudentQrScannerModal({
       let payload = "";
       const baseOrigin = typeof window !== "undefined" && window.location.origin 
         ? window.location.origin 
-        : "https://geniuslibrary.librarywale.in";
+        : "https://genius.librarywale.in";
 
       if (qrTargetType === "master") {
         payload = `${baseOrigin}/attendance/?source=master_turnstile`;
@@ -367,7 +367,7 @@ export function AdminStudentQrScannerModal({
     let payload = "";
     const baseOrigin = typeof window !== "undefined" && window.location.origin 
       ? window.location.origin 
-      : "https://geniuslibrary.librarywale.in";
+      : "https://genius.librarywale.in";
 
     if (qrTargetType === "master") {
       payload = `${baseOrigin}/attendance/?source=master_turnstile`;
