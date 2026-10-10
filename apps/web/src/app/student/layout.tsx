@@ -211,7 +211,7 @@ export default function StudentLayout({
           
           const rawSerial = event.serialNumber || "";
           const normalize = (s: string) => (s || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-          const ALLOWED = ["53:98:3A:CD:53:00:01"];
+          const ALLOWED = ["53:D4:B6:CD:53:00:01", "53:98:3A:CD:53:00:01"];
           const isMatch = ALLOWED.some(a => normalize(a) === normalize(rawSerial));
           if (!isMatch) {
             console.warn("[NFC Background] Non-library tag tapped:", rawSerial);

@@ -271,12 +271,30 @@ function SignupForm() {
           const { data: { user } } = await supabase.auth.getUser();
           
           if (user) {
-            // Check if profile already exists to avoid resetting active accounts
-            const { data: existingProfile } = await supabase
+            // Check if profile already exists by ID or email to avoid resetting active accounts
+            let existingProfile: any = null;
+            const { data: pById } = await supabase
               .from("profiles")
-              .select("status, role")
+              .select("id, status, role")
               .eq("id", user.id)
               .maybeSingle();
+
+            if (pById) {
+              existingProfile = pById;
+            } else if (user.email) {
+              const { data: pByEmail } = await supabase
+                .from("profiles")
+                .select("id, status, role")
+                .eq("email", user.email.toLowerCase())
+                .maybeSingle();
+
+              if (pByEmail) {
+                existingProfile = pByEmail;
+                try {
+                  await supabase.from("profiles").update({ id: user.id }).eq("email", user.email.toLowerCase());
+                } catch {}
+              }
+            }
 
             if (existingProfile && existingProfile.status === "active") {
               sessionStorage.removeItem("pending_student_signup");

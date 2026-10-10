@@ -193,11 +193,14 @@ function LoginForm() {
         authEmail = "geniuslibrarymadhupur@gmail.com";
       } else {
         try {
-          const { data: pData } = await supabase
+          const { data: pList } = await supabase
             .from("profiles")
             .select("email, role")
-            .or(`phone.eq.${cleanPhone},phone.eq.+91 ${cleanPhone}`)
-            .maybeSingle();
+            .ilike("phone", `%${cleanPhone}%`)
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+          const pData = pList?.[0];
 
           if (pData?.email) {
             authEmail = pData.email.toLowerCase();
@@ -256,11 +259,18 @@ function LoginForm() {
         try {
           const { data } = await supabase
             .from("profiles")
-            .select("id, status, full_name, role, email")
+            .select("id, status, full_name, role, email, avatar_url")
             .eq("email", trimmedEmail)
             .maybeSingle();
           pCheck = data;
         } catch {}
+
+        // Check if user was registered via Google OAuth
+        if (pCheck?.avatar_url && pCheck.avatar_url.includes("googleusercontent.com")) {
+          setErrorMsg("You registered using Google! Please click the 'Continue with Google' button below to sign in without entering a password.");
+          setIsLoading(false);
+          return;
+        }
 
         // If this profile is admin, never show student modals
         if (pCheck?.role === "admin" || isMasterAdminEmail(pCheck?.email)) {

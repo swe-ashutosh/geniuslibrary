@@ -1016,55 +1016,26 @@ export function AdminStudentQrScannerModal({
                 <button
                   type="button"
                   onClick={() => setQrTargetType("master")}
-                  className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+                  className={`flex-1 py-2.5 text-xs font-black rounded-xl transition cursor-pointer ${
                     qrTargetType === "master"
                       ? "bg-[#0A2E5C] text-[#FFC107] shadow-xs dark:bg-zinc-700 dark:text-[#FFC107]"
                       : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400"
                   }`}
                 >
-                  Gate Standee QR
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQrTargetType("desk")}
-                  className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
-                    qrTargetType === "desk"
-                      ? "bg-[#0A2E5C] text-[#FFC107] shadow-xs dark:bg-zinc-700 dark:text-[#FFC107]"
-                      : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400"
-                  }`}
-                >
-                  Desk QR (01-100)
+                  Universal Gate QR (Single QR)
                 </button>
                 <button
                   type="button"
                   onClick={() => setQrTargetType("student")}
-                  className={`flex-1 py-2 text-xs font-bold rounded-xl transition cursor-pointer ${
+                  className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition cursor-pointer ${
                     qrTargetType === "student"
                       ? "bg-[#0A2E5C] text-[#FFC107] shadow-xs dark:bg-zinc-700 dark:text-[#FFC107]"
                       : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400"
                   }`}
                 >
-                  Student Card QR
+                  Student Pass QR
                 </button>
               </div>
-
-              {/* Sub-selector for Desk Number or Student Dropdown */}
-              {qrTargetType === "desk" && (
-                <div className="flex items-center gap-2 p-3 rounded-2xl bg-[#FDFCFB] dark:bg-zinc-800/50 border border-[#E5E7EB]/70 dark:border-zinc-700">
-                  <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Choose Desk Number:</span>
-                  <select
-                    value={selectedDeskNumber}
-                    onChange={(e) => setSelectedDeskNumber(e.target.value)}
-                    className="flex-1 rounded-xl border border-[#E5E7EB] bg-white p-2 text-xs font-black text-[#0A2E5C] dark:bg-zinc-800 dark:text-white dark:border-zinc-700 focus:outline-none"
-                  >
-                    {Array.from({ length: 100 }, (_, i) => String(i + 1).padStart(2, "0")).map((dNum) => (
-                      <option key={dNum} value={dNum}>
-                        Desk #{dNum} (Study Slot)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
 
               {qrTargetType === "student" && (
                 <div className="flex items-center gap-2 p-3 rounded-2xl bg-[#FDFCFB] dark:bg-zinc-800/50 border border-[#E5E7EB]/70 dark:border-zinc-700">
@@ -1088,21 +1059,17 @@ export function AdminStudentQrScannerModal({
               <div className="rounded-3xl border-2 border-[#FFC107] bg-gradient-to-b from-white to-[#FDFCFB] dark:from-[#0A2E5C] dark:to-[#141A24] p-5 sm:p-6 text-center space-y-4 shadow-xl">
                 <div>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFC107]/20 text-[#0B5ED7] dark:text-[#FFC107] text-[10px] font-black uppercase tracking-wider mb-2">
-                    <Sparkles className="h-3 w-3" /> Genius Library • Madhupur
+                    <Sparkles className="h-3 w-3" /> Genius Library • Official Entrance Standee
                   </div>
                   <h4 className="text-base font-black text-[#0A2E5C] dark:text-white">
                     {qrTargetType === "master"
-                      ? "Main Turnstile Gate Standee QR"
-                      : qrTargetType === "desk"
-                      ? `Study Desk #${selectedDeskNumber} Sticker QR`
+                      ? "Universal Library Gate Standee QR (Print Once for Gate)"
                       : "Student Attendance Pass QR"}
                   </h4>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 max-w-sm mx-auto leading-relaxed">
                     {qrTargetType === "master"
-                      ? "Students scan this QR code with their phone camera to check-in/out at the entrance gate."
-                      : qrTargetType === "desk"
-                      ? `Stick this code on Desk #${selectedDeskNumber}. Students scan to confirm physical presence.`
-                      : "Show this dynamic code to the front desk scanner or turnstile camera."}
+                      ? "External scanner scans -> Opens library site. In-app student scans -> Silent photo capture & records Check-in/out. NFC card (Serial: 53:D4:B6:CD:53:00:01) taps instantly without photo."
+                      : "Student ID card barcode for front-desk scanning."}
                   </p>
                 </div>
 

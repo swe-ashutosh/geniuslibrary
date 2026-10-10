@@ -97,11 +97,29 @@ function AuthCallbackContent() {
       }
 
       // 3. Student profile check (Supabase profiles is the sole primary database)
-      const { data: profile } = await supabase
+      let profile: any = null;
+      const { data: pById } = await supabase
         .from('profiles')
         .select('id, full_name, phone, status, role')
         .eq('id', user.id)
         .maybeSingle();
+
+      if (pById) {
+        profile = pById;
+      } else if (userEmail) {
+        const { data: pByEmail } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone, status, role')
+          .eq('email', userEmail.toLowerCase())
+          .maybeSingle();
+
+        if (pByEmail) {
+          profile = pByEmail;
+          try {
+            await supabase.from('profiles').update({ id: user.id, updated_at: new Date().toISOString() }).eq('email', userEmail.toLowerCase());
+          } catch {}
+        }
+      }
 
       const hasRegisteredPhone = Boolean(profile?.phone && String(profile.phone).trim().length > 0);
 

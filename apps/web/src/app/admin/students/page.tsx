@@ -320,8 +320,16 @@ function StudentsDirectoryContent() {
           authUserId = signUpData.user.id;
         } else if (signUpError) {
           console.warn("Supabase Auth sign up warning:", signUpError.message);
+          if (signUpError.message?.toLowerCase().includes("confirmation email") || (signUpError as any).status === 500) {
+            throw new Error(
+              "Supabase Auth Error: 'Confirm email' is currently enabled in Supabase Dashboard. Please disable 'Confirm email' under Authentication -> Providers -> Email in Supabase so student login credentials can be activated."
+            );
+          }
         }
-      } catch (authErr) {
+      } catch (authErr: any) {
+        if (authErr?.message?.includes("Confirm email")) {
+          throw authErr;
+        }
         console.warn("Supabase Auth sign up exception:", authErr);
       }
 
