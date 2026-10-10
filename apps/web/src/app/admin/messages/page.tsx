@@ -198,7 +198,7 @@ export default function CommunicationsPortalPage() {
         getMessages().catch(() => []),
       ]);
 
-      // Combine D1 students with Supabase profiles to ensure 100% of students appear
+      // Authoritative Supabase student profiles list
       let combinedStudents: Student[] = [...(stdData || [])];
       try {
         const supabase = createClient();

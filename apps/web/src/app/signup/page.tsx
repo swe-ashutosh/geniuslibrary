@@ -436,14 +436,14 @@ function SignupForm() {
 
     if (!matchedExisting) {
       try {
-        const d1Match = await lookupStudent({ email: cleanEmail });
-        if (d1Match) {
+        const matched = await lookupStudent({ email: cleanEmail });
+        if (matched) {
           matchedExisting = {
-            id: d1Match.id,
-            email: d1Match.email,
-            status: d1Match.status,
-            role: d1Match.role || "student",
-            phone: d1Match.phone,
+            id: matched.id,
+            email: matched.email,
+            status: matched.status,
+            role: matched.role || "student",
+            phone: matched.phone,
           };
         }
       } catch {}

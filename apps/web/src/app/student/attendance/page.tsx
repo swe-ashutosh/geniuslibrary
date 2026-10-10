@@ -39,11 +39,9 @@ export default function StudentAttendancePage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   
-  // Waterfall Pagination & Filter state
+  // Pagination & Filter state
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
-  const [isArchiveLoaded, setIsArchiveLoaded] = useState(false);
-  const [sourceFilter, setSourceFilter] = useState<"all" | "supabase" | "d1">("all");
   const [holidays, setHolidays] = useState<LibraryHoliday[]>([]);
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
 
@@ -75,31 +73,29 @@ export default function StudentAttendancePage() {
         avatar_url: cachedAvatar || profileData?.avatar_url || authUser.user_metadata?.avatar_url || null,
       });
 
-      // 2. Waterfall Fetch: Supabase Live records first, fall back to D1 Archive
+      // 2. Fetch live records from Supabase
       try {
         const [result, holidaysRes] = await Promise.all([
           getAttendanceWaterfall({
             studentId: authUser.id,
             page: resetPage,
             pageSize: 15,
-            loadArchive: resetPage > 1,
           }),
           getLibraryHolidays().catch(() => []),
         ]);
 
         setAttendanceList(result.records);
         setHasMore(result.hasMore);
-        setIsArchiveLoaded(result.isArchiveLoaded);
         setPage(resetPage);
         setHolidays(holidaysRes || []);
       } catch (err) {
-        console.warn("Failed to load attendance waterfall:", err);
+        console.warn("Failed to load attendance:", err);
       }
     }
     setIsLoading(false);
   };
 
-  const handleLoadMoreFromD1 = async () => {
+  const handleLoadMore = async () => {
     if (!user?.id || isLoadingMore) return;
     setIsLoadingMore(true);
 
@@ -109,15 +105,13 @@ export default function StudentAttendancePage() {
         studentId: user.id,
         page: nextPage,
         pageSize: 15,
-        loadArchive: true, // Forces checking Cloudflare D1 cold archive
       });
 
       setAttendanceList(result.records);
       setHasMore(result.hasMore);
-      setIsArchiveLoaded(result.isArchiveLoaded);
       setPage(nextPage);
     } catch (err) {
-      console.warn("Error loading more attendance from D1 archive:", err);
+      console.warn("Error loading more attendance:", err);
     } finally {
       setIsLoadingMore(false);
     }
@@ -223,9 +217,6 @@ export default function StudentAttendancePage() {
   const isCheckedInToday = !!todayRecord && !todayRecord.checkOut;
   const todayHoliday = holidays.find((h) => h.date === todayStr);
 
-  const supabaseCount = attendanceList.filter(a => a.source !== "d1_archive").length;
-  const d1Count = attendanceList.filter(a => a.source === "d1_archive").length;
-
   const calcDuration = (inT: string, outT?: string | null): string => {
     if (!outT || outT === "In Progress" || outT === "—") return "In Progress";
     const inMins = parseTimeToMinutes(inT);
@@ -259,11 +250,7 @@ export default function StudentAttendancePage() {
     sessions: AttendanceSessionItem[];
   }
 
-  const rawFiltered = attendanceList.filter(a => {
-    if (sourceFilter === "supabase") return a.source !== "d1_archive";
-    if (sourceFilter === "d1") return a.source === "d1_archive";
-    return true;
-  });
+  const rawFiltered = attendanceList;
 
   const dayGroupsMap = new Map<string, DayAttendanceGroup>();
 
@@ -547,34 +534,10 @@ export default function StudentAttendancePage() {
               </button>
             </div>
 
-            {/* Filter Pills */}
-            <div className="flex items-center gap-1 bg-[#F8FAFC] dark:bg-zinc-800 p-1 rounded-xl text-[11px] font-bold">
-              <button
-                onClick={() => setSourceFilter("all")}
-                className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                  sourceFilter === "all" ? "bg-white dark:bg-zinc-700 text-[#0A2E5C] dark:text-white shadow-xs" : "text-zinc-500"
-                }`}
-              >
-                All ({attendanceList.length})
-              </button>
-              <button
-                onClick={() => setSourceFilter("supabase")}
-                className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
-                  sourceFilter === "supabase" ? "bg-white dark:bg-zinc-700 text-emerald-600 shadow-xs" : "text-zinc-500"
-                }`}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block" />
-                Recent ({supabaseCount})
-              </button>
-              <button
-                onClick={() => setSourceFilter("d1")}
-                className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
-                  sourceFilter === "d1" ? "bg-white dark:bg-zinc-700 text-purple-600 shadow-xs" : "text-zinc-500"
-                }`}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-purple-500 inline-block" />
-                Older History ({d1Count})
-              </button>
+            {/* Record Count Badge */}
+            <div className="flex items-center gap-1.5 bg-[#F8FAFC] dark:bg-zinc-800 px-3 py-1 rounded-xl text-[11px] font-bold text-zinc-600 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700/60">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block" />
+              <span>{attendanceList.length} Sessions Logged</span>
             </div>
 
             <button
@@ -754,13 +717,13 @@ export default function StudentAttendancePage() {
         {hasMore && (
           <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-center">
             <button
-              onClick={handleLoadMoreFromD1}
+              onClick={handleLoadMore}
               disabled={isLoadingMore}
               className="inline-flex items-center gap-2 px-6 py-2.5 rounded-2xl bg-[#0A2E5C] text-[#FFC107] hover:bg-[#2A3447] text-xs font-bold shadow-sm transition active:scale-95 cursor-pointer disabled:opacity-50"
             >
               <Archive className={`h-4 w-4 ${isLoadingMore ? "animate-spin" : ""}`} />
               <span>
-                {isLoadingMore ? "Loading older records..." : "Load Older Attendance History"}
+                {isLoadingMore ? "Loading records..." : "Load More Attendance"}
               </span>
               <ChevronDown className="h-3.5 w-3.5" />
             </button>

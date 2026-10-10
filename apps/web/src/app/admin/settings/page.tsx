@@ -42,6 +42,9 @@ import {
   getStorageStatus, 
   triggerManualMonthlyBackup, 
   pruneSupabaseRecords,
+  getAttendance,
+  getFees,
+  getMessages,
   getAttendanceHistory,
   getFeesHistory,
   getMessagesHistory,
@@ -58,19 +61,15 @@ export default function AdminSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isPurging, setIsPurging] = useState(false);
   const [storageStatus, setStorageStatus] = useState<StorageStatus | null>(null);
+  const [storageMsg, setStorageMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isLoadingStorage, setIsLoadingStorage] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
-  const [isPruning, setIsPruning] = useState(false);
-  const [pruneTarget, setPruneTarget] = useState<'attendance' | 'messages' | 'fees'>('attendance');
-  const [pruneDays, setPruneDays] = useState<number>(30);
-  const [storageMsg, setStorageMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // D1 Cold Storage Archive Explorer State
-  const [showD1Explorer, setShowD1Explorer] = useState(false);
-  const [d1ExplorerTab, setD1ExplorerTab] = useState<'snapshots' | 'attendance' | 'fees' | 'messages'>('snapshots');
-  const [d1Records, setD1Records] = useState<any[]>([]);
-  const [d1Loading, setD1Loading] = useState(false);
-  const [d1Search, setD1Search] = useState("");
+  // Supabase Records & History Explorer State
+  const [showHistoryExplorer, setShowHistoryExplorer] = useState(false);
+  const [historyTab, setHistoryTab] = useState<'snapshots' | 'attendance' | 'fees' | 'messages'>('snapshots');
+  const [historyRecords, setHistoryRecords] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
 
   // Touch Stamp State
   const [isStampModalOpen, setIsStampModalOpen] = useState(false);
@@ -124,79 +123,49 @@ export default function AdminSettingsPage() {
       if (res.success) {
         setStorageMsg({ 
           type: 'success', 
-          text: `✓ Monthly history backup completed successfully! All records archived.` 
+          text: `✓ All data is verified and securely preserved in Supabase.` 
         });
         await loadStorageMetrics();
       } else {
-        setStorageMsg({ type: 'error', text: res.error || 'Backup sync failed' });
+        setStorageMsg({ type: 'error', text: res.error || 'Sync check failed' });
       }
     } catch (err: any) {
-      setStorageMsg({ type: 'error', text: err.message || 'Error triggering backup' });
+      setStorageMsg({ type: 'error', text: err.message || 'Error triggering sync' });
     } finally {
       setIsBackingUp(false);
     }
   };
 
-  const handlePruneRecords = async () => {
-    const targetLabel = pruneTarget === 'attendance' ? 'Attendance logs' : pruneTarget === 'messages' ? 'Messages' : 'Fees';
-    const confirmPrompt = window.confirm(
-      `Confirm Safe Archiving:\n\nMove ${targetLabel} older than ${pruneDays} days to permanent history?\n\n• All records are permanently preserved in your history archive.\n• This cleans up and speeds up your active storage.\n• Zero data will be lost.`
-    );
-    if (!confirmPrompt) return;
-
-    setIsPruning(true);
-    setStorageMsg(null);
-    try {
-      const res = await pruneSupabaseRecords({
-        target: pruneTarget,
-        daysOlderThan: pruneDays,
-      });
-      if (res.success) {
-        setStorageMsg({
-          type: 'success',
-          text: `✓ ${res.message ? res.message.replace(/Supabase/gi, 'Active Storage').replace(/D1/gi, 'Permanent History') : `Archived ${res.countPruned} records to permanent history.`}`,
-        });
-        await loadStorageMetrics();
-      } else {
-        setStorageMsg({ type: 'error', text: 'Archiving failed. Please try again.' });
-      }
-    } catch (err: any) {
-      setStorageMsg({ type: 'error', text: err.message || 'Error archiving records' });
-    } finally {
-      setIsPruning(false);
-    }
-  };
-
-  const loadD1ArchiveRecords = async (tab: 'snapshots' | 'attendance' | 'fees' | 'messages') => {
-    setD1Loading(true);
-    setD1Records([]);
+  const loadHistoryRecords = async (tab: 'snapshots' | 'attendance' | 'fees' | 'messages') => {
+    setHistoryLoading(true);
+    setHistoryRecords([]);
     try {
       if (tab === 'snapshots') {
         const res = await getDailyReportsSnapshots();
-        setD1Records(res.reports || []);
+        setHistoryRecords(res.reports || []);
       } else if (tab === 'attendance') {
-        const res = await getAttendanceHistory();
-        setD1Records(res || []);
+        const res = await getAttendance();
+        setHistoryRecords(res || []);
       } else if (tab === 'fees') {
-        const res = await getFeesHistory();
-        setD1Records(res || []);
+        const res = await getFees();
+        setHistoryRecords(res || []);
       } else if (tab === 'messages') {
-        const res = await getMessagesHistory();
-        setD1Records(res || []);
+        const res = await getMessages();
+        setHistoryRecords(res || []);
       }
     } catch (err) {
-      console.warn("Error fetching D1 archive records:", err);
-      setD1Records([]);
+      console.warn("Error fetching history records:", err);
+      setHistoryRecords([]);
     } finally {
-      setD1Loading(false);
+      setHistoryLoading(false);
     }
   };
 
   useEffect(() => {
-    if (showD1Explorer) {
-      loadD1ArchiveRecords(d1ExplorerTab);
+    if (showHistoryExplorer) {
+      loadHistoryRecords(historyTab);
     }
-  }, [showD1Explorer, d1ExplorerTab]);
+  }, [showHistoryExplorer, historyTab]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -529,119 +498,73 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* Safe Archiving Controls: Free up active space safely */}
-        <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 space-y-3">
+        {/* Permanent Storage Status Banner */}
+        <div className="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 space-y-2">
           <div className="flex items-center gap-2">
-            <Archive className="h-4 w-4 text-amber-700 dark:text-amber-400" />
-            <h3 className="text-xs font-black text-amber-900 dark:text-amber-300 uppercase tracking-wider">
-              Clean Up Old Active Records (Zero Data Loss)
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <h3 className="text-xs font-black text-emerald-900 dark:text-emerald-300 uppercase tracking-wider">
+              Permanent Retention Enabled (Supabase Sole Database)
             </h3>
           </div>
-          <p className="text-xs text-amber-800/80 dark:text-amber-400/90 leading-relaxed">
-            To keep your system running fast and optimize active storage, you can safely archive older records. All records are permanently preserved in your history archive before being cleared from the active list.
+          <p className="text-xs text-emerald-800/80 dark:text-emerald-400/90 leading-relaxed">
+            All attendance logs, student profiles, and fee receipts are stored permanently in Supabase without automatic expiration or deletion. With a 500 MB storage capacity, your library can safely store years of logs without pruning.
           </p>
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
-            <div className="flex-1">
-              <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 block mb-1">
-                Data to Prune:
-              </label>
-              <select
-                value={pruneTarget}
-                onChange={(e) => setPruneTarget(e.target.value as any)}
-                className="w-full p-2 rounded-xl border border-zinc-300 bg-white text-xs text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              >
-                <option value="attendance">Old Attendance Logs</option>
-                <option value="messages">Old Resolved Messages</option>
-                <option value="fees">Old Paid Fee Receipts</option>
-              </select>
-            </div>
-
-            <div className="flex-1">
-              <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 block mb-1">
-                Age Cutoff:
-              </label>
-              <select
-                value={pruneDays}
-                onChange={(e) => setPruneDays(Number(e.target.value))}
-                className="w-full p-2 rounded-xl border border-zinc-300 bg-white text-xs text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              >
-                <option value={30}>Older than 30 Days</option>
-                <option value={60}>Older than 60 Days</option>
-                <option value={90}>Older than 90 Days</option>
-                <option value={180}>Older than 180 Days (6 Months)</option>
-                <option value={365}>Older than 1 Year (365 Days)</option>
-              </select>
-            </div>
-
-            <div className="sm:self-end">
-              <button
-                type="button"
-                onClick={handlePruneRecords}
-                disabled={isPruning}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition active:scale-95 disabled:opacity-50 cursor-pointer"
-              >
-                <Archive className={`h-3.5 w-3.5 ${isPruning ? "animate-spin" : ""}`} />
-                <span>{isPruning ? "Archiving..." : "Move to History"}</span>
-              </button>
-            </div>
-          </div>
         </div>
 
-        {/* Interactive History Archive Explorer */}
+        {/* Interactive Records History Explorer */}
         <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h3 className="text-xs font-black text-[#0A2E5C] dark:text-white flex items-center gap-2">
-                <HardDrive className="h-4 w-4 text-[#0B5ED7]" /> Past Records & History Explorer
+                <HardDrive className="h-4 w-4 text-[#0B5ED7]" /> Supabase Records & History Explorer
               </h3>
               <p className="text-[11px] text-zinc-500">
-                Directly inspect, search, and export old attendance, receipts, and snapshots.
+                Directly inspect, search, and export attendance logs, fee receipts, and backup snapshots.
               </p>
             </div>
 
             <button
               type="button"
-              onClick={() => setShowD1Explorer(!showD1Explorer)}
+              onClick={() => setShowHistoryExplorer(!showHistoryExplorer)}
               className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/60 hover:bg-[#F8FAFC] dark:border-zinc-700 dark:bg-zinc-800 text-xs font-bold text-[#0A2E5C] dark:text-white transition cursor-pointer"
             >
-              {showD1Explorer ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              <span>{showD1Explorer ? "Close History" : "View Old History"}</span>
+              {showHistoryExplorer ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              <span>{showHistoryExplorer ? "Close Explorer" : "Inspect Records"}</span>
             </button>
           </div>
 
-          {showD1Explorer && (
+          {showHistoryExplorer && (
             <div className="mt-4 p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-4 animate-fadeIn">
               {/* Explorer Tabs */}
               <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-zinc-200 dark:border-zinc-800">
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setD1ExplorerTab('snapshots')}
+                    onClick={() => setHistoryTab('snapshots')}
                     className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      d1ExplorerTab === 'snapshots'
+                      historyTab === 'snapshots'
                         ? 'bg-[#0A2E5C] text-[#FFC107] shadow-xs dark:bg-zinc-800 dark:text-white'
                         : 'text-zinc-600 hover:bg-zinc-200/60 dark:text-zinc-400 dark:hover:bg-zinc-800'
                     }`}
                   >
-                    📑 Backup Snapshots
+                    📑 Daily Snapshots
                   </button>
                   <button
                     type="button"
-                    onClick={() => setD1ExplorerTab('attendance')}
+                    onClick={() => setHistoryTab('attendance')}
                     className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      d1ExplorerTab === 'attendance'
+                      historyTab === 'attendance'
                         ? 'bg-[#0A2E5C] text-[#FFC107] shadow-xs dark:bg-zinc-800 dark:text-white'
                         : 'text-zinc-600 hover:bg-zinc-200/60 dark:text-zinc-400 dark:hover:bg-zinc-800'
                     }`}
                   >
-                    📅 Attendance History
+                    📅 Attendance Logs
                   </button>
                   <button
                     type="button"
-                    onClick={() => setD1ExplorerTab('fees')}
+                    onClick={() => setHistoryTab('fees')}
                     className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      d1ExplorerTab === 'fees'
+                      historyTab === 'fees'
                         ? 'bg-[#0A2E5C] text-[#FFC107] shadow-xs dark:bg-zinc-800 dark:text-white'
                         : 'text-zinc-600 hover:bg-zinc-200/60 dark:text-zinc-400 dark:hover:bg-zinc-800'
                     }`}
@@ -650,9 +573,9 @@ export default function AdminSettingsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setD1ExplorerTab('messages')}
+                    onClick={() => setHistoryTab('messages')}
                     className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
-                      d1ExplorerTab === 'messages'
+                      historyTab === 'messages'
                         ? 'bg-[#0A2E5C] text-[#FFC107] shadow-xs dark:bg-zinc-800 dark:text-white'
                         : 'text-zinc-600 hover:bg-zinc-200/60 dark:text-zinc-400 dark:hover:bg-zinc-800'
                     }`}
@@ -666,45 +589,45 @@ export default function AdminSettingsPage() {
                     <Search className="h-3.5 w-3.5 text-zinc-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      placeholder="Search archive..."
-                      value={d1Search}
-                      onChange={(e) => setD1Search(e.target.value)}
+                      placeholder="Search records..."
+                      value={historySearch}
+                      onChange={(e) => setHistorySearch(e.target.value)}
                       className="pl-8 pr-2.5 py-1 text-xs rounded-lg border border-zinc-300 bg-white text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white w-36 sm:w-48"
                     />
                   </div>
                   <button
                     type="button"
-                    onClick={() => loadD1ArchiveRecords(d1ExplorerTab)}
-                    disabled={d1Loading}
+                    onClick={() => loadHistoryRecords(historyTab)}
+                    disabled={historyLoading}
                     className="p-1 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 transition cursor-pointer"
                     title="Refresh"
                   >
-                    <RefreshCw className={`h-3.5 w-3.5 ${d1Loading ? "animate-spin" : ""}`} />
+                    <RefreshCw className={`h-3.5 w-3.5 ${historyLoading ? "animate-spin" : ""}`} />
                   </button>
                 </div>
               </div>
 
               {/* Data Table */}
               <div className="overflow-x-auto max-h-72 overflow-y-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-                {d1Loading ? (
+                {historyLoading ? (
                   <div className="p-8 text-center text-xs text-zinc-400 flex items-center justify-center gap-2">
                     <RefreshCw className="h-4 w-4 animate-spin text-[#0B5ED7]" />
-                    <span>Loading archive history...</span>
+                    <span>Loading Supabase records...</span>
                   </div>
-                ) : d1Records.length === 0 ? (
+                ) : historyRecords.length === 0 ? (
                   <div className="p-8 text-center space-y-1.5">
                     <CheckCircle2 className="h-6 w-6 text-emerald-500 mx-auto" />
                     <p className="text-xs font-bold text-[#0A2E5C] dark:text-white">
-                      No records archived under this section yet!
+                      No records found under this section
                     </p>
                     <p className="text-[11px] text-zinc-400 max-w-sm mx-auto">
-                      All your records are currently active in the system. Older records will appear here as they are archived.
+                      All records recorded will appear here in real-time from Supabase.
                     </p>
                   </div>
                 ) : (
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-100 dark:bg-zinc-800 text-zinc-500 sticky top-0 font-bold uppercase text-[10px]">
-                      {d1ExplorerTab === 'snapshots' && (
+                      {historyTab === 'snapshots' && (
                         <tr>
                           <th className="p-2.5">Date</th>
                           <th className="p-2.5">Type</th>
@@ -714,7 +637,7 @@ export default function AdminSettingsPage() {
                           <th className="p-2.5 text-right">Downloads</th>
                         </tr>
                       )}
-                      {d1ExplorerTab === 'attendance' && (
+                      {historyTab === 'attendance' && (
                         <tr>
                           <th className="p-2.5">Student</th>
                           <th className="p-2.5">Date</th>
@@ -724,7 +647,7 @@ export default function AdminSettingsPage() {
                           <th className="p-2.5">Seat</th>
                         </tr>
                       )}
-                      {d1ExplorerTab === 'fees' && (
+                      {historyTab === 'fees' && (
                         <tr>
                           <th className="p-2.5">Student</th>
                           <th className="p-2.5">Type</th>
@@ -733,7 +656,7 @@ export default function AdminSettingsPage() {
                           <th className="p-2.5">Date</th>
                         </tr>
                       )}
-                      {d1ExplorerTab === 'messages' && (
+                      {historyTab === 'messages' && (
                         <tr>
                           <th className="p-2.5">Sender</th>
                           <th className="p-2.5">Recipient</th>
@@ -743,15 +666,15 @@ export default function AdminSettingsPage() {
                       )}
                     </thead>
                     <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
-                      {d1Records
+                      {historyRecords
                         .filter((r) => {
-                          if (!d1Search.trim()) return true;
-                          const s = d1Search.toLowerCase();
+                          if (!historySearch.trim()) return true;
+                          const s = historySearch.toLowerCase();
                           return JSON.stringify(r).toLowerCase().includes(s);
                         })
                         .map((r, i) => (
                           <tr key={r.id || i} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
-                            {d1ExplorerTab === 'snapshots' && (
+                            {historyTab === 'snapshots' && (
                               <>
                                 <td className="p-2.5 font-bold">{r.reportDate}</td>
                                 <td className="p-2.5 capitalize">{r.reportType?.replace('_', ' ')}</td>
@@ -778,7 +701,7 @@ export default function AdminSettingsPage() {
                                 </td>
                               </>
                             )}
-                            {d1ExplorerTab === 'attendance' && (
+                            {historyTab === 'attendance' && (
                               <>
                                 <td className="p-2.5 font-bold">{r.studentName}</td>
                                 <td className="p-2.5">{r.date}</td>
@@ -792,7 +715,7 @@ export default function AdminSettingsPage() {
                                 <td className="p-2.5 font-mono">{r.seatNumber || '—'}</td>
                               </>
                             )}
-                            {d1ExplorerTab === 'fees' && (
+                            {historyTab === 'fees' && (
                               <>
                                 <td className="p-2.5 font-bold">{r.studentName}</td>
                                 <td className="p-2.5">{r.type}</td>
@@ -801,7 +724,7 @@ export default function AdminSettingsPage() {
                                 <td className="p-2.5 text-zinc-400">{r.paidAt ? new Date(r.paidAt).toLocaleDateString('en-IN') : '—'}</td>
                               </>
                             )}
-                            {d1ExplorerTab === 'messages' && (
+                            {historyTab === 'messages' && (
                               <>
                                 <td className="p-2.5 font-bold">{r.senderName} ({r.senderRole})</td>
                                 <td className="p-2.5">{r.recipientName || r.recipientRole}</td>

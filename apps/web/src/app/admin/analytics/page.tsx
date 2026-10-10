@@ -50,7 +50,7 @@ export default function AnalyticsPage() {
       setRefreshing(true);
       const [
         stats,
-        d1Students,
+        initialStudents,
         fees,
         attendanceList
       ] = await Promise.all([
@@ -65,9 +65,9 @@ export default function AnalyticsPage() {
       const allMarks = getAllExamMarks();
       setExamMarksList(allMarks);
 
-      // 1. Compute students from Supabase and D1
+      // 1. Compute students from Supabase
       const studentMap = new Map<string, any>();
-      (d1Students || []).forEach(s => studentMap.set(s.id, s));
+      (initialStudents || []).forEach(s => studentMap.set(s.id, s));
 
       try {
         const supabase = createClient();

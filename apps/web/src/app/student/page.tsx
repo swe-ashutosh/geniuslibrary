@@ -497,36 +497,9 @@ export default function StudentDashboard() {
     }
   };
 
-  // Waterfall Pagination & D1 Cold Storage Query
-  const handleLoadMoreAttendance = async () => {
-    if (attDisplayLimit < attendanceLogs.length) {
-      setAttDisplayLimit((prev) => prev + 10);
-      return;
-    }
-
-    if (!user?.id || isLoadingArchiveAtt) return;
-    setIsLoadingArchiveAtt(true);
-    try {
-      const olderRecords = await getAttendanceHistory(user.id);
-      if (olderRecords && olderRecords.length > 0) {
-        setIsArchiveAttLoaded(true);
-        setAttendanceLogs((prev) => {
-          const map = new Map<string, AttendanceRecord>();
-          prev.forEach((r) => map.set(r.id, r));
-          olderRecords.forEach((r) => {
-            if (!map.has(r.id)) {
-              map.set(r.id, { ...r, source: "d1_archive" });
-            }
-          });
-          return Array.from(map.values()).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-        });
-        setAttDisplayLimit((prev) => prev + 10);
-      }
-    } catch (err) {
-      console.warn("Failed to fetch D1 attendance history:", err);
-    } finally {
-      setIsLoadingArchiveAtt(false);
-    }
+  // Pagination for attendance records
+  const handleLoadMoreAttendance = () => {
+    setAttDisplayLimit((prev) => prev + 10);
   };
 
   // Handle Attendance Check-in / Check-out via Camera QR
@@ -1380,60 +1353,54 @@ export default function StudentDashboard() {
               </div>
             ) : (
               <div className="space-y-3">
-                {attendanceLogs.slice(0, attDisplayLimit).map((att) => {
-                  const isD1 = att.source === "d1_archive";
-                  return (
-                    <IntersectionLazyItem key={att.id} estimatedHeight={76}>
-                      <div 
-                        className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-[#FAF9F6] dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-700/80 gap-3 hover:border-[#FFC107]/50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3.5">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#0A2E5C] text-[#FFC107] font-mono font-bold text-xs border border-[#FFC107]/30">
-                            {att.seatNumber || assignedSeat || "Desk"}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-black text-[#0A2E5C] dark:text-white">{att.date}</p>
-                              <span className="text-[10px] font-bold text-[#0B5ED7] dark:text-[#FFC107] bg-[#FFC107]/15 px-2 py-0.5 rounded-md">
-                                {att.seatNumber ? `Desk #${att.seatNumber}` : assignedSeat ? `Desk #${assignedSeat}` : "Study Desk"}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                              Check-In: <strong className="text-emerald-600">{att.checkIn}</strong> • Check-Out: <strong className="text-rose-600">{att.checkOut || "In Progress"}</strong>
-                            </p>
-                          </div>
+                {attendanceLogs.slice(0, attDisplayLimit).map((att) => (
+                  <IntersectionLazyItem key={att.id} estimatedHeight={76}>
+                    <div 
+                      className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-[#FAF9F6] dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-700/80 gap-3 hover:border-[#FFC107]/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#0A2E5C] text-[#FFC107] font-mono font-bold text-xs border border-[#FFC107]/30">
+                          {att.seatNumber || assignedSeat || "Desk"}
                         </div>
-
-                        <div className="flex items-center gap-2.5 self-end sm:self-center">
-                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2.5 py-1 rounded-xl border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
-                            <QrCode className="h-3 w-3" /> QR Verified
-                          </span>
-                          <span className="text-[10px] font-black text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-xl">
-                            {att.status.toUpperCase()}
-                          </span>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-black text-[#0A2E5C] dark:text-white">{att.date}</p>
+                            <span className="text-[10px] font-bold text-[#0B5ED7] dark:text-[#FFC107] bg-[#FFC107]/15 px-2 py-0.5 rounded-md">
+                              {att.seatNumber ? `Desk #${att.seatNumber}` : assignedSeat ? `Desk #${assignedSeat}` : "Study Desk"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                            Check-In: <strong className="text-emerald-600">{att.checkIn}</strong> • Check-Out: <strong className="text-rose-600">{att.checkOut || "In Progress"}</strong>
+                          </p>
                         </div>
                       </div>
-                    </IntersectionLazyItem>
-                  );
-                })}
+
+                      <div className="flex items-center gap-2.5 self-end sm:self-center">
+                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2.5 py-1 rounded-xl border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                          <QrCode className="h-3 w-3" /> QR Verified
+                        </span>
+                        <span className="text-[10px] font-black text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1 rounded-xl">
+                          {att.status.toUpperCase()}
+                        </span>
+                      </div>
+                    </div>
+                  </IntersectionLazyItem>
+                ))}
 
                 {/* Load More History Button */}
-                <div className="flex justify-center pt-3">
-                  <button
-                    onClick={handleLoadMoreAttendance}
-                    disabled={isLoadingArchiveAtt}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#0A2E5C] text-[#FFC107] hover:bg-[#2A3447] text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer disabled:opacity-50"
-                  >
-                    <Archive className={`h-3.5 w-3.5 ${isLoadingArchiveAtt ? "animate-spin" : ""}`} />
-                    <span>
-                      {isLoadingArchiveAtt
-                        ? "Loading older records..."
-                        : attDisplayLimit < attendanceLogs.length
-                        ? `Show Next Records (${attendanceLogs.length - attDisplayLimit} remaining)`
-                        : "Load Older History"}
-                    </span>
-                  </button>
-                </div>
+                {attDisplayLimit < attendanceLogs.length && (
+                  <div className="flex justify-center pt-3">
+                    <button
+                      onClick={handleLoadMoreAttendance}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#0A2E5C] text-[#FFC107] hover:bg-[#2A3447] text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+                    >
+                      <Archive className="h-3.5 w-3.5" />
+                      <span>
+                        Show Next Records ({attendanceLogs.length - attDisplayLimit} remaining)
+                      </span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

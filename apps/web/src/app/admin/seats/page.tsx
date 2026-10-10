@@ -95,7 +95,7 @@ export default function SeatManagementPage() {
 
   const [seats, setSeats] = useState<SeatData[]>(defaultSeats100);
 
-  // Fetch live profiles and D1 students to sync real seat occupants
+  // Fetch live profiles and enrolled students to sync real seat occupants
   useEffect(() => {
     let initialSeats = defaultSeats100;
     try {
@@ -114,7 +114,7 @@ export default function SeatManagementPage() {
     const fetchLiveSeats = async () => {
       try {
         const todayStr = new Date().toISOString().split("T")[0];
-        const [d1Students, feesList, attendanceList] = await Promise.all([
+        const [enrolledStudents, feesList, attendanceList] = await Promise.all([
           getStudents().catch(() => []),
           getFees().catch(() => []),
           getAttendance({ date: todayStr }).catch(() => []),
@@ -153,8 +153,8 @@ export default function SeatManagementPage() {
         }
 
         // Also merge any assigned students from getStudents() if not already in list
-        if (Array.isArray(d1Students) && d1Students.length > 0) {
-          d1Students.forEach((std: any) => {
+        if (Array.isArray(enrolledStudents) && enrolledStudents.length > 0) {
+          enrolledStudents.forEach((std: any) => {
             const seatNo = std.seatNumber || std.seat_number;
             if (seatNo && (std.status === "active" || !std.status)) {
               const already = allAssignedStudents.some(

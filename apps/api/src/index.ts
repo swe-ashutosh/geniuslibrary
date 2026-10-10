@@ -1155,25 +1155,17 @@ app.get('/api/attendance', async (c) => {
   }
 });
 
-// Cold Storage / History: Attendance Archive Query (D1)
+// Attendance History Query (Supabase Sole Primary Database)
 app.get('/api/attendance/history', async (c) => {
   try {
     const studentId = c.req.query('studentId');
-    const database = db(c);
-    let records = [];
+    const supabase = getSupabase(c.env);
+    let query = supabase.from('attendance').select('*').order('date', { ascending: false }).limit(1000);
     if (studentId) {
-      records = await database.select().from(attendanceHistory)
-        .where(eq(attendanceHistory.studentId, studentId))
-        .orderBy(desc(attendanceHistory.date))
-        .limit(500)
-        .all();
-    } else {
-      records = await database.select().from(attendanceHistory)
-        .orderBy(desc(attendanceHistory.date))
-        .limit(1000)
-        .all();
+      query = query.eq('student_id', studentId);
     }
-    return c.json({ success: true, history: records });
+    const { data } = await query;
+    return c.json({ success: true, history: data || [] });
   } catch (err: any) {
     return c.json({ success: true, history: [] });
   }
@@ -2072,25 +2064,17 @@ app.get('/api/fees', async (c) => {
   }
 });
 
-// Cold Storage / History: Fees Archive Query (D1)
+// Fees History Query (Supabase Sole Primary Database)
 app.get('/api/fees/history', async (c) => {
   try {
     const studentId = c.req.query('studentId');
-    const database = db(c);
-    let records = [];
+    const supabase = getSupabase(c.env);
+    let query = supabase.from('fees').select('*').order('created_at', { ascending: false }).limit(1000);
     if (studentId) {
-      records = await database.select().from(feesHistory)
-        .where(eq(feesHistory.studentId, studentId))
-        .orderBy(desc(feesHistory.archivedAt))
-        .limit(500)
-        .all();
-    } else {
-      records = await database.select().from(feesHistory)
-        .orderBy(desc(feesHistory.archivedAt))
-        .limit(1000)
-        .all();
+      query = query.eq('student_id', studentId);
     }
-    return c.json({ success: true, history: records });
+    const { data } = await query;
+    return c.json({ success: true, history: data || [] });
   } catch (err: any) {
     return c.json({ success: true, history: [] });
   }
@@ -2655,28 +2639,17 @@ app.get('/api/messages', async (c) => {
   }
 });
 
-// Cold Storage / History: Messages Archive Query (D1)
+// Messages History Query (Supabase Sole Primary Database)
 app.get('/api/messages/history', async (c) => {
   try {
     const studentId = c.req.query('studentId');
-    const database = db(c);
-    let records = [];
+    const supabase = getSupabase(c.env);
+    let query = supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(500);
     if (studentId) {
-      records = await database
-        .select()
-        .from(messagesHistory)
-        .where(eq(messagesHistory.studentId, studentId))
-        .orderBy(messagesHistory.archivedAt)
-        .all();
-    } else {
-      records = await database
-        .select()
-        .from(messagesHistory)
-        .orderBy(desc(messagesHistory.archivedAt))
-        .limit(500)
-        .all();
+      query = query.or(`student_id.eq.${studentId},student_email.eq.${studentId}`);
     }
-    return c.json({ success: true, history: records });
+    const { data } = await query;
+    return c.json({ success: true, history: data || [] });
   } catch (err: any) {
     return c.json({ success: false, error: err.message, history: [] });
   }
@@ -3556,40 +3529,7 @@ export async function runDailyBackupJob(env: Bindings): Promise<{ success: boole
       console.warn('[Daily Backup] Seat reset notice:', seatResetErr);
     }
 
-    // 3. Rolling Auto-Prune & Cold Backup into Cloudflare D1 (Preserving 500MB Free Quota)
-    // Archive records older than 365 days (1 year) automatically
-    try {
-      const oneYearAgo = new Date();
-      oneYearAgo.setDate(oneYearAgo.getDate() - 365);
-      const oneYearCutoff = oneYearAgo.toISOString();
-
-      const { data: oldAttendance } = await supabase
-        .from('attendance')
-        .select('*')
-        .lt('created_at', oneYearCutoff)
-        .limit(500);
-
-      if (oldAttendance && oldAttendance.length > 0) {
-        for (const r of oldAttendance) {
-          await database.insert(attendanceHistory).values({
-            id: r.id,
-            studentId: r.student_id,
-            studentName: r.student_name,
-            seatNumber: r.seat_number,
-            shiftName: r.shift_name,
-            checkIn: r.check_in,
-            checkOut: r.check_out,
-            status: r.status,
-            photoUrl: r.photo_url,
-            date: r.date,
-          }).onConflictDoNothing();
-        }
-        await supabase.from('attendance').delete().lt('created_at', oneYearCutoff);
-        console.log(`[Daily Backup] Safely archived ${oldAttendance.length} records (>1 year old) to D1.`);
-      }
-    } catch (archiveErr) {
-      console.warn('[Daily Backup] Auto-prune notice:', archiveErr);
-    }
+    // Permanent retention: Attendance records remain permanently in Supabase without auto-deletion.
 
     const reportData = await buildDailyReportData(env, todayDateStr);
 
@@ -3685,76 +3625,8 @@ export async function runMonthlyArchivalJob(env: Bindings): Promise<{ success: b
       console.warn('[Monthly Backup] Student sync note:', stdErr);
     }
 
-    // 1. Archiving Attendance older than 30 days from Supabase
-    try {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const dateLimit = thirtyDaysAgo.toISOString();
-
-      const { data: oldAttendance } = await supabase
-        .from('attendance')
-        .select('*')
-        .lt('created_at', dateLimit);
-
-      if (oldAttendance && oldAttendance.length > 0) {
-        console.log(`Archiving ${oldAttendance.length} attendance rows to D1...`);
-        for (const record of oldAttendance) {
-          await database.insert(attendanceHistory).values({
-            id: record.id,
-            studentId: record.student_id,
-            studentName: record.student_name,
-            seatNumber: record.seat_number,
-            shiftId: record.shift_id,
-            shiftName: record.shift_name,
-            checkIn: record.check_in,
-            checkOut: record.check_out,
-            status: record.status,
-            photoUrl: record.photo_url,
-            date: record.date,
-          }).onConflictDoNothing();
-
-          await supabase.from('attendance').delete().eq('id', record.id);
-          totalArchived++;
-        }
-      }
-    } catch (attErr) {
-      console.warn('[Monthly Backup] Attendance archival note:', attErr);
-    }
-
-    // 2. Archiving Fees older than 60 days
-    try {
-      const sixtyDaysAgo = new Date();
-      sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
-      const feeLimit = sixtyDaysAgo.toISOString();
-
-      const { data: oldFees } = await supabase
-        .from('fees')
-        .select('*')
-        .lt('created_at', feeLimit);
-
-      if (oldFees && oldFees.length > 0) {
-        console.log(`Archiving ${oldFees.length} fee receipts to D1...`);
-        for (const record of oldFees) {
-          await database.insert(feesHistory).values({
-            id: record.id,
-            studentId: record.student_id,
-            studentName: record.student_name,
-            type: record.type,
-            amount: record.amount,
-            paid: record.paid,
-            paidAt: record.paid_at,
-            dueDate: record.due_date,
-            description: record.description,
-            receiptNo: record.receipt_no,
-          }).onConflictDoNothing();
-
-          await supabase.from('fees').delete().eq('id', record.id);
-          totalArchived++;
-        }
-      }
-    } catch (feeErr) {
-      console.warn('[Monthly Backup] Fees archival note:', feeErr);
-    }
+    // Permanent storage: Attendance and fee records remain permanently in Supabase without deletion.
+    console.log("[Monthly Archival Job] Permanent retention active. Zero deletion from Supabase.");
 
     // 3. Archiving Messages older than 30 days into `messagesHistory`
     try {
@@ -3902,119 +3774,14 @@ const handleStorageStatus = async (c: any) => {
 app.get('/api/admin/storage-status', handleStorageStatus);
 app.get('/api/admin/database-usage', handleStorageStatus);
 
-// Safely archives old records to Cloudflare D1 first, then deletes from Supabase to free up MBs
+// Retention auto-pruning is disabled per library mandate:
+// 500 MB capacity in Supabase is ample; all records remain permanently in Supabase.
 const handlePruneRecords = async (c: any) => {
-  try {
-    const body = await c.req.json();
-    const target = body.target; // 'attendance' | 'messages' | 'fees'
-    const days = Number(body.daysOlderThan) || 30;
-    const database = db(c);
-    const supabase = getSupabase(c.env);
-
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - days);
-    const cutoffDateStr = cutoffDate.toISOString();
-    let countPruned = 0;
-
-    if (target === 'attendance') {
-      try {
-        const { data: oldRecords } = await supabase
-          .from('attendance')
-          .select('*')
-          .lt('created_at', cutoffDateStr);
-
-        if (oldRecords && oldRecords.length > 0) {
-          for (const r of oldRecords) {
-            await database.insert(attendanceHistory).values({
-              id: r.id,
-              studentId: r.student_id,
-              studentName: r.student_name,
-              seatNumber: r.seat_number,
-              shiftId: r.shift_id,
-              shiftName: r.shift_name,
-              checkIn: r.check_in,
-              checkOut: r.check_out,
-              status: r.status,
-              photoUrl: r.photo_url,
-              date: r.date,
-            }).onConflictDoNothing();
-          }
-          const { error: delErr } = await supabase.from('attendance').delete().lt('created_at', cutoffDateStr);
-          if (!delErr) countPruned = oldRecords.length;
-        }
-      } catch (attErr: any) {
-        return c.json({ success: false, error: attErr.message }, 500);
-      }
-    } else if (target === 'messages') {
-      try {
-        const oldMessages = await database
-          .select()
-          .from(messages)
-          .where(lt(messages.createdAt, cutoffDateStr))
-          .all();
-
-        if (oldMessages && oldMessages.length > 0) {
-          for (const m of oldMessages) {
-            await database.insert(messagesHistory).values({
-              id: m.id,
-              studentId: m.studentId,
-              studentName: m.studentName,
-              studentEmail: m.studentEmail,
-              senderRole: m.senderRole,
-              senderName: m.senderName,
-              message: m.message,
-              recipientRole: m.recipientRole,
-              recipientName: m.recipientName,
-              recipientId: m.recipientId,
-              isRead: m.isRead,
-              originalCreatedAt: m.createdAt,
-            }).onConflictDoNothing();
-            await database.delete(messages).where(eq(messages.id, m.id));
-            countPruned++;
-          }
-        }
-      } catch (msgErr: any) {
-        return c.json({ success: false, error: msgErr.message }, 500);
-      }
-    } else if (target === 'fees') {
-      try {
-        const { data: oldFees } = await supabase
-          .from('fees')
-          .select('*')
-          .lt('created_at', cutoffDateStr);
-
-        if (oldFees && oldFees.length > 0) {
-          for (const f of oldFees) {
-            await database.insert(feesHistory).values({
-              id: f.id,
-              studentId: f.student_id,
-              studentName: f.student_name,
-              type: f.type,
-              amount: f.amount,
-              paid: f.paid,
-              paidAt: f.paid_at,
-              dueDate: f.due_date,
-              description: f.description,
-              receiptNo: f.receipt_no,
-            }).onConflictDoNothing();
-          }
-          const { error: delErr } = await supabase.from('fees').delete().lt('created_at', cutoffDateStr);
-          if (!delErr) countPruned = oldFees.length;
-        }
-      } catch (feeErr: any) {
-        return c.json({ success: false, error: feeErr.message }, 500);
-      }
-    }
-
-    return c.json({
-      success: true,
-      countPruned,
-      target,
-      message: `Safely archived to Cloudflare D1 permanent storage and pruned ${countPruned} ${target} records from Supabase. Zero data loss.`,
-    });
-  } catch (err: any) {
-    return c.json({ success: false, error: err.message }, 500);
-  }
+  return c.json({
+    success: true,
+    countPruned: 0,
+    message: 'Auto-pruning is disabled. All attendance, student, and fee records remain permanently stored in Supabase.',
+  });
 };
 
 app.post('/api/admin/prune-supabase', handlePruneRecords);

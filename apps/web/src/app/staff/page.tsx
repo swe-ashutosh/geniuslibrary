@@ -270,7 +270,7 @@ export default function StaffPortal() {
   // Load Operational Data
   const loadData = async (activeStaffId?: string) => {
     try {
-      const [d1Students, attList, allStaff, feeList, msgList] = await Promise.all([
+      const [studentsData, attList, allStaff, feeList, msgList] = await Promise.all([
         getStudents(),
         getAttendance(),
         getStaffMembers(),
@@ -287,7 +287,7 @@ export default function StaffPortal() {
         if (synced?.marks?.length) allStudentMarks = synced.marks;
       } catch {}
 
-      setRawStudents(d1Students || []);
+      setRawStudents(studentsData || []);
       setStaffList(allStaff || []);
       setExams(libraryExams);
       setExamMarks(allStudentMarks);
@@ -320,7 +320,7 @@ export default function StaffPortal() {
         }
       });
 
-      const mapped: StaffStudent[] = (d1Students || []).map((s, idx) => {
+      const mapped: StaffStudent[] = (studentsData || []).map((s, idx) => {
         const rawSeat = s.seatNumber || (s as any).seat_number || null;
         const deskNum = parseDeskNum(rawSeat);
         const isCheckedIn = activeStudentCheckInMap.has(s.id) || (s.fullName && activeStudentCheckInMap.has(s.fullName.toLowerCase()));

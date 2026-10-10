@@ -1,8 +1,7 @@
 /**
  * [WEB • LIB • CORE] Unified API Client (Cloudflare Worker + Supabase)
- *
- * Unified API Client for Cloudflare D1 + Hono API
- * Handles Shifts, Seats, Attendance, Books, Fees, Announcements & Dashboard Stats
+ * Unified API Client for Supabase + Library System
+ * Single Source of Truth: Supabase PostgreSQL (500MB quota; zero automated eviction)
  */
 
 import { BRAND_CONFIG, isMasterAdminEmail } from './config';
@@ -48,7 +47,7 @@ export interface AttendanceRecord {
   status: string;
   photoUrl?: string | null;
   date: string;
-  source?: 'supabase' | 'd1_archive';
+  source?: 'supabase';
   verificationMethod?: 'nfc' | 'qr' | 'admin' | 'stamp';
 }
 
@@ -420,10 +419,10 @@ export async function vacateSeat(seatNumber: string) {
   }
 }
 
-// Attendance - Tier 1: Supabase Primary Store, Tier 2: D1 Active Sync
+// Attendance - Single Source of Truth: Supabase Primary Store (Permanent Retention)
 // ── 4b. ATTENDANCE & DESK DISPUTES ──────────────────────────
 export async function getAttendance(params?: string | { studentId?: string; date?: string; startDate?: string; endDate?: string }): Promise<AttendanceRecord[]> {
-  // 1. Try Supabase Attendance Table First (Primary Live Database)
+  // 1. Direct Supabase Query (Sole Database for all attendance)
   try {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
@@ -439,12 +438,7 @@ export async function getAttendance(params?: string | { studentId?: string; date
     }
 
     const { data: supaRows, error } = await query;
-    if (!error && supaRows && supaRows.length > 0) {
-      // Trigger background 3-day retention purge for photos
-      import('./supabase/storage').then(({ purgeOldAttendancePhotos }) => {
-        purgeOldAttendancePhotos(3).catch(() => {});
-      }).catch(() => {});
-
+    if (!error && Array.isArray(supaRows)) {
       const supaRecords: AttendanceRecord[] = supaRows.map((r: any) => ({
         id: r.id,
         studentId: r.student_id,
@@ -462,34 +456,11 @@ export async function getAttendance(params?: string | { studentId?: string; date
       setLocalData(STORAGE_KEYS.ATTENDANCE, supaRecords);
       return supaRecords;
     }
-  } catch {
-    // If Supabase table query errors or is empty, continue to D1 live endpoint
+  } catch (err) {
+    console.warn('Supabase getAttendance error:', err);
   }
 
-  // 2. Query Live API / D1 Active records
-  try {
-    let endpoint = '/api/attendance';
-    if (typeof params === 'string') {
-      endpoint = `/api/attendance?studentId=${encodeURIComponent(params)}`;
-    } else if (params) {
-      const q = new URLSearchParams();
-      if (params.studentId) q.append('studentId', params.studentId);
-      if (params.date) q.append('date', params.date);
-      if (params.startDate) q.append('startDate', params.startDate);
-      if (params.endDate) q.append('endDate', params.endDate);
-      const qs = q.toString();
-      if (qs) endpoint = `/api/attendance?${qs}`;
-    }
-    const data = await fetchApi<{ success: boolean; attendance: AttendanceRecord[] }>(endpoint);
-    if (data?.attendance) {
-      const mapped = data.attendance.map(a => ({ ...a, source: 'supabase' as const }));
-      setLocalData(STORAGE_KEYS.ATTENDANCE, mapped);
-      return mapped;
-    }
-  } catch {
-    // Fallback to cached attendance
-  }
-
+  // Fallback to local cache only if network/Supabase call fails
   const localRecords = getLocalData<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, []);
   if (typeof params === 'string') {
     return localRecords.filter(r => r.studentId === params);
@@ -499,22 +470,14 @@ export async function getAttendance(params?: string | { studentId?: string; date
   return localRecords;
 }
 
-// D1 Cold Storage Archive: Fetch historical attendance records (older records stored in D1)
+// All historical attendance records are permanently stored and queried from Supabase
 export async function getAttendanceHistory(studentId?: string): Promise<AttendanceRecord[]> {
-  try {
-    const url = studentId ? `/api/attendance/history?studentId=${encodeURIComponent(studentId)}` : '/api/attendance/history';
-    const data = await fetchApi<{ success: boolean; history: AttendanceRecord[] }>(url, { timeoutMs: 4000 });
-    const records = data?.history || [];
-    return records.map(r => ({ ...r, source: 'd1_archive' as const }));
-  } catch {
-    return [];
-  }
+  return getAttendance(studentId);
 }
 
 /**
- * Waterfall Attendance Query:
- * Tier 1: Supabase (Primary Live Database) - Recent and current records
- * Tier 2: Cloudflare D1 Archive Vault - When scrolling down / next and next after Supabase records run out!
+ * Attendance Query with Pagination from Supabase (Sole Database):
+ * All records remain permanently in Supabase without automated eviction.
  */
 export async function getAttendanceWaterfall(options: {
   studentId: string;
@@ -527,50 +490,21 @@ export async function getAttendanceWaterfall(options: {
   hasMore: boolean;
   isArchiveLoaded: boolean;
 }> {
-  const { studentId, page = 1, pageSize = 15, loadArchive = false } = options;
+  const { studentId, page = 1, pageSize = 15 } = options;
 
-  // 1. Fetch live records from Supabase primary store
-  const liveRecords = await getAttendance(studentId);
-  
-  // 2. If loadArchive is true or requested page extends beyond live records:
-  let allCombined = [...liveRecords];
-  let isArchiveLoaded = false;
-
-  const neededCount = page * pageSize;
-  if (loadArchive || neededCount > liveRecords.length) {
-    try {
-      const archiveRecords = await getAttendanceHistory(studentId);
-      if (archiveRecords && archiveRecords.length > 0) {
-        isArchiveLoaded = true;
-        // Merge & deduplicate by date + checkIn or ID
-        const seen = new Set(liveRecords.map(r => `${r.date}_${r.checkIn || ''}_${r.id}`));
-        for (const arch of archiveRecords) {
-          const key = `${arch.date}_${arch.checkIn || ''}_${arch.id}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            allCombined.push({
-              ...arch,
-              source: 'd1_archive',
-            });
-          }
-        }
-      }
-    } catch {}
-  }
-
-  // Sort descending by date
-  allCombined.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  // Fetch all records for student from Supabase
+  const allRecords = await getAttendance(studentId);
 
   const startIndex = 0;
   const endIndex = page * pageSize;
-  const pagedRecords = allCombined.slice(startIndex, endIndex);
-  const hasMore = endIndex < allCombined.length || (!isArchiveLoaded && liveRecords.length > 0);
+  const pagedRecords = allRecords.slice(startIndex, endIndex);
+  const hasMore = endIndex < allRecords.length;
 
   return {
     records: pagedRecords,
-    totalAvailable: allCombined.length,
+    totalAvailable: allRecords.length,
     hasMore,
-    isArchiveLoaded,
+    isArchiveLoaded: false,
   };
 }
 
@@ -1162,7 +1096,7 @@ export async function returnBook(issueId: string): Promise<{ success: boolean; m
   }
 }
 
-// Fees (Supabase Primary Database)
+// Fees (Supabase Primary Database - Single Source of Truth)
 // ── 4d. FEES ─────────────────────────────────────────────────
 export async function getFees(studentId?: string): Promise<FeeRecord[]> {
   try {
@@ -1173,7 +1107,7 @@ export async function getFees(studentId?: string): Promise<FeeRecord[]> {
       query = query.eq('student_id', studentId);
     }
     const { data: sbFees, error } = await query;
-    if (!error && Array.isArray(sbFees) && sbFees.length > 0) {
+    if (!error && Array.isArray(sbFees)) {
       const mapped = sbFees.map((f: any) => ({
         id: f.id,
         studentId: f.student_id,
@@ -1191,33 +1125,17 @@ export async function getFees(studentId?: string): Promise<FeeRecord[]> {
       return mapped;
     }
   } catch (err) {
-    console.warn('Supabase getFees error, falling back:', err);
+    console.warn('Supabase getFees error:', err);
   }
 
-  try {
-    const endpoint = studentId ? `/api/fees?studentId=${encodeURIComponent(studentId)}` : '/api/fees';
-    const data = await fetchApi<{ success: boolean; fees: FeeRecord[] }>(endpoint);
-    if (data?.fees) {
-      setLocalData(STORAGE_KEYS.FEES, data.fees);
-      return data.fees;
-    }
-  } catch {
-    // Fallback
-  }
   const cached = getLocalData<FeeRecord[]>(STORAGE_KEYS.FEES, []);
   if (studentId) return cached.filter(f => f.studentId === studentId);
   return cached;
 }
 
-// D1 Cold Storage Archive: Fetch historical fees / receipts (older than 60 days)
+// All historical fees are stored and queried directly from Supabase
 export async function getFeesHistory(studentId?: string): Promise<FeeRecord[]> {
-  try {
-    const url = studentId ? `/api/fees/history?studentId=${encodeURIComponent(studentId)}` : '/api/fees/history';
-    const data = await fetchApi<{ success: boolean; history: FeeRecord[] }>(url, { timeoutMs: 3500 });
-    return data?.history || [];
-  } catch {
-    return [];
-  }
+  return getFees(studentId);
 }
 
 /**
@@ -2494,15 +2412,9 @@ export async function getMessages(studentId?: string): Promise<MessageRecord[]> 
   return allLocal;
 }
 
-// D1 Cold Storage Archive: Fetch historical messages / chat archive (older than 30-60 days)
+// All historical messages are stored and queried directly from Supabase
 export async function getMessagesHistory(studentId?: string): Promise<MessageRecord[]> {
-  try {
-    const url = studentId ? `/api/messages/history?studentId=${encodeURIComponent(studentId)}` : '/api/messages/history';
-    const data = await fetchApi<{ success: boolean; history: MessageRecord[] }>(url, { timeoutMs: 3500 });
-    return data?.history || [];
-  } catch {
-    return [];
-  }
+  return getMessages(studentId);
 }
 
 export async function sendMessage(params: {
@@ -3140,7 +3052,7 @@ export interface StorageStatus {
     percentageUsed: number;
     healthStatus: 'optimal' | 'moderate' | 'warning';
   };
-  d1Backup: {
+  d1Backup?: {
     totalBackedUpStudents: number;
     totalAttendanceHistory: number;
     totalFeesHistory: number;
@@ -3156,57 +3068,62 @@ export async function getStorageStatus(): Promise<StorageStatus> {
     if (data.supabase) {
       return {
         supabase: data.supabase,
-        d1Backup: data.d1Backup,
       };
     }
     throw new Error('Invalid storage response');
   } catch {
-    // Client-side fallback computation
+    // Client-side direct Supabase query
     let supaStudents = 4;
+    let supaAttendance = 0;
+    let supaFees = 0;
     try {
       const { createClient } = await import('@/lib/supabase/client');
       const supabase = createClient();
-      const { data: profs } = await supabase.from('profiles').select('id, email, role');
-      if (profs) supaStudents = profs.filter((p: any) => !isMasterAdminEmail(p.email) && p.role !== 'admin').length;
+      const [pRes, aRes, fRes] = await Promise.all([
+        supabase.from('profiles').select('id, email, role'),
+        supabase.from('attendance').select('id', { count: 'exact', head: true }),
+        supabase.from('fees').select('id', { count: 'exact', head: true }),
+      ]);
+      if (pRes.data) supaStudents = pRes.data.filter((p: any) => !isMasterAdminEmail(p.email) && p.role !== 'admin').length;
+      if (aRes.count !== null && aRes.count !== undefined) supaAttendance = aRes.count;
+      if (fRes.count !== null && fRes.count !== undefined) supaFees = fRes.count;
     } catch {}
+
+    const estimatedBytes = (supaStudents * 2500) + (supaAttendance * 400) + (supaFees * 500) + 50000;
+    const estimatedMbUsed = Number((estimatedBytes / (1024 * 1024)).toFixed(2));
+    const quotaMb = 500;
+    const percentageUsed = Number(((estimatedMbUsed / quotaMb) * 100).toFixed(2));
 
     return {
       supabase: {
         totalStudents: supaStudents,
-        totalAttendance: 0,
-        totalFees: 4,
+        totalAttendance: supaAttendance,
+        totalFees: supaFees,
         totalMessages: 0,
-        estimatedMbUsed: 0.06,
-        quotaMb: 500,
-        percentageUsed: 0.01,
+        estimatedMbUsed,
+        quotaMb,
+        percentageUsed,
         healthStatus: 'optimal',
-      },
-      d1Backup: {
-        totalBackedUpStudents: supaStudents,
-        totalAttendanceHistory: 0,
-        totalFeesHistory: 4,
-        totalMessagesHistory: 0,
-        lastBackupDate: 'Active (Daily & Real-Time Sync)',
-        status: 'synced',
       },
     };
   }
 }
 
 export async function triggerManualMonthlyBackup(): Promise<{ success: boolean; message?: string; error?: string }> {
-  return await fetchApi<{ success: boolean; message?: string; error?: string }>('/api/backup/trigger-monthly', {
-    method: 'POST',
-  });
+  return { success: true, message: 'All data is continuously and safely stored in Supabase.' };
 }
 
-export async function pruneSupabaseRecords(params: {
+export async function pruneSupabaseRecords(_params: {
   target: 'attendance' | 'messages' | 'fees';
   daysOlderThan: number;
 }): Promise<{ success: boolean; countPruned: number; message: string }> {
-  return await fetchApi<{ success: boolean; countPruned: number; message: string }>('/api/admin/prune-supabase', {
-    method: 'POST',
-    body: JSON.stringify(params),
-  });
+  // Pruning and auto-deletion disabled per user mandate:
+  // Attendance and logs are preserved permanently in Supabase.
+  return {
+    success: true,
+    countPruned: 0,
+    message: 'Auto-pruning is disabled. All records remain permanently in Supabase.',
+  };
 }
 
 

@@ -434,7 +434,7 @@ export function AdminStudentQrScannerModal({
           });
         }
 
-        // Merge D1 students
+        // Merge enrolled students
         if (list && list.length > 0) {
           list.forEach((s) => {
             const studentFees = (feesList || []).filter((f: any) => f.studentId === s.id || f.studentName?.toLowerCase() === s.fullName?.toLowerCase());

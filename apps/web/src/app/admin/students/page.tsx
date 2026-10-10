@@ -736,9 +736,9 @@ function StudentsDirectoryContent() {
     if (selectedStudents.length === 0) return;
     if (!confirm(`Are you sure you want to delete ${selectedStudents.length} selected student record(s)?`)) return;
     try {
-      // 1. Delete from D1
+      // 1. Delete student records
       await Promise.all(selectedStudents.map((id) => deleteStudent(id)));
-      // 2. Delete from Supabase
+      // 2. Delete from Supabase profiles
       try {
         const supabase = createClient();
         await supabase.from("profiles").delete().in("id", selectedStudents);
@@ -761,7 +761,7 @@ function StudentsDirectoryContent() {
       const studentObj = students.find((s) => s.id === studentId);
       const studentPlan = studentObj?.membership_plan || "General";
 
-      // 1. Update status and seat in D1
+      // 1. Update status and seat
       await updateStudentStatus(studentId, "active", seatNumber || null, studentPlan);
 
       // 2. If seat assigned, record seat allocation
@@ -863,7 +863,7 @@ function StudentsDirectoryContent() {
     const pendingIds = pendingList.map(s => s.id);
     setActionLoadingId("bulk_pending");
     try {
-      // 1. Update D1
+      // 1. Update student records
       await approveAllStudents();
 
       // 2. Update Supabase
@@ -928,7 +928,7 @@ function StudentsDirectoryContent() {
     setAlertMsg(null);
     const newStatus = currentStatus === "suspended" ? "active" : "suspended";
     try {
-      // 1. Update D1
+      // 1. Update status
       await updateStudentStatus(studentId, newStatus as any);
 
       // 2. Update Supabase
@@ -1180,7 +1180,7 @@ function StudentsDirectoryContent() {
     try {
       const seatNum = editStudentForm.membership_plan === "Reserved Seat" ? (editStudentForm.seat_number?.trim() || null) : null;
 
-      // 1. Universal update across Supabase, D1 Worker, seat cache and broadcast event
+      // 1. Universal update across Supabase profiles, seat cache and broadcast event
       await updateStudentComplete({
         id: editStudentForm.id,
         student_code: editStudentForm.student_code,
@@ -1261,11 +1261,11 @@ function StudentsDirectoryContent() {
     setActionLoadingId(studentId);
     setAlertMsg(null);
     try {
-      // 1. Delete from Cloudflare D1 database
+      // 1. Delete student record
       try {
         await deleteStudent(studentId);
-      } catch (d1Err) {
-        console.warn("D1 delete student notice:", d1Err);
+      } catch (delErr) {
+        console.warn("Delete student notice:", delErr);
       }
 
       // 2. Delete from Supabase profiles table

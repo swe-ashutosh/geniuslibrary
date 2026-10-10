@@ -367,63 +367,9 @@ export async function uploadAttendancePhoto(
 // SECTION 3 · RETENTION
 // Auto-prunes attendance photos older than the retention window.
 // ══════════════════════════════════════════════════════════════
-export async function purgeOldAttendancePhotos(retentionDays = 3): Promise<void> {
-  if (typeof window === 'undefined') return;
-  try {
-    const supabase = createClient();
-    const cutoffDateObj = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
-    const cutoffDate = cutoffDateObj.toISOString().split('T')[0];
-
-    // Find attendance records older than 3 days that still have photos
-    const { data: oldRecords } = await supabase
-      .from('attendance')
-      .select('id, photo_url')
-      .lt('date', cutoffDate)
-      .not('photo_url', 'is', null)
-      .limit(50);
-
-    if (!oldRecords || oldRecords.length === 0) return;
-
-    const idsToClear = oldRecords.map((r) => r.id);
-    const avatarsFilesToDelete: string[] = [];
-    const attBucketFilesToDelete: string[] = [];
-
-    oldRecords.forEach((r) => {
-      if (r.photo_url) {
-        if (r.photo_url.includes('attendance-photos/')) {
-          const match = r.photo_url.match(/attendance-photos\/([^?#]+)/);
-          if (match && match[1]) attBucketFilesToDelete.push(match[1]);
-        } else if (r.photo_url.includes('attendance-logs/')) {
-          const match = r.photo_url.match(/attendance-logs\/[^?#]+/);
-          if (match) avatarsFilesToDelete.push(match[0]);
-        }
-      }
-    });
-
-    // 1. Remove from storage if hosted in bucket
-    if (attBucketFilesToDelete.length > 0) {
-      try {
-        await supabase.storage.from('attendance-photos').remove(attBucketFilesToDelete);
-      } catch {}
-    }
-    if (avatarsFilesToDelete.length > 0) {
-      try {
-        await supabase.storage.from('avatars').remove(avatarsFilesToDelete);
-      } catch (storageErr) {
-        console.warn('Storage purge notice:', storageErr);
-      }
-    }
-
-    // 2. Clear photo_url in database to free space
-    if (idsToClear.length > 0) {
-      await supabase
-        .from('attendance')
-        .update({ photo_url: null, updated_at: new Date().toISOString() })
-        .in('id', idsToClear);
-    }
-  } catch (err) {
-    console.warn('Auto-purge attendance photos notice:', err);
-  }
+export async function purgeOldAttendancePhotos(_retentionDays?: number): Promise<void> {
+  // Permanent retention enabled: Never delete attendance records or photos from Supabase.
+  return;
 }
 
 

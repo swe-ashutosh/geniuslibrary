@@ -244,11 +244,11 @@ export default function StudentMessagesPage() {
 
       // Load Announcements & Notifications
       try {
-        const [d1Announcements, studentNotifs] = await Promise.all([
+        const [announcementsList, studentNotifs] = await Promise.all([
           getAnnouncements().catch(() => []),
           currentUid ? getNotifications({ role: "student", recipientId: currentUid }).catch(() => []) : Promise.resolve([]),
         ]);
-        if (d1Announcements) setAnnouncements(d1Announcements);
+        if (announcementsList) setAnnouncements(announcementsList);
         if (studentNotifs) setPersonalNotifs(studentNotifs);
       } catch (e) {
         // quiet
