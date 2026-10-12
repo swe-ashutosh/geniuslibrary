@@ -983,43 +983,25 @@ function StudentsDirectoryContent() {
     }
   };
 
-  // Suspend / Unsuspend student account
-  const handleToggleSuspend = async (studentId: string, currentStatus: string, studentName: string) => {
-    setActionLoadingId(studentId);
-    setAlertMsg(null);
-    const newStatus = currentStatus === "suspended" ? "active" : "suspended";
-    try {
-      // 1. Update status
-      await updateStudentStatus(studentId, newStatus as any);
-
-      // 2. Update Supabase
-      try {
-        const supabase = createClient();
-        await supabase.from("profiles").update({
-          status: newStatus,
-          updated_at: new Date().toISOString(),
-        }).eq("id", studentId);
-      } catch (err) {
-        console.warn("Supabase toggle suspend notice:", err);
-      }
-
-      setStudents((prev) =>
-        prev.map((s) => (s.id === studentId ? { ...s, status: newStatus as any } : s))
-      );
-      if (selectedStudentForView && selectedStudentForView.id === studentId) {
-        setSelectedStudentForView((prev) => prev ? { ...prev, status: newStatus as any } : null);
-      }
-      setAlertMsg({
-        type: "success",
-        text: newStatus === "suspended"
-          ? `✓ Student "${studentName}" has been suspended.`
-          : `✓ Student "${studentName}" has been reactivated and is now Active.`
-      });
-    } catch (e: any) {
-      setAlertMsg({ type: "error", text: `Failed to update status: ${e.message}` });
-    } finally {
-      setActionLoadingId(null);
+  // Suspend / Unsuspend student account (Unifies Suspend with Pause & Continue Service)
+  const handleToggleSuspend = async (studentOrId: StudentProfile | string, currentStatus?: string, studentName?: string) => {
+    let student: StudentProfile | undefined;
+    if (typeof studentOrId === "object") {
+      student = studentOrId;
+    } else {
+      student = students.find((s) => s.id === studentOrId);
     }
+
+    if (!student) return;
+
+    if (student.status === "suspended" || student.is_service_stopped) {
+      // Puts student on track to resume with prompt for Continue Date (saving inactive month fees)
+      handleOpenResumeServiceModal(student);
+      return;
+    }
+
+    // Otherwise, suspend / pause service
+    await handlePauseService(student);
   };
 
   // Helper formatters
@@ -2651,39 +2633,26 @@ function StudentsDirectoryContent() {
                               <Edit3 className="h-3.5 w-3.5" />
                             </button>
 
-                            {/* Pause / Resume Service Action */}
-                            {std.is_service_stopped ? (
-                              <button
-                                onClick={() => handleOpenResumeServiceModal(std)}
-                                disabled={actionLoadingId === std.id}
-                                className="flex h-8 items-center gap-1 px-2.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 transition cursor-pointer text-[10px] font-black shadow-xs"
-                                title="Resume Library Service (Set Continue Date)"
-                              >
-                                <Play className="h-3 w-3 fill-current" />
-                                <span>Continue</span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => handlePauseService(std)}
-                                disabled={actionLoadingId === std.id}
-                                className="flex h-8 w-8 items-center justify-center rounded-xl border border-amber-200 bg-amber-50/70 text-amber-700 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300 transition cursor-pointer"
-                                title="Pause / Stop Service (Hold Membership)"
-                              >
-                                <Pause className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-
-                            {/* Suspend / Unsuspend Action */}
+                            {/* Suspend / Resume (Pause Service) Action */}
                             <button
-                              onClick={() => handleToggleSuspend(std.id, std.status, std.full_name)}
+                              onClick={() => handleToggleSuspend(std)}
                               disabled={actionLoadingId === std.id}
-                              className={`flex h-8 w-8 items-center justify-center rounded-xl border transition cursor-pointer disabled:opacity-50 ${std.status === "suspended"
-                                ? "border-emerald-200 bg-emerald-50/70 text-emerald-600 hover:bg-emerald-100 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-400"
-                                : "border-amber-200 bg-amber-50/70 text-amber-700 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-400"
-                                }`}
-                              title={std.status === "suspended" ? "Reactivate / Unsuspend Student" : "Suspend Student Access"}
+                              className={`flex h-8 w-8 items-center justify-center rounded-xl border transition cursor-pointer disabled:opacity-50 ${
+                                std.status === "suspended" || std.is_service_stopped
+                                  ? "border-emerald-200 bg-emerald-50/70 text-emerald-600 hover:bg-emerald-100 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-400"
+                                  : "border-amber-200 bg-amber-50/70 text-amber-700 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-400"
+                              }`}
+                              title={
+                                std.status === "suspended" || std.is_service_stopped
+                                  ? "Reactivate / Resume Service (Set Continue Date)"
+                                  : "Suspend / Pause Service (Put On Hold)"
+                              }
                             >
-                              {std.status === "suspended" ? <UserCheck className="h-3.5 w-3.5" /> : <Ban className="h-3.5 w-3.5" />}
+                              {std.status === "suspended" || std.is_service_stopped ? (
+                                <Play className="h-3.5 w-3.5 fill-current" />
+                              ) : (
+                                <Ban className="h-3.5 w-3.5" />
+                              )}
                             </button>
 
                             {/* Delete Action */}
@@ -2819,29 +2788,24 @@ function StudentsDirectoryContent() {
                     </a>
                     <a href={`https://wa.me/91${std.phone?.replace(/\\D/g, '').slice(-10)}?text=Hello ${encodeURIComponent(std.full_name)},`} target="_blank" rel="noopener noreferrer" className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer" title="Message on WhatsApp"><MessageCircle className="h-4 w-4" /></a>
                     <button onClick={() => { setSelectedStudentForEdit(std); setEditStudentForm(std); }} className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg cursor-pointer" title="Edit Student"><Edit3 className="h-4 w-4" /></button>
-                    {std.is_service_stopped ? (
-                      <button
-                        onClick={() => handleOpenResumeServiceModal(std)}
-                        className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg cursor-pointer"
-                        title="Resume Service (Set Continue Date)"
-                      >
-                        <Play className="h-4 w-4 fill-current" />
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handlePauseService(std)}
-                        className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer"
-                        title="Pause / Stop Service (Hold Membership)"
-                      >
-                        <Pause className="h-4 w-4" />
-                      </button>
-                    )}
                     <button
-                      onClick={() => handleToggleSuspend(std.id, std.status, std.full_name)}
-                      className={`p-1.5 rounded-lg cursor-pointer transition ${std.status === "suspended" ? "text-emerald-600 hover:bg-emerald-50" : "text-amber-600 hover:bg-amber-50"}`}
-                      title={std.status === "suspended" ? "Reactivate Student" : "Suspend Student"}
+                      onClick={() => handleToggleSuspend(std)}
+                      className={`p-1.5 rounded-lg cursor-pointer transition ${
+                        std.status === "suspended" || std.is_service_stopped
+                          ? "text-emerald-600 hover:bg-emerald-50"
+                          : "text-amber-600 hover:bg-amber-50"
+                      }`}
+                      title={
+                        std.status === "suspended" || std.is_service_stopped
+                          ? "Reactivate / Resume Student (Set Continue Date)"
+                          : "Suspend / Pause Student (Put On Hold)"
+                      }
                     >
-                      {std.status === "suspended" ? <UserCheck className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+                      {std.status === "suspended" || std.is_service_stopped ? (
+                        <Play className="h-4 w-4 fill-current" />
+                      ) : (
+                        <Ban className="h-4 w-4" />
+                      )}
                     </button>
                     <button onClick={() => handleRejectAndDelete(std.id, std.full_name)} className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer" title="Delete Student"><Trash2 className="h-4 w-4" /></button>
                   </div>
@@ -3836,19 +3800,23 @@ function StudentsDirectoryContent() {
             <div className="pt-3.5 sm:pt-4 border-t border-[#E5E7EB]/60 dark:border-zinc-800 grid grid-cols-3 sm:flex sm:items-center sm:justify-end gap-1.5 sm:gap-2">
               <button
                 type="button"
-                onClick={() => handleToggleSuspend(selectedStudentForView.id, selectedStudentForView.status, selectedStudentForView.full_name)}
+                onClick={() => handleToggleSuspend(selectedStudentForView)}
                 disabled={actionLoadingId === selectedStudentForView.id}
                 className={`inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-black transition cursor-pointer disabled:opacity-50 truncate ${
-                  selectedStudentForView.status === "suspended"
+                  selectedStudentForView.status === "suspended" || selectedStudentForView.is_service_stopped
                     ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
                     : "border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
                 }`}
-                title={selectedStudentForView.status === "suspended" ? "Reactivate Student" : "Suspend Student Access"}
+                title={
+                  selectedStudentForView.status === "suspended" || selectedStudentForView.is_service_stopped
+                    ? "Resume Service (Set Continue Date)"
+                    : "Suspend Student Access (Put On Hold)"
+                }
               >
-                {selectedStudentForView.status === "suspended" ? (
+                {selectedStudentForView.status === "suspended" || selectedStudentForView.is_service_stopped ? (
                   <>
-                    <UserCheck className="h-3.5 sm:h-4 w-3.5 sm:w-4 shrink-0" />
-                    <span className="truncate">Reactivate</span>
+                    <Play className="h-3.5 sm:h-4 w-3.5 sm:w-4 fill-current shrink-0" />
+                    <span className="truncate">Resume Service</span>
                   </>
                 ) : (
                   <>
@@ -3858,31 +3826,6 @@ function StudentsDirectoryContent() {
                 )}
               </button>
 
-              {selectedStudentForView.is_service_stopped ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleOpenResumeServiceModal(selectedStudentForView);
-                  }}
-                  className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] sm:text-xs font-black transition cursor-pointer shadow-xs truncate"
-                  title="Resume Library Service (Set Continue Date)"
-                >
-                  <Play className="h-3.5 sm:h-4 w-3.5 sm:w-4 fill-current shrink-0" />
-                  <span className="truncate">Resume Service</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    handlePauseService(selectedStudentForView);
-                  }}
-                  className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 text-[11px] sm:text-xs font-bold cursor-pointer truncate"
-                  title="Pause / Stop Service (Hold Membership)"
-                >
-                  <Pause className="h-3.5 sm:h-4 w-3.5 sm:w-4 shrink-0" />
-                  <span className="truncate">Pause Service</span>
-                </button>
-              )}
 
               <button
                 type="button"

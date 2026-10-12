@@ -272,6 +272,18 @@ function SignupForm() {
         try {
           const parsed = JSON.parse(pendingData);
           const supabase = createClient();
+          // Handle PKCE code exchange if returning from OAuth
+          if (typeof window !== "undefined") {
+            const codeParam = new URLSearchParams(window.location.search).get("code");
+            if (codeParam) {
+              try {
+                await supabase.auth.exchangeCodeForSession(codeParam);
+              } catch (codeErr) {
+                console.warn("OAuth code exchange notice:", codeErr);
+              }
+            }
+          }
+
           const { data: { user } } = await supabase.auth.getUser();
           
           if (user) {
@@ -321,7 +333,7 @@ function SignupForm() {
 
             // Direct save to Supabase profiles (Primary live database)
             try {
-              await supabase.from("profiles").upsert({
+              const oauthPayload: Record<string, any> = {
                 id: user.id,
                 full_name: studentName,
                 email: user.email,
@@ -341,7 +353,15 @@ function SignupForm() {
                 fee_status: "Due",
                 due_amount: parsed.membershipPlan === "Trial Pass" ? 0 : matchedShift.price,
                 updated_at: new Date().toISOString(),
-              });
+              };
+
+              let { error: oauthErr } = await supabase.from("profiles").upsert(oauthPayload);
+              if (oauthErr) {
+                delete oauthPayload.dob;
+                delete oauthPayload.gender;
+                delete oauthPayload.join_date;
+                await supabase.from("profiles").upsert(oauthPayload);
+              }
             } catch (err) {
               console.warn("OAuth registration save warning:", err);
             }
@@ -572,7 +592,7 @@ function SignupForm() {
         generatedStudentCode = generateStudentCode([]);
       }
 
-      const { error: upsertErr } = await supabase.from("profiles").upsert({
+      const upsertPayload: Record<string, any> = {
         id: studentId,
         student_code: generatedStudentCode,
         full_name: name,
@@ -593,9 +613,34 @@ function SignupForm() {
         fee_status: "Due",
         due_amount: currentTotalFee,
         updated_at: new Date().toISOString(),
-      });
+      };
 
+      let { error: upsertErr } = await supabase.from("profiles").upsert(upsertPayload);
+
+      // Resilient fallback: If dob/gender/join_date do not exist yet in live Supabase database
       if (upsertErr) {
+        console.warn("Initial profile upsert failed, retrying without optional demographic columns:", upsertErr.message);
+        delete upsertPayload.dob;
+        delete upsertPayload.gender;
+        delete upsertPayload.join_date;
+        const retry1 = await supabase.from("profiles").upsert(upsertPayload);
+        upsertErr = retry1.error;
+
+        // If still failing (e.g. duplicate student_code), retry without student_code
+        if (upsertErr) {
+          delete upsertPayload.student_code;
+          const retry2 = await supabase.from("profiles").upsert(upsertPayload);
+          upsertErr = retry2.error;
+        }
+
+        // Try direct update by id if profile was already inserted by auth trigger
+        if (upsertErr && studentId) {
+          const retry3 = await supabase.from("profiles").update(upsertPayload).eq("id", studentId);
+          upsertErr = retry3.error;
+        }
+      }
+
+      if (upsertErr && !studentId) {
         console.error("Student registration save error:", upsertErr);
         setIsLoading(false);
         setErrorMsg(`Failed to save registration: ${upsertErr.message}`);

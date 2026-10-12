@@ -126,6 +126,12 @@ function AuthCallbackContent() {
       // CRITICAL: When student logs in without signup:
       // Do NOT create/leave ghost pending student on admin panel, and do NOT redirect to student page!
       if (!profile || !hasRegisteredPhone) {
+        // If coming from Google signup flow with pending details in sessionStorage, redirect to /signup/ to finish
+        if (typeof window !== 'undefined' && sessionStorage.getItem('pending_student_signup')) {
+          router.replace('/signup/');
+          return;
+        }
+
         // Delete ghost profile row created by trigger so it never shows in admin pending
         try {
           await supabase.from('profiles').delete().eq('id', user.id);
