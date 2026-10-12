@@ -1513,8 +1513,8 @@ function StudentsDirectoryContent() {
     }
   });
 
-  // All 100 library desks list (01 to 100 continuous matrix)
-  const allDesksList: string[] = Array.from({ length: 100 }, (_, i) => String(i + 1).padStart(2, "0"));
+  // All 134 library desks list (01 to 134 continuous matrix)
+  const allDesksList: string[] = Array.from({ length: 134 }, (_, i) => String(i + 1).padStart(2, "0"));
 
   // Metrics Calculations (Total students strictly counts approved/active students)
   const enrolledStudentsCount = students.filter((s) => s.status === "active").length;
@@ -4832,7 +4832,7 @@ function StudentsDirectoryContent() {
               {/* Desk Grid (01 to 100 Desks Matrix) */}
               <div>
                 <p className="text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-2">
-                  Interactive Library Desk Map (Click to Select Desk 01-100)
+                  Interactive Library Desk Map (Click to Select Desk 01-134)
                 </p>
                 <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5 p-3 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/40">
                   {allDesksList.map((deskId) => {

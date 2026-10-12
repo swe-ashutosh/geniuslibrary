@@ -13,7 +13,7 @@
 export function parseDeskNum(raw: string | number | null | undefined): number | null {
   if (raw === null || raw === undefined) return null;
   if (typeof raw === "number") {
-    return raw >= 1 && raw <= 100 ? raw : null;
+    return raw >= 1 && raw <= 500 ? raw : null;
   }
   const s = String(raw).trim().toUpperCase();
   if (!s || s === "—" || s === "-" || s === "OPEN" || s === "NONE") return null;
@@ -25,10 +25,10 @@ export function parseDeskNum(raw: string | number | null | undefined): number | 
     const subNum = parseInt(rowMatch[2], 10);
     const rowIndex = letter.charCodeAt(0) - 65; // A=0, B=1, ... J=9
     const calculatedDesk = rowIndex * 10 + subNum;
-    if (calculatedDesk >= 1 && calculatedDesk <= 100) {
+    if (calculatedDesk >= 1 && calculatedDesk <= 500) {
       return calculatedDesk;
     }
-    if (subNum >= 1 && subNum <= 100) {
+    if (subNum >= 1 && subNum <= 500) {
       return subNum;
     }
   }
@@ -37,7 +37,7 @@ export function parseDeskNum(raw: string | number | null | undefined): number | 
   const digitsMatch = s.match(/\d+/);
   if (digitsMatch) {
     const num = parseInt(digitsMatch[0], 10);
-    if (num >= 1 && num <= 100) {
+    if (num >= 1 && num <= 500) {
       return num;
     }
   }

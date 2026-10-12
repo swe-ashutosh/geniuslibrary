@@ -593,7 +593,25 @@ export async function findRandomAvailableSeat(
   todayStr?: string
 ): Promise<string | null> {
   const currentDateStr = todayStr || new Date().toLocaleDateString('en-CA');
-  const allDeskNumbers: number[] = Array.from({ length: 100 }, (_, i) => i + 1);
+  let allDeskNumbers: number[] = [];
+
+  // 0. Fetch all configured desks dynamically from Supabase seats table
+  try {
+    const { data: dbSeats } = await supabase.from('seats').select('seat_number');
+    if (Array.isArray(dbSeats) && dbSeats.length > 0) {
+      allDeskNumbers = dbSeats
+        .map((s: any) => parseDeskNum(s.seat_number))
+        .filter((n: number | null): n is number => n !== null);
+    }
+  } catch (err) {
+    console.warn('Error fetching all seats from db in findRandomAvailableSeat:', err);
+  }
+
+  // Default to 134 library desks if not configured
+  if (allDeskNumbers.length === 0) {
+    allDeskNumbers = Array.from({ length: 134 }, (_, i) => i + 1);
+  }
+  allDeskNumbers = Array.from(new Set(allDeskNumbers)).sort((a, b) => a - b);
   const unavailableDesks = new Set<number>();
 
   // 1. Desks permanently reserved by active students in profiles
