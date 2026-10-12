@@ -15,7 +15,7 @@ import {
   Activity, Phone, Users, Camera, AlertCircle, Sparkles, RefreshCw, X,
   CheckSquare, Plus, Trash2, CheckCircle2, TrendingUp, Flame, Target,
   Quote, ShieldCheck, ArrowUpRight, ExternalLink, Trophy, Database, Archive,
-  CalendarX2, AlertTriangle
+  CalendarX2, AlertTriangle, Play, Pause
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { uploadAvatar } from "@/lib/supabase/storage";
@@ -122,6 +122,12 @@ export default function StudentDashboard() {
     seat_number?: string | null;
     fee_status?: string;
     due_amount?: number;
+    dob?: string | null;
+    gender?: string | null;
+    join_date?: string | null;
+    continue_date?: string | null;
+    is_service_stopped?: boolean;
+    service_stopped_at?: string | null;
   }>({
     full_name: "Student Member",
     email: "",
@@ -137,7 +143,18 @@ export default function StudentDashboard() {
     seat_number: null,
     fee_status: "Paid",
     due_amount: 0,
+    dob: null,
+    gender: "Male",
+    join_date: null,
+    continue_date: null,
+    is_service_stopped: false,
+    service_stopped_at: null,
   });
+
+  // Membership Pause & Resume State
+  const [showResumeModal, setShowResumeModal] = useState(false);
+  const [studentContinueDateInput, setStudentContinueDateInput] = useState(() => new Date().toISOString().split("T")[0]);
+  const [isUpdatingServiceStatus, setIsUpdatingServiceStatus] = useState(false);
 
   const [shiftsList, setShiftsList] = useState<Shift[]>([]);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceRecord[]>([]);
@@ -242,7 +259,7 @@ export default function StudentDashboard() {
         Promise.resolve(
           supabase
             .from("profiles")
-            .select("full_name, email, phone, parent_name, parent_phone, address, course, shift, membership_plan, avatar_url, status, role, fee_status, due_amount, student_code, seat_number, created_at")
+            .select("full_name, email, phone, parent_name, parent_phone, address, course, shift, membership_plan, avatar_url, status, role, fee_status, due_amount, student_code, seat_number, created_at, dob, gender, join_date, continue_date, is_service_stopped, service_stopped_at")
             .eq("id", authUser.id)
             .maybeSingle()
         ).then(r => r.data).catch(() => null),
@@ -258,8 +275,11 @@ export default function StudentDashboard() {
 
       const isAdmin = isMasterAdminEmail(authUser.email) || meta.role === "admin";
       const hasValidPhone = Boolean(profileData?.phone && String(profileData.phone).trim().length > 0);
+      const isServiceStopped = Boolean(profileData?.is_service_stopped);
       const determinedStatus = isAdmin
         ? "active"
+        : isServiceStopped
+        ? "suspended"
         : (hasValidPhone && profileData?.status === "active" ? "active" : (profileData?.status || "pending"));
 
       // Student face photo: prioritize custom uploaded photo from localStorage/profile over Google OAuth picture
@@ -290,6 +310,12 @@ export default function StudentDashboard() {
         seat_number: realSeat || null,
         fee_status: rawFeeStatus,
         due_amount: rawDueAmount,
+        dob: profileData?.dob || null,
+        gender: profileData?.gender || "Male",
+        join_date: profileData?.join_date || (profileData?.created_at ? profileData.created_at.split('T')[0] : null),
+        continue_date: profileData?.continue_date || null,
+        is_service_stopped: isServiceStopped,
+        service_stopped_at: profileData?.service_stopped_at || null,
       };
 
       setProfile(currentProfile);
@@ -500,6 +526,80 @@ export default function StudentDashboard() {
     } catch (err: any) {
       setIsUploadingAvatar(false);
       setFeedbackMsg({ type: "error", text: `Upload error: ${err.message}` });
+    }
+  };
+
+  // Membership Service Pause / Hold Handler
+  const handleStudentPauseService = async () => {
+    if (!profile.id) return;
+    if (!confirm("Are you sure you want to pause/hold your library membership? Your desk will be released and membership put on hold so you don't incur fees for your inactive period. When you return, click Resume Membership to set your Continue Date.")) {
+      return;
+    }
+    setIsUpdatingServiceStatus(true);
+    try {
+      const supabase = createClient();
+      await supabase.from("profiles").update({
+        is_service_stopped: true,
+        status: "suspended",
+        service_stopped_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", profile.id);
+
+      if (profile.seat_number) {
+        try {
+          const { markSeatVacantInSupabase } = await import("@/lib/api");
+          await markSeatVacantInSupabase(supabase, profile.id, profile.seat_number);
+        } catch {}
+      }
+
+      setProfile((prev) => ({
+        ...prev,
+        is_service_stopped: true,
+        status: "suspended",
+        service_stopped_at: new Date().toISOString(),
+      }));
+
+      setFeedbackMsg({
+        type: "success",
+        text: "Your membership is now on hold / paused. When you return, click Resume Membership to set your Continue Date.",
+      });
+    } catch (err: any) {
+      setFeedbackMsg({ type: "error", text: `Failed to pause membership: ${err.message}` });
+    } finally {
+      setIsUpdatingServiceStatus(false);
+    }
+  };
+
+  // Membership Service Resume Handler
+  const handleStudentResumeService = async () => {
+    if (!profile.id) return;
+    setIsUpdatingServiceStatus(true);
+    try {
+      const chosenContinueDate = studentContinueDateInput || new Date().toISOString().split("T")[0];
+      const supabase = createClient();
+      await supabase.from("profiles").update({
+        is_service_stopped: false,
+        status: "active",
+        continue_date: chosenContinueDate,
+        updated_at: new Date().toISOString(),
+      }).eq("id", profile.id);
+
+      setProfile((prev) => ({
+        ...prev,
+        is_service_stopped: false,
+        status: "active",
+        continue_date: chosenContinueDate,
+      }));
+
+      setShowResumeModal(false);
+      setFeedbackMsg({
+        type: "success",
+        text: `✓ Welcome back! Your membership is resumed from ${chosenContinueDate}. Billing starts from this date, saving your inactive gap period.`,
+      });
+    } catch (err: any) {
+      setFeedbackMsg({ type: "error", text: `Failed to resume membership: ${err.message}` });
+    } finally {
+      setIsUpdatingServiceStatus(false);
     }
   };
 
@@ -880,16 +980,50 @@ export default function StudentDashboard() {
           
           {/* Left Side: Student Greeting & Meta (Name, Date, Shift, Course, Seat) */}
           <div className="space-y-3 max-w-2xl">
-            {/* Date & Active Member Badges */}
-            <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Date & Active Member Badges & Pause / Resume Service Controls */}
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0B5ED7] dark:text-[#FFC107] bg-[#FFC107]/15 dark:bg-[#FFC107]/10 px-2.5 py-1 rounded-xl border border-[#FFC107]/30">
                 <Calendar className="h-3.5 w-3.5" />
                 {todayDateFormatted}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                ACTIVE MEMBER
-              </span>
+
+              {profile.is_service_stopped ? (
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-950/60 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    MEMBERSHIP ON HOLD (SERVICE PAUSED)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStudentContinueDateInput(new Date().toISOString().split("T")[0]);
+                      setShowResumeModal(true);
+                    }}
+                    disabled={isUpdatingServiceStatus}
+                    className="inline-flex items-center gap-1 text-[11px] font-black text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1 rounded-xl shadow-xs transition active:scale-95 cursor-pointer disabled:opacity-50"
+                  >
+                    <Play className="h-3 w-3 fill-current" />
+                    <span>Resume Membership</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    ACTIVE MEMBER
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleStudentPauseService}
+                    disabled={isUpdatingServiceStatus}
+                    className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 dark:text-amber-200 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 px-2.5 py-1 rounded-xl transition active:scale-95 cursor-pointer disabled:opacity-50"
+                    title="Pause membership when taking a gap month to save fees"
+                  >
+                    <Pause className="h-3 w-3" />
+                    <span>Pause / Hold</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Welcome Heading */}
@@ -897,14 +1031,38 @@ export default function StudentDashboard() {
               Welcome, {profile.full_name}!
             </h1>
 
-            {/* Shift, Course, Seat Details */}
-            <p className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 flex items-center gap-2 flex-wrap">
+            {/* Shift, Course, Seat & Dates Details */}
+            <div className="text-xs sm:text-sm text-zinc-600 dark:text-zinc-400 flex items-center gap-2 flex-wrap">
               <span>Course: <strong className="text-[#0A2E5C] dark:text-zinc-200">{profile.course}</strong></span>
               <span>•</span>
               <span>Shift: <strong className="text-[#0B5ED7] dark:text-[#FFC107]">{activeShiftInfo.name}</strong></span>
               <span>•</span>
               <span>Seat: <strong className="text-purple-600 dark:text-purple-400 font-mono font-bold">{sanitizeSeatNumber(assignedSeat) ? `#${sanitizeSeatNumber(assignedSeat)}` : "Flexible Desk"}</strong></span>
-            </p>
+              {profile.gender && (
+                <>
+                  <span>•</span>
+                  <span>Gender: <strong className="text-[#0A2E5C] dark:text-zinc-200">{profile.gender}</strong></span>
+                </>
+              )}
+              {profile.dob && (
+                <>
+                  <span>•</span>
+                  <span>DOB: <strong className="text-[#0A2E5C] dark:text-zinc-200 font-mono">{profile.dob}</strong></span>
+                </>
+              )}
+              {profile.join_date && (
+                <>
+                  <span>•</span>
+                  <span>Joined: <strong className="text-blue-600 dark:text-blue-400 font-mono">{profile.join_date}</strong></span>
+                </>
+              )}
+              {profile.continue_date && (
+                <>
+                  <span>•</span>
+                  <span>Continued: <strong className="text-emerald-600 dark:text-emerald-400 font-mono">{profile.continue_date}</strong></span>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Right Side: Inspirational Quote Box & Action Buttons */}
@@ -1711,6 +1869,69 @@ export default function StudentDashboard() {
                 className="px-4 py-2 rounded-xl bg-zinc-800 text-xs font-bold text-zinc-300 hover:text-white cursor-pointer"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resume Membership Modal with Continue Date */}
+      {showResumeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="relative w-full max-w-sm rounded-3xl border border-emerald-500/50 bg-gradient-to-b from-[#0A2E5C] to-[#141A24] p-6 text-white shadow-2xl space-y-4 text-center">
+            <button
+              onClick={() => setShowResumeModal(false)}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-white cursor-pointer"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="flex justify-center">
+              <div className="h-12 w-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/40">
+                <Play className="h-6 w-6 fill-current" />
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-black text-white">Resume Membership</h3>
+              <p className="text-xs text-emerald-400 font-bold mt-0.5">Welcome back to Genius Library!</p>
+              <p className="text-[11px] text-zinc-300 mt-2 leading-relaxed">
+                Pick the date you are restarting attendance. Your billing schedule will anchor to this date, saving your inactive break period.
+              </p>
+            </div>
+
+            <div className="text-left bg-white/5 p-3 rounded-2xl border border-white/10 space-y-1.5">
+              <label className="block text-[11px] font-bold text-zinc-300">
+                Continue / Restart Date
+              </label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-400" />
+                <input
+                  type="date"
+                  required
+                  value={studentContinueDateInput}
+                  onChange={(e) => setStudentContinueDateInput(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-900 py-2.5 pl-9 pr-3 text-xs font-mono font-bold text-white focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-zinc-800 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowResumeModal(false)}
+                className="px-4 py-2 rounded-xl bg-zinc-800 text-xs font-bold text-zinc-300 hover:text-white cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isUpdatingServiceStatus}
+                onClick={handleStudentResumeService}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition disabled:opacity-50 cursor-pointer"
+              >
+                <Play className="h-3.5 w-3.5 fill-current" />
+                <span>{isUpdatingServiceStatus ? "Activating..." : "Confirm & Resume"}</span>
               </button>
             </div>
           </div>

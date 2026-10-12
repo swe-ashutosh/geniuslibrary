@@ -205,7 +205,7 @@ export const WL = {
     { icon: "Wifi", title: "Dual Gigabit Optical Fiber", desc: "300 Mbps high-speed dual backup connection with zero downtime." },
     { icon: "Zap", title: "100% Inverter Power Backup", desc: "Uninterrupted power with dedicated charging points on each desk." },
     { icon: "Snowflake", title: "Centralized Climate Control", desc: "Silent dual split inverters maintaining a pleasant 23°C atmosphere." },
-    { icon: "ShieldCheck", title: "24/7 CCTV & RFID Turnstile", desc: "Biometric and smart QR gate pass check-in with high security." },
+    { icon: "ShieldCheck", title: "24/7 CCTV & RFID Turnstile", desc: "NFC tap card and smart QR gate pass check-in with high security." },
     { icon: "Droplets", title: "RO UV Water & Hot Kettle", desc: "Pure chilled, normal, and hot drinking water station." },
     { icon: "BookOpen", title: "Ergonomic Lumbar Chairs", desc: "Orthopedic high-back mesh chairs for long 12+ hours study comfort." },
   ],

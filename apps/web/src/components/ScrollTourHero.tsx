@@ -293,7 +293,7 @@ export function ScrollTourHero() {
           >
             <div className="bg-black/80 sm:bg-black/65 backdrop-blur-xl p-4 sm:p-6 rounded-3xl border border-white/15 shadow-2xl text-center">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-bold border border-emerald-500/40 mb-2">
-                <ShieldCheck className="w-3.5 h-3.5" /> Biometric &amp; Smart Gate
+                <ShieldCheck className="w-3.5 h-3.5" /> Smart NFC &amp; QR Gate
               </div>
 
               <h2 className="text-lg sm:text-2xl font-black text-white">

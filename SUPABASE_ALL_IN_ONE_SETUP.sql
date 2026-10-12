@@ -34,6 +34,13 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   fee_status TEXT DEFAULT 'Due',
   due_amount NUMERIC DEFAULT 0,
   fcm_token TEXT DEFAULT NULL,
+  dob TEXT DEFAULT NULL,
+  gender TEXT DEFAULT 'Male',
+  join_date TEXT DEFAULT NULL,
+  continue_date TEXT DEFAULT NULL,
+  is_service_stopped BOOLEAN DEFAULT false,
+  service_stopped_at TIMESTAMPTZ DEFAULT NULL,
+  service_stop_reason TEXT DEFAULT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

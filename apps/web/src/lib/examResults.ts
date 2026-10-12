@@ -48,37 +48,56 @@ export interface StudentExamMark {
   submittedAt?: string;
 }
 
+export interface ExamEnrollment {
+  id: string; // `enroll_${examId}_${studentId}`
+  examId: string;
+  examTitle: string;
+  studentId: string;
+  studentName: string;
+  studentCode?: string;
+  studentEmail?: string;
+  studentPhone?: string;
+  seatNumber?: string;
+  enrolledAt?: string;
+  status?: "Enrolled" | "Cancelled";
+}
+
 export interface StudentExamResultItem {
   exam: LibraryExam;
   mark?: StudentExamMark;
   rank?: number;
   totalAppeared: number;
+  isEnrolled?: boolean;
+  enrolledCount?: number;
 }
 
 const EXAMS_STORAGE_KEY = "genius_library_exams_data";
 const MARKS_STORAGE_KEY = "genius_library_marks_data";
+const ENROLLMENTS_STORAGE_KEY = "genius_library_enrollments_data";
 
 export const DEFAULT_LIBRARY_EXAMS: LibraryExam[] = [];
 export const DEFAULT_STUDENT_MARKS: StudentExamMark[] = [];
 
 /**
- * Sync exams and marks from Supabase
+ * Sync exams, marks and student enrollments from Supabase
  * Single source of truth across all devices
  */
 export async function syncExamsAndMarksFromSupabase(): Promise<{
   exams: LibraryExam[];
   marks: StudentExamMark[];
+  enrollments: ExamEnrollment[];
 }> {
   try {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("messages")
       .select("*")
-      .in("student_id", ["SYSTEM_EXAM", "SYSTEM_EXAM_MARK"]);
+      .in("student_id", ["SYSTEM_EXAM", "SYSTEM_EXAM_MARK", "SYSTEM_EXAM_ENROLLMENT"]);
 
     if (!error && Array.isArray(data)) {
       const fetchedExams: LibraryExam[] = [];
       const fetchedMarks: StudentExamMark[] = [];
+      const fetchedEnrollments: ExamEnrollment[] = [];
 
       data.forEach((row: any) => {
         try {
@@ -87,6 +106,10 @@ export async function syncExamsAndMarksFromSupabase(): Promise<{
             fetchedExams.push(parsed);
           } else if (row.student_id === "SYSTEM_EXAM_MARK" && parsed && parsed.id) {
             fetchedMarks.push(parsed);
+          } else if (row.student_id === "SYSTEM_EXAM_ENROLLMENT" && parsed && parsed.id) {
+            if (parsed.status !== "Cancelled") {
+              fetchedEnrollments.push(parsed);
+            }
           }
         } catch (e) {
           console.warn("Failed to parse synced exam message:", e);
@@ -106,18 +129,25 @@ export async function syncExamsAndMarksFromSupabase(): Promise<{
       fetchedMarks.forEach((m) => markMap.set(m.id, m));
       const mergedMarks = Array.from(markMap.values());
 
+      const currentEnrollments = getAllExamEnrollments();
+      const enrollMap = new Map<string, ExamEnrollment>();
+      currentEnrollments.forEach((en) => enrollMap.set(en.id, en));
+      fetchedEnrollments.forEach((en) => enrollMap.set(en.id, en));
+      const mergedEnrollments = Array.from(enrollMap.values()).filter((en) => en.status !== "Cancelled");
+
       if (typeof window !== "undefined") {
         localStorage.setItem(EXAMS_STORAGE_KEY, JSON.stringify(mergedExams));
         localStorage.setItem(MARKS_STORAGE_KEY, JSON.stringify(mergedMarks));
+        localStorage.setItem(ENROLLMENTS_STORAGE_KEY, JSON.stringify(mergedEnrollments));
       }
 
-      return { exams: mergedExams, marks: mergedMarks };
+      return { exams: mergedExams, marks: mergedMarks, enrollments: mergedEnrollments };
     }
   } catch (err) {
     console.warn("Error syncing exams from Supabase:", err);
   }
 
-  return { exams: getLibraryExams(), marks: getAllExamMarks() };
+  return { exams: getLibraryExams(), marks: getAllExamMarks(), enrollments: getAllExamEnrollments() };
 }
 
 /**
@@ -184,6 +214,23 @@ export function saveLibraryExam(exam: LibraryExam): LibraryExam[] {
       );
   } catch (e) {
     console.warn("Supabase client unavailable for exam sync:", e);
+  }
+
+  if (exam.status === "Published") {
+    try {
+      import("./pushNotify").then(({ broadcastNotification }) => {
+        broadcastNotification({
+          id: `exam-${exam.id}`,
+          recipientRole: "all",
+          title: `📝 Exam: ${exam.title}`,
+          message: `${exam.title} (${exam.category || "Mock Test"}) scheduled for ${exam.examDate}.`,
+          type: "exam",
+          actionUrl: "/student/tasks",
+          examId: exam.id,
+          examTitle: exam.title,
+        });
+      }).catch(() => {});
+    } catch {}
   }
 
   return updated;
@@ -312,6 +359,20 @@ export function saveStudentMark(mark: StudentExamMark): StudentExamMark[] {
     console.warn("Supabase client unavailable for mark sync:", e);
   }
 
+  try {
+    import("./pushNotify").then(({ broadcastNotification }) => {
+      broadcastNotification({
+        id: `mark-${mark.id}`,
+        recipientRole: "student",
+        recipientId: mark.studentId,
+        title: `🏆 Exam Score Declared`,
+        message: `Score for ${mark.studentName || "you"}: ${mark.marksObtained}/${mark.totalMarks} (${mark.percentage}%). Status: ${mark.status}.`,
+        type: "exam",
+        actionUrl: "/student/tasks",
+      });
+    }).catch(() => {});
+  } catch {}
+
   return updated;
 }
 
@@ -342,6 +403,209 @@ export function deleteStudentMark(markId: string): StudentExamMark[] {
 }
 
 /**
+ * Get all active exam enrollments (from local cache)
+ */
+export function getAllExamEnrollments(): ExamEnrollment[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(ENROLLMENTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: ExamEnrollment[] = JSON.parse(raw);
+    return (parsed || []).filter((en) => en.status !== "Cancelled");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get enrollments for a specific exam
+ */
+export function getEnrollmentsForExam(examId: string): ExamEnrollment[] {
+  return getAllExamEnrollments().filter((en) => en.examId === examId);
+}
+
+/**
+ * Check if a student is already enrolled in an exam
+ */
+export function isStudentEnrolledInExam(
+  examId: string,
+  criteria?: { id?: string; email?: string; studentCode?: string; fullName?: string } | string
+): boolean {
+  const enrollments = getEnrollmentsForExam(examId);
+  if (!criteria) return false;
+
+  const cObj = typeof criteria === "string"
+    ? { id: criteria, email: criteria, studentCode: criteria, fullName: criteria }
+    : criteria;
+
+  const cId = cObj.id?.toLowerCase().trim();
+  const cEmail = cObj.email?.toLowerCase().trim();
+  const cCode = cObj.studentCode?.toLowerCase().trim();
+  const cName = cObj.fullName?.toLowerCase().trim();
+
+  return enrollments.some((en) => {
+    if (cId && en.studentId && en.studentId.toLowerCase().trim() === cId) return true;
+    if (cEmail && en.studentEmail && en.studentEmail.toLowerCase().trim() === cEmail) return true;
+    if (cCode && en.studentCode && en.studentCode.toLowerCase().trim() === cCode) return true;
+    if (cName && en.studentName && en.studentName.toLowerCase().trim() === cName) return true;
+    return false;
+  });
+}
+
+/**
+ * Enroll a student in an exam (persists locally and to Supabase messages table)
+ */
+export async function enrollStudentInExam(
+  enrollment: Partial<ExamEnrollment> & { examId: string; examTitle: string; studentName: string }
+): Promise<boolean> {
+  const current = getAllExamEnrollments();
+  const enrollmentId = enrollment.id || `enroll_${enrollment.examId}_${enrollment.studentId || Date.now()}`;
+  const fullEnrollment: ExamEnrollment = {
+    id: enrollmentId,
+    examId: enrollment.examId,
+    examTitle: enrollment.examTitle,
+    studentId: enrollment.studentId || `student-${Date.now()}`,
+    studentName: enrollment.studentName,
+    studentCode: enrollment.studentCode,
+    studentEmail: enrollment.studentEmail,
+    studentPhone: enrollment.studentPhone,
+    seatNumber: enrollment.seatNumber,
+    status: "Enrolled",
+    enrolledAt: enrollment.enrolledAt || new Date().toISOString(),
+  };
+
+  const existingIdx = current.findIndex(
+    (e) => e.examId === fullEnrollment.examId && (e.studentId === fullEnrollment.studentId || (e.studentEmail && e.studentEmail === fullEnrollment.studentEmail))
+  );
+
+  let updated: ExamEnrollment[];
+  if (existingIdx !== -1) {
+    updated = [...current];
+    updated[existingIdx] = fullEnrollment;
+  } else {
+    updated = [fullEnrollment, ...current];
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(ENROLLMENTS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent("genius_enrollment_updated", { detail: fullEnrollment }));
+    } catch (e) {
+      console.warn("Failed to persist enrollment locally:", e);
+    }
+  }
+
+  // Persist directly into Supabase messages table (SYSTEM_EXAM_ENROLLMENT)
+  try {
+    const supabase = createClient();
+    const { error } = await supabase.from("messages").upsert({
+      id: fullEnrollment.id,
+      student_id: "SYSTEM_EXAM_ENROLLMENT",
+      student_name: fullEnrollment.studentName || "Student",
+      student_email: fullEnrollment.studentEmail || "",
+      sender_role: "student",
+      sender_name: fullEnrollment.studentName || "Student",
+      message: JSON.stringify(fullEnrollment),
+      recipient_role: "admin",
+      is_read: false,
+    });
+
+    if (error) {
+      console.warn("Failed to upsert enrollment to Supabase:", error.message);
+    }
+  } catch (err) {
+    console.warn("Supabase client unavailable for enrollment:", err);
+  }
+
+  // Notify admin & broadcast
+  try {
+    const { broadcastNotification } = await import("./pushNotify");
+    broadcastNotification({
+      id: `enroll-${fullEnrollment.id}`,
+      recipientRole: "admin",
+      title: "📝 New Exam Candidate Enrolled",
+      message: `${fullEnrollment.studentName} has enrolled for exam "${fullEnrollment.examTitle}".`,
+      type: "exam",
+      actionUrl: "/admin/results",
+    });
+  } catch {}
+
+  return true;
+}
+
+/**
+ * Unenroll/withdraw a student from an exam (persists locally and to Supabase)
+ * Handles "mood change" scenario where student opts out
+ */
+export async function unenrollStudentFromExam(
+  examId: string,
+  criteria: { id?: string; email?: string; studentCode?: string } | string
+): Promise<boolean> {
+  const cObj = typeof criteria === "string"
+    ? { id: criteria, email: criteria, studentCode: criteria }
+    : criteria;
+
+  const cId = cObj.id?.toLowerCase().trim();
+  const cEmail = cObj.email?.toLowerCase().trim();
+  const cCode = cObj.studentCode?.toLowerCase().trim();
+
+  const all = getAllExamEnrollments();
+  const target = all.find((en) => {
+    if (en.examId !== examId) return false;
+    if (cId && en.studentId && en.studentId.toLowerCase().trim() === cId) return true;
+    if (cEmail && en.studentEmail && en.studentEmail.toLowerCase().trim() === cEmail) return true;
+    if (cCode && en.studentCode && en.studentCode.toLowerCase().trim() === cCode) return true;
+    return false;
+  });
+
+  const updated = all.filter((en) => {
+    if (en.examId !== examId) return true;
+    if (cId && en.studentId && en.studentId.toLowerCase().trim() === cId) return false;
+    if (cEmail && en.studentEmail && en.studentEmail.toLowerCase().trim() === cEmail) return false;
+    if (cCode && en.studentCode && en.studentCode.toLowerCase().trim() === cCode) return false;
+    return true;
+  });
+
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(ENROLLMENTS_STORAGE_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent("genius_enrollment_updated", { detail: { examId, cancelled: true } }));
+    } catch {}
+  }
+
+  // Delete from Supabase
+  try {
+    const supabase = createClient();
+    if (target?.id) {
+      await supabase.from("messages").delete().eq("id", target.id);
+    } else {
+      await supabase
+        .from("messages")
+        .delete()
+        .eq("student_id", "SYSTEM_EXAM_ENROLLMENT")
+        .ilike("message", `%"examId":"${examId}"%`);
+    }
+  } catch (err) {
+    console.warn("Failed to delete enrollment from Supabase:", err);
+  }
+
+  // Broadcast cancellation notification
+  try {
+    const { broadcastNotification } = await import("./pushNotify");
+    broadcastNotification({
+      id: `unenroll-${examId}-${cId || Date.now()}`,
+      recipientRole: "admin",
+      title: "🚫 Exam Enrollment Cancelled",
+      message: `A candidate withdrew enrollment from exam ID ${examId}.`,
+      type: "exam",
+      actionUrl: "/admin/results",
+    });
+  } catch {}
+
+  return true;
+}
+
+/**
  * Get all exam results for a specific student, matched by ID, email, or studentCode
  * (synchronous from cache)
  */
@@ -367,6 +631,9 @@ export function getResultsForStudent(criteria: string | {
     .map((exam) => {
       const examMarks = getMarksForExam(exam.id);
       const totalAppeared = examMarks.length;
+      const enrollments = getEnrollmentsForExam(exam.id);
+      const enrolledCount = enrollments.length;
+      const isEnrolled = isStudentEnrolledInExam(exam.id, cObj);
 
       // Find mark belonging to this student
       const rawMark = examMarks.find((m) => {
@@ -384,6 +651,8 @@ export function getResultsForStudent(criteria: string | {
         mark,
         rank: mark?.rank,
         totalAppeared: Math.max(totalAppeared, 1),
+        isEnrolled,
+        enrolledCount,
       };
     });
 }

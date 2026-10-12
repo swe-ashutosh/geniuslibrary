@@ -394,8 +394,8 @@ export default function AdminDashboardOverview() {
             seenStudentIds.add(p.id);
             if (p.full_name) seenStudentIds.add(p.full_name.toLowerCase());
             const dueAmt = p.due_amount && Number(p.due_amount) > 0 ? Number(p.due_amount) : 800;
-            const initials = (p.full_name || "ST").split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
-            const studentCode = p.student_code || p.member_id || `SDL-${(p.id || "").slice(-4).toUpperCase()}`;
+            const rawCode = (p.student_code || p.member_id || "").trim();
+            const studentCode = rawCode && !/^\d+$/.test(rawCode) ? rawCode : `SDL-2026-${String(duesList.length + 1).padStart(3, "0")}`;
 
             const joinDate = p.created_at || p.joined_at ? new Date(p.created_at || p.joined_at) : new Date(currDate.getTime() - 25 * 86400000);
             const daysOverdue = Math.max(0, Math.floor((currDate.getTime() - joinDate.getTime()) / (1000 * 60 * 60 * 24)));
@@ -418,7 +418,7 @@ export default function AdminDashboardOverview() {
               studentId: p.id,
               studentCode,
               student: p.full_name || "Student",
-              initials: initials || "ST",
+              initials: p.full_name ? p.full_name.slice(0, 2).toUpperCase() : "ST",
               phone: p.phone || "",
               avatarBg: "bg-amber-600",
               feeType: p.shift ? `${p.shift} Desk Fee` : "Monthly Seat Fee",
@@ -442,7 +442,8 @@ export default function AdminDashboardOverview() {
               const phone = studentProfile?.phone || "";
               const initials = (fee.studentName || "ST").split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
               const avatarColors = ["bg-amber-600", "bg-indigo-600", "bg-teal-600", "bg-pink-600", "bg-cyan-600"];
-              const studentCode = studentProfile?.student_code || studentProfile?.member_id || fee.studentCode || `SDL-${(fee.studentId || `${idx}`).slice(-4).toUpperCase()}`;
+              const rawCode = (studentProfile?.student_code || studentProfile?.member_id || fee.studentCode || "").trim();
+              const studentCode = rawCode && !/^\d+$/.test(rawCode) ? rawCode : `SDL-2026-${String(duesList.length + 1).padStart(3, "0")}`;
 
               const feeDate = fee.dueDate ? new Date(fee.dueDate) : fee.createdAt ? new Date(fee.createdAt) : new Date(currDate.getTime() - 20 * 86400000);
               const daysOverdue = Math.max(0, Math.floor((currDate.getTime() - feeDate.getTime()) / (1000 * 60 * 60 * 24)));

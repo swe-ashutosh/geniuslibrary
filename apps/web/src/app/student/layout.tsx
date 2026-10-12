@@ -36,20 +36,10 @@ import {
   Settings,
   Download,
   KeyRound,
-  Newspaper,
-  Fingerprint
+  Newspaper
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { 
-  isWebAuthnSupported, 
-  hasRegisteredPasskey, 
-  getBiometricProfile, 
-  registerPasskey, 
-  removePasskey, 
-  type BiometricProfile 
-} from "@/lib/webauthn";
-import { BiometricAppLock } from "@/components/BiometricAppLock";
 import { 
   getStudents, 
   getAnnouncements,
@@ -71,6 +61,7 @@ import {
 } from "@/lib/pushNotify";
 import { uploadAvatar } from "@/lib/supabase/storage";
 import { BRAND_CONFIG, isMasterAdminEmail } from "@/lib/config";
+import { enrollStudentInExam } from "@/lib/examResults";
 import QRCode from "qrcode";
 
 const NAV_ITEMS = [
@@ -144,52 +135,6 @@ export default function StudentLayout({
     }
   };
 
-  // Biometric Passkey state
-  const [biometricSupported, setBiometricSupported] = useState(false);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
-  const [biometricProfile, setBiometricProfile] = useState<BiometricProfile | null>(null);
-  const [isBiometricActionLoading, setIsBiometricActionLoading] = useState(false);
-  const [biometricStatusMsg, setBiometricStatusMsg] = useState("");
-
-  useEffect(() => {
-    if (isWebAuthnSupported()) {
-      setBiometricSupported(true);
-      const isEnabled = hasRegisteredPasskey();
-      setBiometricEnabled(isEnabled);
-      if (isEnabled) {
-        setBiometricProfile(getBiometricProfile());
-      }
-    }
-  }, []);
-
-  const handleToggleBiometric = async () => {
-    setIsBiometricActionLoading(true);
-    setBiometricStatusMsg("");
-
-    if (biometricEnabled) {
-      const res = await removePasskey();
-      if (res.success) {
-        setBiometricEnabled(false);
-        setBiometricProfile(null);
-        setBiometricStatusMsg("Biometric login & App Lock removed.");
-      } else {
-        setBiometricStatusMsg(res.error || "Failed to remove biometric login.");
-      }
-      setIsBiometricActionLoading(false);
-      return;
-    }
-
-    const enteredPassword = window.prompt("Enter your account password to enable 1-touch login after logout (optional):")?.trim() || undefined;
-    const res = await registerPasskey(undefined, enteredPassword);
-    if (res.success) {
-      setBiometricEnabled(true);
-      setBiometricProfile(getBiometricProfile());
-      setBiometricStatusMsg("Biometric login & App Lock enabled!");
-    } else {
-      setBiometricStatusMsg(res.error || "Biometric registration failed.");
-    }
-    setIsBiometricActionLoading(false);
-  };
 
   const [userProfile, setUserProfile] = useState<{
     id?: string;
@@ -351,6 +296,64 @@ export default function StudentLayout({
   const [currentStudentId, setCurrentStudentId] = useState<string>("");
   const [currentStudentEmail, setCurrentStudentEmail] = useState<string>("");
   const [studentRegisteredAt, setStudentRegisteredAt] = useState<string>("");
+  const [livePopupAlert, setLivePopupAlert] = useState<{
+    title: string;
+    body: string;
+    url: string;
+    type: string;
+    examId?: string;
+    examTitle?: string;
+  } | null>(null);
+  const [enrolledToast, setEnrolledToast] = useState<string | null>(null);
+  const [enrollSubmitting, setEnrollSubmitting] = useState(false);
+  const [dismissedPermPrompt, setDismissedPermPrompt] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      return sessionStorage.getItem("genius_notif_prompt_dismissed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const recentNotifKeys = useRef(new Set<string>());
+
+  const dispatchStudentAlert = (alertData: {
+    title: string;
+    body: string;
+    url: string;
+    type?: string;
+    dedupeKey?: string;
+    examId?: string;
+    examTitle?: string;
+  }) => {
+    if (alertData.dedupeKey) {
+      if (recentNotifKeys.current.has(alertData.dedupeKey)) return;
+      recentNotifKeys.current.add(alertData.dedupeKey);
+      setTimeout(() => recentNotifKeys.current.delete(alertData.dedupeKey!), 8000);
+    }
+
+    triggerNativeNotification({
+      title: alertData.title,
+      body: alertData.body,
+      url: alertData.url,
+    });
+
+    setLivePopupAlert({
+      title: alertData.title,
+      body: alertData.body,
+      url: alertData.url,
+      type: alertData.type || "general",
+      examId: alertData.examId,
+      examTitle: alertData.examTitle,
+    });
+  };
+
+  useEffect(() => {
+    if (!livePopupAlert) return;
+    const timer = setTimeout(() => {
+      setLivePopupAlert(null);
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [livePopupAlert]);
 
   const formatRelativeTime = (dateStr?: string | null) => {
     if (!dateStr) return "Just now";
@@ -448,7 +451,8 @@ export default function StudentLayout({
     }, 120000);
 
     const unsubscribe = subscribeToNotificationBroadcast((payload: any) => {
-      const isForStudent = payload.recipientRole === "student" || payload.recipientRole === "all";
+      const role = (payload.recipientRole || "all").toLowerCase();
+      const isForStudent = role === "student" || role === "all" || role === "students" || role.includes("student");
       const isTarget =
         !payload.recipientId ||
         payload.recipientId === currentStudentId ||
@@ -457,10 +461,14 @@ export default function StudentLayout({
 
       if (isForStudent && isTarget) {
         fetchStudentNotifications(currentStudentId, currentStudentEmail);
-        triggerNativeNotification({
+        dispatchStudentAlert({
           title: payload.title || "Library Alert",
           body: payload.message || payload.body || "",
           url: payload.actionUrl || payload.url || "/student",
+          type: payload.type || "general",
+          examId: payload.examId || (typeof payload.id === "string" && payload.id.startsWith("exam-") ? payload.id.replace("exam-", "") : undefined),
+          examTitle: payload.examTitle || payload.title,
+          dedupeKey: `broadcast_${payload.id || payload.title}_${payload.createdAt || ""}`,
         });
       }
     });
@@ -468,14 +476,20 @@ export default function StudentLayout({
     // Supabase Realtime for cross-device instant notification sync
     const supabase = createClient();
     const channel = supabase
-      .channel(`student_system_notifs_${currentStudentId || "guest"}`)
+      .channel(`student_realtime_stream_${currentStudentId || "guest"}_${Math.random().toString(36).substring(2, 6)}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
+        { event: "*", schema: "public", table: "messages" },
         (change: any) => {
           const row = change.new;
-          if (row && row.student_id === "SYSTEM_NOTIF") {
-            const isForStudent = row.recipient_role === "student" || row.recipient_role === "all";
+          if (!row) return;
+
+          const dedupeKey = `row_${row.id || ""}_${row.created_at || ""}`;
+
+          // CASE 1: Standard System Notification
+          if (row.student_id === "SYSTEM_NOTIF") {
+            const role = (row.recipient_role || "all").toLowerCase();
+            const isForStudent = role === "student" || role === "all" || role === "students" || role.includes("student");
             const isTarget =
               !row.recipient_id ||
               row.recipient_id === currentStudentId ||
@@ -484,21 +498,117 @@ export default function StudentLayout({
 
             if (isForStudent && isTarget) {
               fetchStudentNotifications(currentStudentId, currentStudentEmail);
+              let notifTitle = row.student_name || "Library Alert";
+              let notifBody = row.message || "";
+              let notifUrl = "/student";
+              let notifType = row.sender_name || "general";
+              let examId: string | undefined = undefined;
+              let examTitle: string | undefined = undefined;
+
               try {
                 const parsed = typeof row.message === "string" ? JSON.parse(row.message) : row.message;
-                triggerNativeNotification({
-                  title: parsed.title || row.student_name || "Library Alert",
-                  body: parsed.message || "",
-                  url: parsed.actionUrl || "/student",
-                });
-              } catch {
-                triggerNativeNotification({
-                  title: row.student_name || "Library Alert",
-                  body: row.message || "",
-                  url: "/student",
-                });
+                if (parsed && typeof parsed === "object") {
+                  notifTitle = parsed.title || notifTitle;
+                  notifBody = parsed.message || notifBody;
+                  notifUrl = parsed.actionUrl || notifUrl;
+                  notifType = parsed.type || notifType;
+                  examId = parsed.examId;
+                  examTitle = parsed.examTitle;
+                }
+              } catch {}
+
+              dispatchStudentAlert({
+                title: notifTitle,
+                body: notifBody,
+                url: notifUrl,
+                type: notifType,
+                examId,
+                examTitle,
+                dedupeKey,
+              });
+            }
+          }
+
+          // CASE 2: Broadcast Announcement from Admin
+          else if (row.student_id === "SYSTEM_ANNOUNCEMENT") {
+            const role = (row.recipient_role || "all").toLowerCase();
+            const isForStudent = role === "all" || role === "student" || role.includes("all") || role.includes("student");
+
+            if (isForStudent) {
+              fetchStudentNotifications(currentStudentId, currentStudentEmail);
+              const notifTitle = row.student_name ? `📢 ${row.student_name}` : "📢 New Library Announcement";
+              const notifBody = row.message || "A new library announcement has been broadcast.";
+              const notifUrl = "/student/messages";
+
+              dispatchStudentAlert({
+                title: notifTitle,
+                body: notifBody,
+                url: notifUrl,
+                type: "announcement",
+                dedupeKey,
+              });
+
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("genius_announcement_updated"));
               }
             }
+          }
+
+          // CASE 3: Exam Released or Scheduled
+          else if (row.student_id === "SYSTEM_EXAM") {
+            try {
+              const exam = typeof row.message === "string" ? JSON.parse(row.message) : row.message;
+              if (exam && (exam.status === "Published" || !exam.status)) {
+                fetchStudentNotifications(currentStudentId, currentStudentEmail);
+                const notifTitle = `📝 New Exam: ${exam.title || row.student_name}`;
+                const notifBody = `${exam.category ? `[${exam.category}] ` : ""}Exam Date: ${exam.examDate || "Scheduled"}. Tap to enroll & check syllabus.`;
+                const notifUrl = "/student/tasks";
+
+                dispatchStudentAlert({
+                  title: notifTitle,
+                  body: notifBody,
+                  url: notifUrl,
+                  type: "exam",
+                  examId: exam.id,
+                  examTitle: exam.title || row.student_name,
+                  dedupeKey,
+                });
+
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(new CustomEvent("genius_exams_updated"));
+                }
+              }
+            } catch {}
+          }
+
+          // CASE 4: Student Exam Mark Released
+          else if (row.student_id === "SYSTEM_EXAM_MARK") {
+            try {
+              const mark = typeof row.message === "string" ? JSON.parse(row.message) : row.message;
+              const isMatch =
+                mark &&
+                ((mark.studentId && mark.studentId === currentStudentId) ||
+                 (mark.studentEmail && currentStudentEmail && mark.studentEmail.toLowerCase() === currentStudentEmail.toLowerCase()));
+
+              if (isMatch) {
+                fetchStudentNotifications(currentStudentId, currentStudentEmail);
+                const notifTitle = `🏆 Exam Score Declared!`;
+                const notifBody = `Score: ${mark.marksObtained}/${mark.totalMarks} (${mark.percentage}%). Status: ${mark.status}. Tap to view scorecard.`;
+                const notifUrl = "/student/tasks";
+
+                dispatchStudentAlert({
+                  title: notifTitle,
+                  body: notifBody,
+                  url: notifUrl,
+                  type: "exam_result",
+                  dedupeKey,
+                });
+
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(new CustomEvent("genius_exams_updated"));
+                }
+              }
+            } catch {}
           }
         }
       )
@@ -720,11 +830,7 @@ export default function StudentLayout({
 
   const handleLogout = async () => {
     const supabase = createClient();
-    if (hasRegisteredPasskey()) {
-      await supabase.auth.signOut({ scope: "local" });
-    } else {
-      await supabase.auth.signOut();
-    }
+    await supabase.auth.signOut();
     clearInactivityTracking();
     router.push("/login/");
   };
@@ -760,8 +866,6 @@ export default function StudentLayout({
       <meta name="robots" content="noindex, nofollow" />
       <title>{`Student Portal | ${BRAND_CONFIG.fullName}`}</title>
 
-      {/* Biometric App Lock Overlay for Student */}
-      <BiometricAppLock userName={userProfile.fullName} userRole="student" />
 
       {/* Desktop-Only Sidebar: No Sidebar on Mobile per Requirements */}
       <aside className="hidden lg:flex lg:w-64 lg:flex-col bg-[#0A2E5C]">
@@ -816,60 +920,6 @@ export default function StudentLayout({
             </div>
           </div>
 
-          {/* Biometric Passkey Quick Toggle */}
-          {biometricSupported && (
-            <div className="mt-2.5 rounded-2xl border border-zinc-800 bg-[#141A24]/90 p-2.5 shadow-xs">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                    biometricEnabled
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                      : "bg-[#FFC107]/20 text-[#FFC107] border border-[#FFC107]/30"
-                  }`}>
-                    <Fingerprint className={`h-4 w-4 ${isBiometricActionLoading ? "animate-spin" : ""}`} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-bold text-white truncate flex items-center gap-1">
-                      <span>{biometricEnabled ? "Biometric Active" : "Touch / Face ID"}</span>
-                      {biometricEnabled && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      )}
-                    </p>
-                    <p className="text-[9px] text-zinc-400 truncate">
-                      {biometricEnabled ? (biometricProfile?.deviceName || "This Device") : "1-Touch Quick Sign In"}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleToggleBiometric}
-                  disabled={isBiometricActionLoading}
-                  className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-black transition active:scale-95 cursor-pointer ${
-                    biometricEnabled
-                      ? "bg-zinc-800 text-zinc-300 hover:bg-rose-950/60 hover:text-rose-400 border border-zinc-700 hover:border-rose-800"
-                      : "bg-[#FFC107] text-[#0A2E5C] hover:bg-[#FFA000] shadow-xs"
-                  }`}
-                >
-                  {isBiometricActionLoading
-                    ? "..."
-                    : biometricEnabled
-                    ? "Disable"
-                    : "Enable"}
-                </button>
-              </div>
-
-              {biometricStatusMsg && (
-                <p className={`mt-1.5 text-[9px] font-medium leading-tight ${
-                  biometricStatusMsg.includes("success") || biometricStatusMsg.includes("enabled")
-                    ? "text-emerald-400"
-                    : "text-amber-400"
-                }`}>
-                  {biometricStatusMsg}
-                </p>
-              )}
-            </div>
-          )}
 
           <button 
             onClick={handleLogout}
@@ -982,6 +1032,22 @@ export default function StudentLayout({
                       )}
                     </div>
                   </div>
+
+                  {/* Enable Native OS/PWA Popups Banner if not yet granted */}
+                  {notificationPermission !== "granted" && (
+                    <div className="mt-2.5 mb-1 p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 flex items-center justify-between gap-2 shrink-0">
+                      <div className="text-[11px] text-amber-900 dark:text-amber-200 leading-tight">
+                        <span className="font-bold">Turn on Native Popups</span>
+                        <p className="text-[10px] text-amber-700 dark:text-amber-400">Get exam releases & broadcast popup alerts</p>
+                      </div>
+                      <button
+                        onClick={handleEnableStudentPush}
+                        className="px-2.5 py-1 text-[10px] font-bold rounded-xl bg-[#0A2E5C] text-[#FFC107] hover:bg-black transition active:scale-95 cursor-pointer shrink-0"
+                      >
+                        Enable
+                      </button>
+                    </div>
+                  )}
 
                   <div className="mt-3 flex-1 overflow-y-auto space-y-2 pr-1 max-h-72">
                     {notifications.length === 0 ? (
@@ -1207,60 +1273,6 @@ export default function StudentLayout({
             </div>
           </button>
 
-          {/* Biometric Passkey Quick Toggle (Mobile Drawer) */}
-          {biometricSupported && (
-            <div className="rounded-2xl border border-zinc-800 bg-[#141A24]/90 p-2.5 shadow-xs">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                    biometricEnabled
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                      : "bg-[#FFC107]/20 text-[#FFC107] border border-[#FFC107]/30"
-                  }`}>
-                    <Fingerprint className={`h-4 w-4 ${isBiometricActionLoading ? "animate-spin" : ""}`} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-bold text-white truncate flex items-center gap-1">
-                      <span>{biometricEnabled ? "Biometric Active" : "Touch / Face ID"}</span>
-                      {biometricEnabled && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      )}
-                    </p>
-                    <p className="text-[9px] text-zinc-400 truncate">
-                      {biometricEnabled ? (biometricProfile?.deviceName || "This Device") : "1-Touch Quick Sign In"}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleToggleBiometric}
-                  disabled={isBiometricActionLoading}
-                  className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-black transition active:scale-95 cursor-pointer ${
-                    biometricEnabled
-                      ? "bg-zinc-800 text-zinc-300 hover:bg-rose-950/60 hover:text-rose-400 border border-zinc-700 hover:border-rose-800"
-                      : "bg-[#FFC107] text-[#0A2E5C] hover:bg-[#FFA000] shadow-xs"
-                  }`}
-                >
-                  {isBiometricActionLoading
-                    ? "..."
-                    : biometricEnabled
-                    ? "Disable"
-                    : "Enable"}
-                </button>
-              </div>
-
-              {biometricStatusMsg && (
-                <p className={`mt-1.5 text-[9px] font-medium leading-tight ${
-                  biometricStatusMsg.includes("success") || biometricStatusMsg.includes("enabled")
-                    ? "text-emerald-400"
-                    : "text-amber-400"
-                }`}>
-                  {biometricStatusMsg}
-                </p>
-              )}
-            </div>
-          )}
 
           <button
             type="button"
@@ -1530,26 +1542,6 @@ export default function StudentLayout({
                     <span className="text-[10px] text-zinc-400">→</span>
                   </Link>
 
-                  {biometricSupported && (
-                    <button
-                      type="button"
-                      onClick={handleToggleBiometric}
-                      disabled={isBiometricActionLoading}
-                      className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-800 rounded-xl transition cursor-pointer text-left"
-                    >
-                      <span className="flex items-center gap-2">
-                        <Fingerprint className={`h-3.5 w-3.5 ${biometricEnabled ? "text-emerald-500" : "text-[#FFC107]"}`} />
-                        <span>{biometricEnabled ? "Biometric Login" : "Enable Touch / Face ID"}</span>
-                      </span>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                        biometricEnabled
-                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                          : "bg-[#FFC107]/20 text-[#0A2E5C] dark:text-[#FFC107]"
-                      }`}>
-                        {isBiometricActionLoading ? "..." : biometricEnabled ? "Active ✓" : "Set up"}
-                      </span>
-                    </button>
-                  )}
 
                   <Link
                     href="/student/messages"
@@ -1594,6 +1586,169 @@ export default function StudentLayout({
           window.dispatchEvent(new CustomEvent("attendance_updated"));
         }}
       />
+
+      {/* Live In-App Native-Style Popup Alert Card */}
+      {livePopupAlert && (
+        <aside
+          aria-label="Live Notification Alert"
+          className="fixed top-4 right-4 sm:top-6 sm:right-6 z-[999] max-w-sm sm:max-w-md w-[calc(100%-2rem)] animate-slideDown shadow-2xl"
+        >
+          <div className="flex items-start gap-3 p-4 rounded-2xl bg-[#0A2E5C] text-white border-2 border-[#FFC107] ring-4 ring-black/20 backdrop-blur-md">
+            <div className="h-10 w-10 rounded-xl bg-[#FFC107]/20 border border-[#FFC107]/50 flex items-center justify-center shrink-0 text-[#FFC107]">
+              {livePopupAlert.type === "exam" || livePopupAlert.type === "exam_result" ? (
+                <Award className="h-5 w-5" />
+              ) : (
+                <Bell className="h-5 w-5" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0 pr-1">
+              <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-1">
+                {livePopupAlert.title}
+              </h4>
+              <p className="text-[11px] sm:text-xs text-zinc-200 mt-0.5 line-clamp-2">
+                {livePopupAlert.body}
+              </p>
+              <div className="mt-2.5 flex items-center flex-wrap gap-2">
+                {livePopupAlert.type === "exam" && livePopupAlert.examId ? (
+                  <>
+                    <button
+                      disabled={enrollSubmitting}
+                      onClick={async () => {
+                        if (!livePopupAlert.examId) return;
+                        setEnrollSubmitting(true);
+                        try {
+                          await enrollStudentInExam({
+                            id: `enroll_${livePopupAlert.examId}_${userProfile.id || currentStudentId || "student"}`,
+                            examId: livePopupAlert.examId,
+                            examTitle: livePopupAlert.examTitle || livePopupAlert.title.replace(/^📝\s*(New Exam:\s*)?/i, ""),
+                            studentId: userProfile.id || currentStudentId || "student",
+                            studentName: userProfile.fullName || "Student Member",
+                            studentEmail: userProfile.email || currentStudentEmail || "",
+                            studentCode: userProfile.studentCode || undefined,
+                            seatNumber: userProfile.seatNumber || undefined,
+                          });
+                          setLivePopupAlert(null);
+                          setEnrolledToast(`✓ Enrolled successfully in ${livePopupAlert.examTitle || "the exam"}! Best of luck.`);
+                          setTimeout(() => setEnrolledToast(null), 5000);
+                        } catch (err) {
+                          console.error(err);
+                        } finally {
+                          setEnrollSubmitting(false);
+                        }
+                      }}
+                      className="px-3 py-1 text-[11px] font-black rounded-lg bg-emerald-400 text-emerald-950 hover:bg-emerald-300 transition active:scale-95 cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1"
+                    >
+                      <CheckCircle className="h-3 w-3" />
+                      <span>{enrollSubmitting ? "Enrolling..." : "Yes, Enroll Now"}</span>
+                    </button>
+                    <button
+                      onClick={() => setLivePopupAlert(null)}
+                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white/10 text-zinc-200 hover:text-white hover:bg-white/20 transition cursor-pointer"
+                    >
+                      No, Skip
+                    </button>
+                    <button
+                      onClick={() => {
+                        const target = livePopupAlert.url;
+                        setLivePopupAlert(null);
+                        if (target) router.push(target);
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-medium text-amber-300 hover:text-amber-200 underline transition cursor-pointer"
+                    >
+                      Details
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        const target = livePopupAlert.url;
+                        setLivePopupAlert(null);
+                        if (target) router.push(target);
+                      }}
+                      className="px-3 py-1 text-[11px] font-bold rounded-lg bg-[#FFC107] text-[#0A2E5C] hover:bg-amber-300 transition active:scale-95 cursor-pointer"
+                    >
+                      View Details
+                    </button>
+                    <button
+                      onClick={() => setLivePopupAlert(null)}
+                      className="px-2.5 py-1 text-[11px] font-medium text-zinc-300 hover:text-white transition cursor-pointer"
+                    >
+                      Dismiss
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => setLivePopupAlert(null)}
+              className="text-zinc-400 hover:text-white transition p-1 cursor-pointer shrink-0"
+              aria-label="Close alert"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </aside>
+      )}
+
+      {/* 1-Tap Enrollment Confirmation Toast */}
+      {enrolledToast && (
+        <aside
+          aria-label="Enrollment Confirmation"
+          className="fixed top-4 right-4 sm:top-6 sm:right-6 z-[999] max-w-sm w-[calc(100%-2rem)] animate-slideDown shadow-2xl"
+        >
+          <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-emerald-800 text-white border-2 border-emerald-400 ring-4 ring-black/20 shadow-xl">
+            <div className="h-8 w-8 rounded-xl bg-emerald-700 border border-emerald-400/50 flex items-center justify-center shrink-0">
+              <CheckCircle className="h-5 w-5 text-emerald-200" />
+            </div>
+            <p className="text-xs font-bold flex-1 leading-snug">{enrolledToast}</p>
+            <button
+              onClick={() => setEnrolledToast(null)}
+              className="text-white/70 hover:text-white p-1 cursor-pointer shrink-0"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </aside>
+      )}
+
+      {/* Quick Permission Prompt Banner (if permission not granted and not dismissed) */}
+      {notificationPermission !== "granted" && !dismissedPermPrompt && (
+        <aside
+          aria-label="Notification Permission"
+          className="fixed bottom-16 sm:bottom-4 left-4 right-4 sm:left-auto sm:right-4 z-40 max-w-sm rounded-2xl bg-[#0A2E5C] text-white p-3 shadow-xl border border-[#FFC107]/50 flex items-center justify-between gap-3 animate-slideUp"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="h-8 w-8 rounded-xl bg-[#FFC107]/20 border border-[#FFC107]/40 flex items-center justify-center shrink-0 text-[#FFC107]">
+              <Bell className="h-4 w-4" />
+            </div>
+            <div className="text-[11px] leading-tight min-w-0">
+              <p className="font-bold text-white truncate">Enable Native Alerts</p>
+              <p className="text-[10px] text-zinc-300 truncate">Get instant exam & notice popups</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              onClick={handleEnableStudentPush}
+              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-[#FFC107] text-[#0A2E5C] hover:bg-amber-300 transition active:scale-95 cursor-pointer"
+            >
+              Turn On
+            </button>
+            <button
+              onClick={() => {
+                setDismissedPermPrompt(true);
+                try {
+                  sessionStorage.setItem("genius_notif_prompt_dismissed", "1");
+                } catch {}
+              }}
+              className="p-1 text-zinc-400 hover:text-white transition cursor-pointer"
+              aria-label="Dismiss banner"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </aside>
+      )}
 
     </div>
   );

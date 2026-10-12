@@ -203,19 +203,36 @@ async function isAuthorizedRequest(c: any, requireAdmin = false): Promise<boolea
 
 async function generateApiStudentCode(database: any, supabaseClient?: any): Promise<string> {
   const now = new Date();
-  const yy = now.getFullYear().toString().slice(-2);
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const prefix = `${yy}${mm}`;
+  const year = now.getFullYear();
+  const prefix = `SDL-${year}-`;
 
   let maxSeq = 0;
+  const parseSeq = (code: string | null | undefined) => {
+    if (!code) return;
+    const str = String(code).trim().toUpperCase();
+    const matchYear = str.match(/SDL-\d{4}-(\d+)/i);
+    if (matchYear) {
+      const num = parseInt(matchYear[1], 10);
+      if (!isNaN(num) && num > maxSeq) maxSeq = num;
+      return;
+    }
+    const matchSimple = str.match(/SDL-(\d+)/i);
+    if (matchSimple) {
+      const num = parseInt(matchSimple[1], 10);
+      if (!isNaN(num) && num > maxSeq) maxSeq = num;
+      return;
+    }
+    const matchLegacy = str.match(/^\d{4}(\d{3})$/);
+    if (matchLegacy) {
+      const num = parseInt(matchLegacy[1], 10);
+      if (!isNaN(num) && num > maxSeq) maxSeq = num;
+    }
+  };
+
   try {
     const d1Students = await database.select().from(students).all();
     for (const s of d1Students) {
-      const clean = String(s.studentCode || '').replace(/[^0-9]/g, '');
-      if (clean.startsWith(prefix) && clean.length >= prefix.length + 3) {
-        const num = parseInt(clean.slice(prefix.length, prefix.length + 3), 10);
-        if (!isNaN(num) && num > maxSeq) maxSeq = num;
-      }
+      parseSeq(s.studentCode);
     }
   } catch {}
 
@@ -224,11 +241,7 @@ async function generateApiStudentCode(database: any, supabaseClient?: any): Prom
       const { data: sbProfiles } = await supabaseClient.from('profiles').select('student_code');
       if (sbProfiles && Array.isArray(sbProfiles)) {
         for (const sp of sbProfiles) {
-          const clean = String(sp.student_code || '').replace(/[^0-9]/g, '');
-          if (clean.startsWith(prefix) && clean.length >= prefix.length + 3) {
-            const num = parseInt(clean.slice(prefix.length, prefix.length + 3), 10);
-            if (!isNaN(num) && num > maxSeq) maxSeq = num;
-          }
+          parseSeq(sp.student_code);
         }
       }
     }

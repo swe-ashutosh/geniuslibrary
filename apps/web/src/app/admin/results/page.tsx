@@ -34,6 +34,7 @@ import {
 import { 
   LibraryExam, 
   StudentExamMark, 
+  ExamEnrollment,
   getLibraryExams, 
   saveLibraryExam, 
   deleteLibraryExam, 
@@ -41,7 +42,11 @@ import {
   saveStudentMark, 
   deleteStudentMark,
   getAllExamMarks,
-  syncExamsAndMarksFromSupabase
+  syncExamsAndMarksFromSupabase,
+  getAllExamEnrollments,
+  getEnrollmentsForExam,
+  isStudentEnrolledInExam,
+  unenrollStudentFromExam
 } from "@/lib/examResults";
 import { getStudents, Student, createNotification } from "@/lib/api";
 import { triggerNativeNotification } from "@/lib/pushNotify";
@@ -49,6 +54,7 @@ import { triggerNativeNotification } from "@/lib/pushNotify";
 export default function AdminResultsPage() {
   const [exams, setExams] = useState<LibraryExam[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [enrollments, setEnrollments] = useState<ExamEnrollment[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [mounted, setMounted] = useState(false);
@@ -61,9 +67,13 @@ export default function AdminResultsPage() {
   const [isMarksModalOpen, setIsMarksModalOpen] = useState(false);
   const [selectedExamForMarks, setSelectedExamForMarks] = useState<LibraryExam | null>(null);
   const [examMarksList, setExamMarksList] = useState<StudentExamMark[]>([]);
+  const [showEnrolledOnlyInMarks, setShowEnrolledOnlyInMarks] = useState(false);
 
   const [isAnswerKeyModalOpen, setIsAnswerKeyModalOpen] = useState(false);
   const [selectedExamForAnswerKey, setSelectedExamForAnswerKey] = useState<LibraryExam | null>(null);
+
+  const [isEnrolledModalOpen, setIsEnrolledModalOpen] = useState(false);
+  const [selectedExamForEnrolled, setSelectedExamForEnrolled] = useState<LibraryExam | null>(null);
 
   // Form States for Exam
   const [examTitle, setExamTitle] = useState("");
@@ -93,9 +103,11 @@ export default function AdminResultsPage() {
     try {
       const synced = await syncExamsAndMarksFromSupabase();
       setExams(synced.exams);
+      setEnrollments(synced.enrollments || getAllExamEnrollments());
     } catch {
       const loadedExams = getLibraryExams();
       setExams(loadedExams);
+      setEnrollments(getAllExamEnrollments());
     }
 
     try {
@@ -109,6 +121,16 @@ export default function AdminResultsPage() {
   useEffect(() => {
     setMounted(true);
     loadData();
+
+    const handleUpdate = () => {
+      loadData();
+    };
+    window.addEventListener("genius_enrollment_updated", handleUpdate);
+    window.addEventListener("genius_exams_updated", handleUpdate);
+    return () => {
+      window.removeEventListener("genius_enrollment_updated", handleUpdate);
+      window.removeEventListener("genius_exams_updated", handleUpdate);
+    };
   }, []);
 
   // Filtered exams
@@ -128,7 +150,15 @@ export default function AdminResultsPage() {
   // Result published: only for conducted exams that are published with marks or answer key
   const publishedExamsCount = conductedExams.filter(e => e.status === "Published" && (getMarksForExam(e.id).length > 0 || !!e.answerKeyUrl || !!e.answerKeyText || (e.examDate || "") < todayStr)).length;
   const withAnswerKeyCount = exams.filter(e => !!e.answerKeyUrl || !!e.answerKeyText).length;
-  const enrolledStudentsCount = students.length;
+
+  // Real enrolled students KPI (unique students who registered for library exams)
+  const activeEnrollments = enrollments.length > 0 ? enrollments : getAllExamEnrollments();
+  const uniqueEnrolledStudentIds = new Set(
+    activeEnrollments
+      .map((en) => (en.studentId || en.studentEmail || en.studentCode || "").toLowerCase().trim())
+      .filter(Boolean)
+  );
+  const enrolledStudentsCount = uniqueEnrolledStudentIds.size;
 
   // Next Exam (nearest upcoming exam date)
   const upcomingExams = exams
@@ -196,12 +226,16 @@ export default function AdminResultsPage() {
     if (newExam.status === "Published") {
       const isNew = !editingExam;
       createNotification({
-        recipientRole: "student",
-        title: isNew ? "📝 New Exam Scheduled" : "Exam Updated",
-        message: `${newExam.title} (${newExam.category}) has been published. Date: ${newExam.examDate}.`,
-        type: "general",
+        recipientRole: "all",
+        title: isNew ? `📝 New Exam: ${newExam.title}` : `📝 Exam Updated: ${newExam.title}`,
+        message: `${newExam.category ? `[${newExam.category}] ` : ""}Date: ${newExam.examDate}. Duration: ${newExam.durationMinutes} mins. Tap to enroll & check schedule.`,
+        type: "exam",
         actionUrl: "/student/tasks",
-      }).catch(console.error);
+        metadata: {
+          examId: newExam.id,
+          examTitle: newExam.title,
+        },
+      } as any).catch(console.error);
     }
   };
 
@@ -222,7 +256,15 @@ export default function AdminResultsPage() {
     setSelectedStudentId("");
     setMarksObtained(0);
     setStudentRemarks("");
+    const examEnrolled = getEnrollmentsForExam(exam.id);
+    setShowEnrolledOnlyInMarks(examEnrolled.length > 0);
     setIsMarksModalOpen(true);
+  };
+
+  // Handle Open Enrolled Candidates Modal
+  const handleOpenEnrolledModal = (exam: LibraryExam) => {
+    setSelectedExamForEnrolled(exam);
+    setIsEnrolledModalOpen(true);
   };
 
   // Handle Add Student Mark
@@ -264,6 +306,16 @@ export default function AdminResultsPage() {
     setMarksObtained(0);
     setStudentRemarks("");
     showToast(`Marks for ${sName} saved successfully!`);
+
+    // Dispatch instant notification to the student
+    createNotification({
+      recipientRole: "student",
+      recipientId: selectedStudentId,
+      title: `🏆 Exam Score Declared: ${selectedExamForMarks.title}`,
+      message: `${sName}, your scorecard has been released. Score: ${scoreNum}/${totalNum} (${pct}%). Result: ${isPass ? "Passed 🎉" : "Needs Revision"}.`,
+      type: "exam",
+      actionUrl: "/student/tasks",
+    }).catch(console.error);
   };
 
   // Handle Delete Student Mark
@@ -300,10 +352,10 @@ export default function AdminResultsPage() {
     showToast("Official Answer Key published to student portal!");
 
     createNotification({
-      recipientRole: "student",
-      title: "🔑 Official Answer Key Published",
-      message: `The official answer key for ${updatedExam.title} is now available.`,
-      type: "general",
+      recipientRole: "all",
+      title: `🔑 Answer Key: ${updatedExam.title}`,
+      message: `The official answer key for ${updatedExam.title} is now available in your student portal.`,
+      type: "exam",
       actionUrl: "/student/tasks",
     }).catch(console.error);
   };
@@ -401,8 +453,10 @@ export default function AdminResultsPage() {
               <Users className="h-4 w-4" />
             </div>
           </div>
-          <h3 className="text-xl sm:text-2xl font-black text-purple-600 dark:text-purple-400 mt-2">{enrolledStudentsCount || students.length}</h3>
-          <p className="text-[10px] text-zinc-400 mt-0.5">Test candidates</p>
+          <h3 className="text-xl sm:text-2xl font-black text-purple-600 dark:text-purple-400 mt-2">{enrolledStudentsCount}</h3>
+          <p className="text-[10px] text-zinc-400 mt-0.5">
+            {activeEnrollments.length} candidate registration{activeEnrollments.length === 1 ? "" : "s"}
+          </p>
         </div>
 
         {/* 6. Topper */}
@@ -466,6 +520,7 @@ export default function AdminResultsPage() {
             const evaluatedCount = marks.length;
             const topScore = marks.length > 0 ? marks[0].marksObtained : 0;
             const hasKey = !!(exam.answerKeyUrl || exam.answerKeyText);
+            const enrolledForThisExam = getEnrollmentsForExam(exam.id);
 
             return (
               <div
@@ -508,17 +563,21 @@ export default function AdminResultsPage() {
                   )}
 
                   {/* Summary Metric Strip */}
-                  <div className="grid grid-cols-3 gap-2 p-2.5 rounded-2xl bg-[#F8FAFC]/70 dark:bg-zinc-800/70 text-center border border-zinc-200/50 dark:border-zinc-700/50">
+                  <div className="grid grid-cols-4 gap-1.5 p-2.5 rounded-2xl bg-[#F8FAFC]/70 dark:bg-zinc-800/70 text-center border border-zinc-200/50 dark:border-zinc-700/50">
                     <div>
-                      <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Total Marks</p>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Total</p>
                       <p className="text-xs font-black text-[#0A2E5C] dark:text-white mt-0.5">{exam.totalMarks}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Evaluated</p>
-                      <p className="text-xs font-black text-blue-600 dark:text-blue-400 mt-0.5">{evaluatedCount} Students</p>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Enrolled</p>
+                      <p className="text-xs font-black text-purple-600 dark:text-purple-400 mt-0.5">{enrolledForThisExam.length}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Top Score</p>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Evaluated</p>
+                      <p className="text-xs font-black text-blue-600 dark:text-blue-400 mt-0.5">{evaluatedCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Top</p>
                       <p className="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
                         {topScore > 0 ? `${topScore}` : "--"}
                       </p>
@@ -528,27 +587,37 @@ export default function AdminResultsPage() {
 
                 {/* Actions Row */}
                 <div className="space-y-2 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {/* Enrolled Candidates Button */}
+                    <button
+                      onClick={() => handleOpenEnrolledModal(exam)}
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-2 py-2 text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+                      title="View list of candidates enrolled in this exam"
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      <span>Enrolled ({enrolledForThisExam.length})</span>
+                    </button>
+
                     {/* Enter / Manage Marks Button */}
                     <button
                       onClick={() => handleOpenMarksModal(exam)}
-                      className="flex items-center justify-center gap-1.5 rounded-xl bg-linear-to-r from-[#0B5ED7] to-[#FFC107] px-3 py-2 text-xs font-black text-[#0A2E5C] hover:opacity-95 transition shadow-xs cursor-pointer active:scale-95"
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-linear-to-r from-[#0B5ED7] to-[#FFC107] px-2 py-2 text-xs font-black text-[#0A2E5C] hover:opacity-95 transition shadow-xs cursor-pointer active:scale-95"
                     >
                       <Trophy className="h-3.5 w-3.5" />
-                      <span>Enter Marks ({evaluatedCount})</span>
+                      <span>Marks ({evaluatedCount})</span>
                     </button>
 
                     {/* Answer Key Button */}
                     <button
                       onClick={() => handleOpenAnswerKeyModal(exam)}
-                      className={`flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition shadow-xs cursor-pointer active:scale-95 ${
+                      className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-2 text-xs font-bold transition shadow-xs cursor-pointer active:scale-95 ${
                         hasKey
                           ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
                           : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200"
                       }`}
                     >
                       <KeyRound className="h-3.5 w-3.5" />
-                      <span>{hasKey ? "Answer Key (Live)" : "Set Answer Key"}</span>
+                      <span>{hasKey ? "Key (Live)" : "Set Key"}</span>
                     </button>
                   </div>
 
@@ -749,7 +818,18 @@ export default function AdminResultsPage() {
             {/* Quick Add Marks Form */}
             <form onSubmit={handleAddStudentMark} className="mt-4 p-4 rounded-2xl bg-[#F8FAFC]/80 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
               <div className="sm:col-span-2">
-                <label className="block font-bold text-zinc-700 dark:text-zinc-300 mb-1">Select Student</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-bold text-zinc-700 dark:text-zinc-300">Select Student</label>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-purple-600 dark:text-purple-400 font-bold">
+                    <input
+                      type="checkbox"
+                      checked={showEnrolledOnlyInMarks}
+                      onChange={(e) => setShowEnrolledOnlyInMarks(e.target.checked)}
+                      className="rounded text-purple-600 cursor-pointer"
+                    />
+                    <span>Show Enrolled Only ({getEnrollmentsForExam(selectedExamForMarks.id).length})</span>
+                  </label>
+                </div>
                 <select
                   required
                   value={selectedStudentId}
@@ -757,11 +837,29 @@ export default function AdminResultsPage() {
                   className="w-full h-9 px-3 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-[#0A2E5C] dark:text-white focus:outline-none"
                 >
                   <option value="">-- Choose Student --</option>
-                  {students.map((st) => (
-                    <option key={st.id} value={st.id}>
-                      {st.fullName} ({st.seatNumber ? `Seat ${st.seatNumber}` : "No Seat"}) - {st.phone}
-                    </option>
-                  ))}
+                  {students
+                    .filter((st) => {
+                      if (!showEnrolledOnlyInMarks) return true;
+                      return isStudentEnrolledInExam(selectedExamForMarks.id, {
+                        id: st.id,
+                        email: st.email,
+                        studentCode: st.studentCode,
+                        fullName: st.fullName,
+                      });
+                    })
+                    .map((st) => {
+                      const isEnrolled = isStudentEnrolledInExam(selectedExamForMarks.id, {
+                        id: st.id,
+                        email: st.email,
+                        studentCode: st.studentCode,
+                        fullName: st.fullName,
+                      });
+                      return (
+                        <option key={st.id} value={st.id}>
+                          {isEnrolled ? "⭐ " : ""}{st.fullName} ({st.seatNumber ? `Seat ${st.seatNumber}` : "No Seat"}) {isEnrolled ? "[Enrolled]" : ""} - {st.phone}
+                        </option>
+                      );
+                    })}
                 </select>
               </div>
 
@@ -965,6 +1063,123 @@ export default function AdminResultsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. ENROLLED STUDENTS / CANDIDATES MODAL */}
+      {/* ========================================================================= */}
+      {isEnrolledModalOpen && selectedExamForEnrolled && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-3xl rounded-3xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-2xl dark:border-zinc-800 dark:bg-[#0A2E5C] flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+              <div>
+                <h2 className="text-base font-black text-[#0A2E5C] dark:text-white flex items-center gap-2">
+                  <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  Enrolled Candidates Desk
+                </h2>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {selectedExamForEnrolled.title} • Date: {selectedExamForEnrolled.examDate} • ({getEnrollmentsForExam(selectedExamForEnrolled.id).length} Enrolled)
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsEnrolledModalOpen(false)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-white cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Candidates Table or Empty State */}
+            <div className="mt-4 flex-1 overflow-y-auto">
+              {getEnrollmentsForExam(selectedExamForEnrolled.id).length === 0 ? (
+                <div className="text-center py-12 rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/40">
+                  <Users className="h-10 w-10 text-zinc-300 dark:text-zinc-600 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-zinc-600 dark:text-zinc-300">No candidates enrolled yet</p>
+                  <p className="text-xs text-zinc-400 max-w-sm mx-auto mt-1">
+                    When students tap &quot;Yes, Enroll Now&quot; on the notification popup or enroll from their exam dashboard, they will appear here.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-zinc-100 dark:border-zinc-800 text-zinc-400 font-bold uppercase tracking-wider text-[10px]">
+                        <th className="pb-2.5">#</th>
+                        <th className="pb-2.5">Candidate Name</th>
+                        <th className="pb-2.5">Student Code / ID</th>
+                        <th className="pb-2.5">Seat No.</th>
+                        <th className="pb-2.5">Contact</th>
+                        <th className="pb-2.5">Enrolled Date</th>
+                        <th className="pb-2.5">Status</th>
+                        <th className="pb-2.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {getEnrollmentsForExam(selectedExamForEnrolled.id).map((en, idx) => (
+                        <tr key={en.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                          <td className="py-2.5 font-bold text-zinc-400">{idx + 1}</td>
+                          <td className="py-2.5">
+                            <p className="font-black text-[#0A2E5C] dark:text-white">{en.studentName}</p>
+                            <p className="text-[10px] text-zinc-400">{en.studentEmail || "—"}</p>
+                          </td>
+                          <td className="py-2.5 font-mono text-zinc-600 dark:text-zinc-300">
+                            {en.studentCode || en.studentId?.slice(0, 8) || "—"}
+                          </td>
+                          <td className="py-2.5 font-bold text-purple-600 dark:text-purple-400">
+                            {en.seatNumber ? `Seat ${en.seatNumber}` : "—"}
+                          </td>
+                          <td className="py-2.5 text-zinc-500">
+                            {en.studentPhone || "—"}
+                          </td>
+                          <td className="py-2.5 text-zinc-400 text-[11px]">
+                            {en.enrolledAt ? new Date(en.enrolledAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "Recent"}
+                          </td>
+                          <td className="py-2.5">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300">
+                              Enrolled ✓
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-right">
+                            <button
+                              onClick={async () => {
+                                if (confirm(`Remove ${en.studentName}'s enrollment for this exam?`)) {
+                                  await unenrollStudentFromExam(selectedExamForEnrolled.id, {
+                                    id: en.studentId,
+                                    email: en.studentEmail,
+                                    studentCode: en.studentCode,
+                                  });
+                                  const updated = getAllExamEnrollments();
+                                  setEnrollments(updated);
+                                  showToast(`Removed ${en.studentName} from enrolled candidates.`);
+                                }
+                              }}
+                              className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer font-bold text-[11px]"
+                              title="Cancel / Remove candidate"
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-between items-center pt-3 border-t border-zinc-100 dark:border-zinc-800 text-xs">
+              <span className="text-zinc-400 font-medium">
+                Total Candidates: <strong className="text-[#0A2E5C] dark:text-white">{getEnrollmentsForExam(selectedExamForEnrolled.id).length}</strong>
+              </span>
+              <button
+                onClick={() => setIsEnrolledModalOpen(false)}
+                className="px-4 py-1.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 font-bold cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

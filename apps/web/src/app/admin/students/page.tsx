@@ -18,7 +18,7 @@ import {
   Edit3, MoreVertical, Send, Download, Printer, ShieldCheck,
   CheckCircle2, Sparkles, UserPlus, ChevronLeft, ChevronRight,
   ChevronDown, DollarSign, Wallet, Lock, User, Ban, UserX, UserCheck,
-  Mail, ShieldAlert, TrendingUp, Armchair, MessageCircle
+  Mail, ShieldAlert, TrendingUp, Armchair, MessageCircle, Play, Pause, PlayCircle, PauseCircle
 } from "lucide-react";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
@@ -48,6 +48,13 @@ interface StudentProfile {
   full_name: string;
   email: string;
   phone: string;
+  dob?: string;
+  gender?: "Male" | "Female" | "Other" | string;
+  join_date?: string;
+  continue_date?: string;
+  is_service_stopped?: boolean;
+  service_stopped_at?: string;
+  service_stop_reason?: string;
   parent_name?: string;
   parent_phone?: string;
   address?: string;
@@ -93,13 +100,26 @@ export function getShiftOptionsForPlan(plan?: string) {
   return GENERAL_SHIFT_OPTIONS;
 }
 
-export function getStudentFeeSchedule(std: { fee_status?: string; due_amount?: number; created_at?: string }) {
+export function getStudentFeeSchedule(std: { fee_status?: string; due_amount?: number; created_at?: string; join_date?: string; continue_date?: string; is_service_stopped?: boolean }) {
+  if (std.is_service_stopped) {
+    return {
+      isDue: false,
+      status: "Service Paused",
+      daysOverdue: 0,
+      dateString: "On Hold",
+      label: "Membership On Hold",
+      colorClass: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+    };
+  }
+
   const isDue = std.fee_status === "Due" || (std.due_amount !== undefined && std.due_amount > 0);
   const now = new Date();
-  const joinDate = std.created_at ? new Date(std.created_at) : new Date();
+  // Billing cycle anchors to continue_date (if resumed from gap) or join_date, saving the inactive period
+  const anchorStr = std.continue_date || std.join_date || std.created_at;
+  const joinDate = anchorStr ? new Date(anchorStr) : new Date();
 
   if (isDue) {
-    // Unpaid due date anchored to admission date / billing cycle
+    // Unpaid due date anchored to admission or continue date
     const daysOverdue = Math.max(0, Math.floor((now.getTime() - joinDate.getTime()) / (1000 * 60 * 60 * 24)));
     const isDefaulter = daysOverdue >= 60; // 2+ months unpaid
     const isOverdue = daysOverdue > 15;     // > 15 days unpaid
@@ -220,6 +240,9 @@ function StudentsDirectoryContent() {
     parent_phone: "",
     course: "UPSC",
     shift: GENERAL_SHIFT_OPTIONS[0].name,
+    dob: "",
+    gender: "Male",
+    join_date: new Date().toISOString().split("T")[0],
     membership_plan: "General",
     seat_number: "",
     address: "",
@@ -228,6 +251,11 @@ function StudentsDirectoryContent() {
     due_amount: 300,
   });
   const [isAddingStudent, setIsAddingStudent] = useState(false);
+
+  // Resume / Continue Service Modal State
+  const [resumeServiceStudent, setResumeServiceStudent] = useState<StudentProfile | null>(null);
+  const [continueDateInput, setContinueDateInput] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [isResumingService, setIsResumingService] = useState(false);
 
   const [showPrintCardsModal, setShowPrintCardsModal] = useState(false);
   const [showSendSmsModal, setShowSendSmsModal] = useState(false);
@@ -343,6 +371,9 @@ function StudentsDirectoryContent() {
         parent_phone: newStudentForm.parent_phone?.trim() ? (newStudentForm.parent_phone.trim().startsWith("+91") ? newStudentForm.parent_phone.trim() : `+91 ${newStudentForm.parent_phone.trim()}`) : "",
         course: newStudentForm.course || "General Studies",
         shift: newStudentForm.shift || GENERAL_SHIFT_OPTIONS[0].name,
+        dob: newStudentForm.dob || undefined,
+        gender: newStudentForm.gender || "Male",
+        join_date: newStudentForm.join_date || new Date().toISOString().split("T")[0],
         membership_plan: (newStudentForm.membership_plan as any) || "General",
         seat_number: seatNum || undefined,
         address: newStudentForm.address?.trim() || "Madhupur, Sonbhadra",
@@ -359,6 +390,9 @@ function StudentsDirectoryContent() {
         full_name: newRecord.full_name,
         phone: newRecord.phone,
         email: newRecord.email,
+        dob: newRecord.dob || null,
+        gender: newRecord.gender || "Male",
+        join_date: newRecord.join_date || new Date().toISOString().split("T")[0],
         parent_name: newRecord.parent_name,
         parent_phone: newRecord.parent_phone,
         course: newRecord.course,
@@ -389,6 +423,9 @@ function StudentsDirectoryContent() {
         parent_phone: "",
         course: "UPSC",
         shift: GENERAL_SHIFT_OPTIONS[0].name,
+        dob: "",
+        gender: "Male",
+        join_date: new Date().toISOString().split("T")[0],
         membership_plan: "General",
         seat_number: "",
         address: "",
@@ -421,6 +458,11 @@ function StudentsDirectoryContent() {
       "Student ID",
       "Full Name",
       "Phone",
+      "Gender",
+      "DOB",
+      "Join Date",
+      "Continue Date",
+      "Service Paused",
       "Parent Phone",
       "Email",
       "Course",
@@ -439,6 +481,11 @@ function StudentsDirectoryContent() {
         `"${s.student_code || s.id}"`,
         `"${(s.full_name || "").replace(/"/g, '""')}"`,
         `"${s.phone || ""}"`,
+        `"${s.gender || "Male"}"`,
+        `"${s.dob || ""}"`,
+        `"${s.join_date || (s.created_at ? s.created_at.split('T')[0] : "")}"`,
+        `"${s.continue_date || ""}"`,
+        `"${s.is_service_stopped ? "Yes" : "No"}"`,
         `"${s.parent_phone || ""}"`,
         `"${s.email || ""}"`,
         `"${(s.course || "General").replace(/"/g, '""')}"`,
@@ -1014,10 +1061,13 @@ function StudentsDirectoryContent() {
           if (!isMasterAdminEmail(p.email) && p.role !== "admin" && hasPhone) {
             const resolvedPlan = (p.membership_plan as any) || "General";
             const existingCodesSoFar = realStudentsList.map((s) => s.student_code);
-            const resolvedCode = p.student_code || p.studentCode || generateStudentCode(existingCodesSoFar);
+            let rawCode = (p.student_code || p.studentCode || "").trim();
+            // If code is missing, purely numeric (legacy 2610001), doesn't start with SDL-, or already used:
+            const isInvalidOrDuplicate = !rawCode || /^\d+$/.test(rawCode) || existingCodesSoFar.includes(rawCode);
+            const resolvedCode = isInvalidOrDuplicate ? generateStudentCode(existingCodesSoFar) : rawCode;
 
-            // Persist back to Supabase if student_code was missing
-            if (!p.student_code && p.id) {
+            // Persist back to Supabase if student_code was missing, legacy, or duplicate
+            if (isInvalidOrDuplicate && p.id) {
               createClient().from("profiles").update({ student_code: resolvedCode }).eq("id", p.id).then();
             }
 
@@ -1034,10 +1084,17 @@ function StudentsDirectoryContent() {
               shift: p.shift || "Morning Shift",
               membership_plan: resolvedPlan,
               seat_number: resolvedPlan === "Reserved Seat" ? (p.seat_number || undefined) : undefined,
+              dob: p.dob || undefined,
+              gender: p.gender || undefined,
+              join_date: p.join_date || (p.created_at ? p.created_at.split('T')[0] : undefined),
+              continue_date: p.continue_date || undefined,
+              is_service_stopped: Boolean(p.is_service_stopped),
+              service_stopped_at: p.service_stopped_at || undefined,
+              service_stop_reason: p.service_stop_reason || undefined,
               status: (p.status as any) || "pending",
               fee_status: (p.fee_status as any) || "Due",
               due_amount: Number(p.due_amount !== undefined && p.due_amount !== null ? p.due_amount : 0),
-              avatar_url: p.avatar_url || null,
+              avatar_url: p.avatar_url || p.photo_url || p.profile_photo || p.image_url || (p.raw_user_meta_data as any)?.avatar_url || (p.raw_user_meta_data as any)?.picture || null,
               created_at: p.created_at || new Date().toISOString(),
             });
           }
@@ -1201,6 +1258,10 @@ function StudentsDirectoryContent() {
         full_name: editStudentForm.full_name,
         email: editStudentForm.email,
         phone: normalizedPhone,
+        dob: editStudentForm.dob || null,
+        gender: editStudentForm.gender || "Male",
+        join_date: editStudentForm.join_date || null,
+        continue_date: editStudentForm.continue_date || null,
         parent_name: editStudentForm.parent_name,
         parent_phone: normalizedParentPhone,
         course: editStudentForm.course,
@@ -1265,6 +1326,94 @@ function StudentsDirectoryContent() {
       setAlertMsg({ type: "error", text: `Failed to update: ${e.message}` });
     }
     setActionLoadingId(null);
+  };
+
+  // Pause / Stop Library Service (Puts student on hold, waives inactive gap from billing)
+  const handlePauseService = async (student: StudentProfile) => {
+    if (!confirm(`Are you sure you want to pause/stop library service for "${student.full_name}"? Their account will be put on hold, and their active seat will be released.`)) {
+      return;
+    }
+    setActionLoadingId(student.id);
+    try {
+      const supabase = createClient();
+      await supabase.from("profiles").update({
+        is_service_stopped: true,
+        status: "suspended",
+        service_stopped_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", student.id);
+
+      // If they had an occupied seat, mark it vacant
+      if (student.seat_number) {
+        try {
+          const { markSeatVacantInSupabase } = await import("@/lib/api");
+          await markSeatVacantInSupabase(supabase, student.id, student.seat_number);
+        } catch {}
+      }
+
+      const updatedRecord: StudentProfile = {
+        ...student,
+        is_service_stopped: true,
+        status: "suspended",
+        service_stopped_at: new Date().toISOString(),
+      };
+
+      setStudents((prev) => prev.map((s) => (s.id === student.id ? updatedRecord : s)));
+      if (selectedStudentForView?.id === student.id) {
+        setSelectedStudentForView(updatedRecord);
+      }
+      setAlertMsg({
+        type: "success",
+        text: `✓ Library service paused for "${student.full_name}". Membership is now On Hold.`,
+      });
+    } catch (err: any) {
+      setAlertMsg({ type: "error", text: `Failed to pause service: ${err.message}` });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Open Resume Service Modal (Prompts for Continue Date)
+  const handleOpenResumeServiceModal = (student: StudentProfile) => {
+    setResumeServiceStudent(student);
+    setContinueDateInput(new Date().toISOString().split("T")[0]);
+  };
+
+  // Confirm Resume Service with selected Continue Date
+  const handleConfirmResumeService = async () => {
+    if (!resumeServiceStudent) return;
+    setIsResumingService(true);
+    try {
+      const chosenContinueDate = continueDateInput || new Date().toISOString().split("T")[0];
+      const supabase = createClient();
+      await supabase.from("profiles").update({
+        is_service_stopped: false,
+        status: "active",
+        continue_date: chosenContinueDate,
+        updated_at: new Date().toISOString(),
+      }).eq("id", resumeServiceStudent.id);
+
+      const updatedRecord: StudentProfile = {
+        ...resumeServiceStudent,
+        is_service_stopped: false,
+        status: "active",
+        continue_date: chosenContinueDate,
+      };
+
+      setStudents((prev) => prev.map((s) => (s.id === resumeServiceStudent.id ? updatedRecord : s)));
+      if (selectedStudentForView?.id === resumeServiceStudent.id) {
+        setSelectedStudentForView(updatedRecord);
+      }
+      setAlertMsg({
+        type: "success",
+        text: `✓ Service resumed for "${resumeServiceStudent.full_name}"! Continue Date set to ${chosenContinueDate}. Billing starts from this date, saving inactive gap.`,
+      });
+      setResumeServiceStudent(null);
+    } catch (err: any) {
+      setAlertMsg({ type: "error", text: `Failed to resume service: ${err.message}` });
+    } finally {
+      setIsResumingService(false);
+    }
   };
 
   const handleRejectAndDelete = async (studentId: string, studentName: string) => {
@@ -2310,8 +2459,23 @@ function StudentsDirectoryContent() {
                             const presence = getStudentPresence(std.id, std.full_name);
                             return (
                               <div className="flex items-center gap-3">
-                                <div className="relative shrink-0">
-                                  <div className={`flex h-10 w-10 items-center justify-center rounded-full font-black text-xs ${avatarColor}`}>
+                                <div className="relative shrink-0 h-10 w-10">
+                                  {std.avatar_url ? (
+                                    <img
+                                      src={std.avatar_url}
+                                      alt={std.full_name}
+                                      className="h-10 w-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shadow-xs"
+                                      onError={(e) => {
+                                        (e.currentTarget as HTMLElement).style.display = "none";
+                                        const fb = e.currentTarget.nextElementSibling as HTMLElement;
+                                        if (fb) fb.style.display = "flex";
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div
+                                    className={`h-10 w-10 items-center justify-center rounded-full font-black text-xs ${avatarColor}`}
+                                    style={{ display: std.avatar_url ? "none" : "flex" }}
+                                  >
                                     {getInitials(std.full_name)}
                                   </div>
                                 </div>
@@ -2487,6 +2651,28 @@ function StudentsDirectoryContent() {
                               <Edit3 className="h-3.5 w-3.5" />
                             </button>
 
+                            {/* Pause / Resume Service Action */}
+                            {std.is_service_stopped ? (
+                              <button
+                                onClick={() => handleOpenResumeServiceModal(std)}
+                                disabled={actionLoadingId === std.id}
+                                className="flex h-8 items-center gap-1 px-2.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 transition cursor-pointer text-[10px] font-black shadow-xs"
+                                title="Resume Library Service (Set Continue Date)"
+                              >
+                                <Play className="h-3 w-3 fill-current" />
+                                <span>Continue</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handlePauseService(std)}
+                                disabled={actionLoadingId === std.id}
+                                className="flex h-8 w-8 items-center justify-center rounded-xl border border-amber-200 bg-amber-50/70 text-amber-700 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300 transition cursor-pointer"
+                                title="Pause / Stop Service (Hold Membership)"
+                              >
+                                <Pause className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+
                             {/* Suspend / Unsuspend Action */}
                             <button
                               onClick={() => handleToggleSuspend(std.id, std.status, std.full_name)}
@@ -2534,9 +2720,23 @@ function StudentsDirectoryContent() {
                       const presence = getStudentPresence(std.id, std.full_name);
                       return (
                         <div className="flex items-center gap-3">
-                          <div className="relative">
-                            <div className={`h-10 w-10 rounded-full font-bold flex items-center justify-center text-xs ${std.status === "pending" ? "bg-amber-100 text-amber-800" : std.status === "suspended" ? "bg-rose-100 text-rose-800" : "bg-purple-100 text-purple-700"
-                              }`}>
+                          <div className="relative shrink-0 h-10 w-10">
+                            {std.avatar_url ? (
+                              <img
+                                src={std.avatar_url}
+                                alt={std.full_name}
+                                className="h-10 w-10 rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shadow-xs"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLElement).style.display = "none";
+                                  const fb = e.currentTarget.nextElementSibling as HTMLElement;
+                                  if (fb) fb.style.display = "flex";
+                                }}
+                              />
+                            ) : null}
+                            <div
+                              className={`h-10 w-10 rounded-full font-bold items-center justify-center text-xs ${std.status === "pending" ? "bg-amber-100 text-amber-800" : std.status === "suspended" ? "bg-rose-100 text-rose-800" : "bg-purple-100 text-purple-700"}`}
+                              style={{ display: std.avatar_url ? "none" : "flex" }}
+                            >
                               {getInitials(std.full_name)}
                             </div>
                           </div>
@@ -2619,6 +2819,23 @@ function StudentsDirectoryContent() {
                     </a>
                     <a href={`https://wa.me/91${std.phone?.replace(/\\D/g, '').slice(-10)}?text=Hello ${encodeURIComponent(std.full_name)},`} target="_blank" rel="noopener noreferrer" className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg cursor-pointer" title="Message on WhatsApp"><MessageCircle className="h-4 w-4" /></a>
                     <button onClick={() => { setSelectedStudentForEdit(std); setEditStudentForm(std); }} className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg cursor-pointer" title="Edit Student"><Edit3 className="h-4 w-4" /></button>
+                    {std.is_service_stopped ? (
+                      <button
+                        onClick={() => handleOpenResumeServiceModal(std)}
+                        className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg cursor-pointer"
+                        title="Resume Service (Set Continue Date)"
+                      >
+                        <Play className="h-4 w-4 fill-current" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handlePauseService(std)}
+                        className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg cursor-pointer"
+                        title="Pause / Stop Service (Hold Membership)"
+                      >
+                        <Pause className="h-4 w-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => handleToggleSuspend(std.id, std.status, std.full_name)}
                       className={`p-1.5 rounded-lg cursor-pointer transition ${std.status === "suspended" ? "text-emerald-600 hover:bg-emerald-50" : "text-amber-600 hover:bg-amber-50"}`}
@@ -3082,6 +3299,67 @@ function StudentsDirectoryContent() {
                       />
                     </div>
                   </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1">
+                      Date of Birth (DOB)
+                    </label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                      <input
+                        type="date"
+                        value={editStudentForm.dob || ""}
+                        onChange={(e) => setEditStudentForm({ ...editStudentForm, dob: e.target.value })}
+                        className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/40 py-2.5 pl-9 pr-3 text-xs font-mono font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-[#FFC107] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1">
+                      Gender
+                    </label>
+                    <select
+                      value={editStudentForm.gender || "Male"}
+                      onChange={(e) => setEditStudentForm({ ...editStudentForm, gender: e.target.value })}
+                      className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/40 py-2.5 px-3 text-xs font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-[#FFC107] focus:outline-none cursor-pointer"
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1">
+                      Admission / Join Date
+                    </label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                      <input
+                        type="date"
+                        value={editStudentForm.join_date || (editStudentForm.created_at ? editStudentForm.created_at.split('T')[0] : "")}
+                        onChange={(e) => setEditStudentForm({ ...editStudentForm, join_date: e.target.value })}
+                        className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/40 py-2.5 pl-9 pr-3 text-xs font-mono font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-[#FFC107] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1 flex items-center justify-between">
+                      <span>Continue Date (Resume)</span>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Resets fee cycle</span>
+                    </label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+                      <input
+                        type="date"
+                        value={editStudentForm.continue_date || ""}
+                        onChange={(e) => setEditStudentForm({ ...editStudentForm, continue_date: e.target.value })}
+                        className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/40 py-2.5 pl-9 pr-3 text-xs font-mono font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-[#FFC107] focus:outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -3321,13 +3599,30 @@ function StudentsDirectoryContent() {
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-4 border-b border-[#E5E7EB]/60 dark:border-zinc-800">
               <div className="flex items-center gap-3">
-                <div className={`flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-2xl font-black text-base sm:text-lg shadow-xs ${selectedStudentForView.status === "pending"
-                  ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-                  : selectedStudentForView.status === "suspended"
-                    ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
-                    : "bg-linear-to-br from-[#0B5ED7]/20 to-[#FFC107]/30 text-[#0A2E5C] dark:text-white"
-                  }`}>
-                  {getInitials(selectedStudentForView.full_name)}
+                <div className="relative shrink-0 h-12 w-12 sm:h-14 sm:w-14">
+                  {selectedStudentForView.avatar_url ? (
+                    <img
+                      src={selectedStudentForView.avatar_url}
+                      alt={selectedStudentForView.full_name}
+                      className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl object-cover border border-zinc-200 dark:border-zinc-700 shadow-xs"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLElement).style.display = "none";
+                        const fb = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (fb) fb.style.display = "flex";
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className={`h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-2xl font-black text-base sm:text-lg shadow-xs ${selectedStudentForView.status === "pending"
+                      ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                      : selectedStudentForView.status === "suspended"
+                        ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300"
+                        : "bg-linear-to-br from-[#0B5ED7]/20 to-[#FFC107]/30 text-[#0A2E5C] dark:text-white"
+                    }`}
+                    style={{ display: selectedStudentForView.avatar_url ? "none" : "flex" }}
+                  >
+                    {getInitials(selectedStudentForView.full_name)}
+                  </div>
                 </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
@@ -3395,6 +3690,38 @@ function StudentsDirectoryContent() {
                     <p className="text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
                       <BookOpen className="h-3.5 w-3.5 text-purple-600" />
                       {selectedStudentForView.course || "General Studies"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#E5E7EB]/70 bg-[#F8FAFC]/40 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
+                    <span className="text-[10px] font-bold text-zinc-400 block mb-0.5">Date of Birth (DOB)</span>
+                    <p className="text-xs font-mono font-bold text-[#0A2E5C] dark:text-white flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-zinc-400" />
+                      {selectedStudentForView.dob || "Not specified"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#E5E7EB]/70 bg-[#F8FAFC]/40 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
+                    <span className="text-[10px] font-bold text-zinc-400 block mb-0.5">Gender</span>
+                    <p className="text-xs font-bold text-[#0A2E5C] dark:text-white flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-indigo-500" />
+                      {selectedStudentForView.gender || "Male"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#E5E7EB]/70 bg-[#F8FAFC]/40 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
+                    <span className="text-[10px] font-bold text-zinc-400 block mb-0.5">Admission / Join Date</span>
+                    <p className="text-xs font-mono font-bold text-[#0A2E5C] dark:text-white flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-blue-500" />
+                      {selectedStudentForView.join_date || (selectedStudentForView.created_at ? selectedStudentForView.created_at.split('T')[0] : "Recent")}
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#E5E7EB]/70 bg-[#F8FAFC]/40 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
+                    <span className="text-[10px] font-bold text-zinc-400 block mb-0.5">Continue Date (Resume)</span>
+                    <p className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-emerald-600" />
+                      {selectedStudentForView.continue_date || "Continuous (No gap)"}
                     </p>
                   </div>
                 </div>
@@ -3530,6 +3857,32 @@ function StudentsDirectoryContent() {
                   </>
                 )}
               </button>
+
+              {selectedStudentForView.is_service_stopped ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleOpenResumeServiceModal(selectedStudentForView);
+                  }}
+                  className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] sm:text-xs font-black transition cursor-pointer shadow-xs truncate"
+                  title="Resume Library Service (Set Continue Date)"
+                >
+                  <Play className="h-3.5 sm:h-4 w-3.5 sm:w-4 fill-current shrink-0" />
+                  <span className="truncate">Resume Service</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handlePauseService(selectedStudentForView);
+                  }}
+                  className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 text-[11px] sm:text-xs font-bold cursor-pointer truncate"
+                  title="Pause / Stop Service (Hold Membership)"
+                >
+                  <Pause className="h-3.5 sm:h-4 w-3.5 sm:w-4 shrink-0" />
+                  <span className="truncate">Pause Service</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -3680,8 +4033,25 @@ function StudentsDirectoryContent() {
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200 font-black text-xs">
-                          {getInitials(std.full_name)}
+                        <div className="relative shrink-0 h-10 w-10">
+                          {std.avatar_url ? (
+                            <img
+                              src={std.avatar_url}
+                              alt={std.full_name}
+                              className="h-10 w-10 rounded-full object-cover border border-amber-200 shadow-xs"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = "none";
+                                const fb = e.currentTarget.nextElementSibling as HTMLElement;
+                                if (fb) fb.style.display = "flex";
+                              }}
+                            />
+                          ) : null}
+                          <div
+                            className="h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200 font-black text-xs"
+                            style={{ display: std.avatar_url ? "none" : "flex" }}
+                          >
+                            {getInitials(std.full_name)}
+                          </div>
                         </div>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
@@ -3841,8 +4211,25 @@ function StudentsDirectoryContent() {
 
                   {/* Student Photo & Details */}
                   <div className="flex items-center gap-3">
-                    <div className="h-12 w-12 rounded-xl bg-gradient-to-tr from-[#0B5ED7] to-[#FFC107] text-[#0A2E5C] flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
-                      {getInitials(std.full_name)}
+                    <div className="relative shrink-0 h-12 w-12">
+                      {std.avatar_url ? (
+                        <img
+                          src={std.avatar_url}
+                          alt={std.full_name}
+                          className="h-12 w-12 rounded-xl object-cover border border-zinc-200 shadow-xs"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = "none";
+                            const fb = e.currentTarget.nextElementSibling as HTMLElement;
+                            if (fb) fb.style.display = "flex";
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        className="h-12 w-12 rounded-xl bg-gradient-to-tr from-[#0B5ED7] to-[#FFC107] text-[#0A2E5C] items-center justify-center font-black text-sm shadow-xs"
+                        style={{ display: std.avatar_url ? "none" : "flex" }}
+                      >
+                        {getInitials(std.full_name)}
+                      </div>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="font-black text-xs text-[#0A2E5C] dark:text-white truncate">
@@ -4151,6 +4538,52 @@ function StudentsDirectoryContent() {
                       onChange={(e) => setNewStudentForm({ ...newStudentForm, course: e.target.value })}
                       className="w-full rounded-xl border border-zinc-200 bg-white p-2.5 text-xs font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-[#FFC107] focus:outline-none"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1">
+                      Date of Birth (DOB) <span className="text-zinc-400 font-normal">(Optional)</span>
+                    </label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                      <input
+                        type="date"
+                        value={newStudentForm.dob || ""}
+                        onChange={(e) => setNewStudentForm({ ...newStudentForm, dob: e.target.value })}
+                        className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-9 pr-3 text-xs font-mono font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-[#FFC107] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1">
+                      Gender <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={newStudentForm.gender || "Male"}
+                      onChange={(e) => setNewStudentForm({ ...newStudentForm, gender: e.target.value })}
+                      className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 px-3 text-xs font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-[#FFC107] focus:outline-none cursor-pointer"
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1">
+                      Admission / Join Date <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                      <input
+                        type="date"
+                        required
+                        value={newStudentForm.join_date || ""}
+                        onChange={(e) => setNewStudentForm({ ...newStudentForm, join_date: e.target.value })}
+                        className="w-full rounded-xl border border-zinc-200 bg-white py-2.5 pl-9 pr-3 text-xs font-mono font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-[#FFC107] focus:outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -4628,6 +5061,86 @@ function StudentsDirectoryContent() {
             </button>
           </div>
         </div>
+      )}
+      {/* ========================================================================= */}
+      {/* 9. MODAL: RESUME / CONTINUE SERVICE (WITH EDITABLE CONTINUE DATE) */}
+      {/* ========================================================================= */}
+      {resumeServiceStudent && mounted && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl dark:bg-[#0A2E5C] border border-[#E5E7EB] dark:border-zinc-700 animate-scaleUp">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E5E7EB]/60 dark:border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                  <Play className="h-5 w-5 fill-current" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-[#0A2E5C] dark:text-white">
+                    Resume Library Service
+                  </h3>
+                  <p className="text-[11px] text-zinc-500 font-medium">
+                    {resumeServiceStudent.full_name} ({resumeServiceStudent.student_code || resumeServiceStudent.id})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResumeServiceStudent(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="py-4 space-y-4">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3.5 dark:border-emerald-900/40 dark:bg-emerald-950/20 text-xs text-emerald-900 dark:text-emerald-200">
+                <p className="font-bold flex items-center gap-1.5 mb-1">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>Gap Period Fee Protection</span>
+                </p>
+                <p className="text-[11px] text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                  The student took a break or gap. By resuming service, their new billing cycle will anchor from the <strong>Continue Date</strong> below, saving them from paying for the inactive period.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1.5 flex items-center justify-between">
+                  <span>Continue / Resume Date <span className="text-rose-500">*</span></span>
+                  <span className="text-[10px] text-zinc-400 font-normal">Default: Today (Changeable)</span>
+                </label>
+                <div className="relative">
+                  <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-600" />
+                  <input
+                    type="date"
+                    required
+                    value={continueDateInput}
+                    onChange={(e) => setContinueDateInput(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-300 bg-white py-2.5 pl-10 pr-3 text-xs font-mono font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[#E5E7EB]/60 dark:border-zinc-800 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setResumeServiceStudent(null)}
+                className="px-4 py-2 rounded-xl border border-zinc-200 text-xs font-bold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isResumingService}
+                onClick={handleConfirmResumeService}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition cursor-pointer shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Play className="h-3.5 w-3.5 fill-current" />
+                <span>{isResumingService ? "Activating..." : "Confirm & Resume"}</span>
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
 
     </div>

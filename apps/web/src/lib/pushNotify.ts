@@ -116,10 +116,13 @@ export async function triggerNativeNotification(options: NativeNotificationOptio
     // 1. Preferred method for PWAs & Android Chrome: Service Worker registration showNotification
     if ("serviceWorker" in navigator) {
       try {
-        const registration = await Promise.race([
-          navigator.serviceWorker.ready,
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 1200))
-        ]);
+        let registration: ServiceWorkerRegistration | undefined | null = await navigator.serviceWorker.getRegistration();
+        if (!registration || !registration.active) {
+          registration = await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500))
+          ]);
+        }
 
         if (registration && typeof registration.showNotification === "function") {
           await registration.showNotification(title, {

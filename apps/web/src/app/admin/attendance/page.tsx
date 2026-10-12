@@ -105,6 +105,7 @@ interface StudentCheckLogModalData {
     shift: string;
     seatNumber: string;
     isPresent: boolean;
+    avatar_url?: string | null;
   };
   date: string;
   formattedDate: string;
@@ -250,9 +251,10 @@ export default function AdminAttendancePage() {
           const hasPhone = p.phone && String(p.phone).trim().length > 0;
           if (p.role !== "admin" && !isMasterAdminEmail(p.email) && hasPhone) {
             const key = p.email ? p.email.toLowerCase() : p.id;
+            const rawCode = (p.student_code || p.studentCode || "").trim();
             studentMap.set(key, {
               ...p,
-              student_code: p.student_code || p.studentCode || null,
+              student_code: rawCode && !/^\d+$/.test(rawCode) ? rawCode : null,
               shift: p.shift || "Morning Shift",
               seat_number: p.seat_number || null,
               status: p.status || "pending",
@@ -311,7 +313,14 @@ export default function AdminAttendancePage() {
       return a.date >= startDate && a.date <= endDate;
     });
 
-    const studentCode = std.student_code || `SDL-2026-${String(idx + 1).padStart(3, "0")}`;
+    const currentYear = new Date().getFullYear();
+    const studentCode = (std.student_code && !/^\d+$/.test(std.student_code))
+      ? std.student_code
+      : `SDL-${currentYear}-${String(idx + 1).padStart(3, "0")}`;
+
+    if ((!std.student_code || /^\d+$/.test(std.student_code)) && std.id) {
+      createClient().from("profiles").update({ student_code: studentCode }).eq("id", std.id).then();
+    }
 
     // Pure real data: NO demo fallback!
     let sessions: CheckSession[] = [];
@@ -827,6 +836,7 @@ export default function AdminAttendancePage() {
         shift: std.shift,
         seatNumber: std.seatNumber,
         isPresent: std.isPresent || std.isCompleted,
+        avatar_url: std.avatar_url,
       },
       date: startDate === endDate ? startDate : `${startDate} to ${endDate}`,
       formattedDate: formatDisplayDate(startDate, endDate),
@@ -1442,8 +1452,25 @@ export default function AdminAttendancePage() {
                             {/* Student Name (No email below name) */}
                             <td className="p-3">
                               <div className="flex items-center gap-2.5">
-                                <div className={`h-8 w-8 shrink-0 rounded-full flex items-center justify-center text-xs font-black ${avatarColor}`}>
-                                  {initials}
+                                <div className="relative shrink-0 h-8 w-8">
+                                  {std.avatar_url ? (
+                                    <img
+                                      src={std.avatar_url}
+                                      alt={std.full_name}
+                                      className="h-8 w-8 rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shadow-xs"
+                                      onError={(e) => {
+                                        (e.currentTarget as HTMLElement).style.display = "none";
+                                        const fb = e.currentTarget.nextElementSibling as HTMLElement;
+                                        if (fb) fb.style.display = "flex";
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div
+                                    className={`h-8 w-8 items-center justify-center rounded-full text-xs font-black ${avatarColor}`}
+                                    style={{ display: std.avatar_url ? "none" : "flex" }}
+                                  >
+                                    {initials}
+                                  </div>
                                 </div>
                                 <div>
                                   <p className="font-bold text-[#0A2E5C] dark:text-white capitalize leading-tight hover:text-[#0B5ED7] cursor-pointer" onClick={() => handleOpenFullStudentHistory(std)}>
@@ -1612,8 +1639,25 @@ export default function AdminAttendancePage() {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2.5">
-                            <div className={`h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-xs font-black ${avatarColor}`}>
-                              {initials}
+                            <div className="relative shrink-0 h-9 w-9">
+                              {std.avatar_url ? (
+                                <img
+                                  src={std.avatar_url}
+                                  alt={std.full_name}
+                                  className="h-9 w-9 rounded-full object-cover border border-zinc-200 dark:border-zinc-700 shadow-xs"
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLElement).style.display = "none";
+                                    const fb = e.currentTarget.nextElementSibling as HTMLElement;
+                                    if (fb) fb.style.display = "flex";
+                                  }}
+                                />
+                              ) : null}
+                              <div
+                                className={`h-9 w-9 items-center justify-center rounded-full text-xs font-black ${avatarColor}`}
+                                style={{ display: std.avatar_url ? "none" : "flex" }}
+                              >
+                                {initials}
+                              </div>
                             </div>
                             <div>
                               <p className="font-bold text-[#0A2E5C] dark:text-white capitalize text-xs hover:text-[#0B5ED7] cursor-pointer" onClick={() => handleOpenStudentLog(std)}>
@@ -2113,8 +2157,25 @@ export default function AdminAttendancePage() {
             {/* Modal Header */}
             <div className="flex items-start justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
               <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-2xl bg-linear-to-br from-[#0B5ED7] to-[#FFC107] text-white flex items-center justify-center font-black text-sm shadow-md">
-                  {getInitials(selectedStudentForLog.student.full_name)}
+                <div className="relative shrink-0 h-12 w-12">
+                  {selectedStudentForLog.student.avatar_url ? (
+                    <img
+                      src={selectedStudentForLog.student.avatar_url}
+                      alt={selectedStudentForLog.student.full_name}
+                      className="h-12 w-12 rounded-2xl object-cover border border-zinc-200 dark:border-zinc-700 shadow-md"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLElement).style.display = "none";
+                        const fb = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (fb) fb.style.display = "flex";
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className="h-12 w-12 rounded-2xl bg-linear-to-br from-[#0B5ED7] to-[#FFC107] text-white items-center justify-center font-black text-sm shadow-md"
+                    style={{ display: selectedStudentForLog.student.avatar_url ? "none" : "flex" }}
+                  >
+                    {getInitials(selectedStudentForLog.student.full_name)}
+                  </div>
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
@@ -2278,8 +2339,25 @@ export default function AdminAttendancePage() {
             {/* Modal Header */}
             <div className="flex items-start justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
               <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-2xl bg-linear-to-br from-[#0B5ED7] to-[#FFC107] text-white flex items-center justify-center font-black text-sm shadow-md">
-                  {getInitials(studentHistoryData.student.full_name)}
+                <div className="relative shrink-0 h-12 w-12">
+                  {studentHistoryData.student.avatar_url ? (
+                    <img
+                      src={studentHistoryData.student.avatar_url}
+                      alt={studentHistoryData.student.full_name}
+                      className="h-12 w-12 rounded-2xl object-cover border border-zinc-200 dark:border-zinc-700 shadow-md"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLElement).style.display = "none";
+                        const fb = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (fb) fb.style.display = "flex";
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className="h-12 w-12 rounded-2xl bg-linear-to-br from-[#0B5ED7] to-[#FFC107] text-white items-center justify-center font-black text-sm shadow-md"
+                    style={{ display: studentHistoryData.student.avatar_url ? "none" : "flex" }}
+                  >
+                    {getInitials(studentHistoryData.student.full_name)}
+                  </div>
                 </div>
                 <div>
                   <div className="flex items-center gap-2">

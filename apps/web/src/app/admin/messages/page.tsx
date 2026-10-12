@@ -222,9 +222,10 @@ export default function CommunicationsPortalPage() {
             const existing = (idKey && map.get(idKey)) || (emailKey && map.get(emailKey));
 
             if (!existing) {
+              const rawCode = (p.student_code || p.studentCode || p.member_id || "").trim();
               const newStd: Student = {
                 id: p.id,
-                studentCode: p.member_id || p.student_code || `SDL-2026-${String(p.id).slice(-4).toUpperCase()}`,
+                studentCode: rawCode && !/^\d+$/.test(rawCode) ? rawCode : `SDL-${new Date().getFullYear()}-${String(map.size + 1).padStart(3, "0")}`,
                 fullName: p.full_name || p.fullName || "Student Member",
                 email: p.email || "",
                 phone: p.phone || "",
@@ -442,6 +443,15 @@ export default function CommunicationsPortalPage() {
         priority: broadcastPriority,
         targetAudience: group.targetAudience,
       });
+
+      // Also dispatch real-time system notification to ensure native popups across devices
+      await createNotification({
+        recipientRole: "all",
+        title: `📢 ${broadcastTitle.trim()}`,
+        message: broadcastBody.trim(),
+        type: "announcement",
+        actionUrl: "/student/messages",
+      }).catch(console.error);
 
       setBroadcastTitle("");
       setBroadcastBody("");
@@ -673,8 +683,23 @@ export default function CommunicationsPortalPage() {
                         : "hover:bg-white/60 dark:hover:bg-zinc-800/50"
                     }`}
                   >
-                    <div className="relative shrink-0">
-                      <div className="h-10 w-10 rounded-2xl bg-[#0A2E5C] text-[#FFC107] font-bold flex items-center justify-center text-xs shadow-xs">
+                    <div className="relative shrink-0 h-10 w-10">
+                      {((item.student as any).avatar_url || (item.student as any).avatarUrl) ? (
+                        <img
+                          src={(item.student as any).avatar_url || (item.student as any).avatarUrl}
+                          alt={displayName}
+                          className="h-10 w-10 rounded-2xl object-cover border border-zinc-200 dark:border-zinc-700 shadow-xs"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = "none";
+                            const fb = e.currentTarget.nextElementSibling as HTMLElement;
+                            if (fb) fb.style.display = "flex";
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        className="h-10 w-10 rounded-2xl bg-[#0A2E5C] text-[#FFC107] font-bold items-center justify-center text-xs shadow-xs"
+                        style={{ display: ((item.student as any).avatar_url || (item.student as any).avatarUrl) ? "none" : "flex" }}
+                      >
                         {initials}
                       </div>
                       {item.unreadCount > 0 && (

@@ -29,21 +29,11 @@ import {
   Sparkles,
   ShieldCheck,
   CheckCircle2,
-  QrCode,
-  Fingerprint
+  QrCode
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { 
-  isWebAuthnSupported, 
-  hasRegisteredPasskey, 
-  getBiometricProfile, 
-  registerPasskey, 
-  removePasskey, 
-  type BiometricProfile 
-} from "@/lib/webauthn";
 import { BrandLogo } from "@/components/BrandLogo";
-import { BiometricAppLock } from "@/components/BiometricAppLock";
 import { AdminStudentQrScannerModal } from "@/components/AdminStudentQrScannerModal";
 import { 
   getNotifications, 
@@ -127,52 +117,6 @@ export default function AdminLayout({
   const [searchQuery, setSearchQuery] = useState("");
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
 
-  // Biometric Passkey state
-  const [biometricSupported, setBiometricSupported] = useState(false);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
-  const [biometricProfile, setBiometricProfile] = useState<BiometricProfile | null>(null);
-  const [isBiometricActionLoading, setIsBiometricActionLoading] = useState(false);
-  const [biometricStatusMsg, setBiometricStatusMsg] = useState("");
-
-  useEffect(() => {
-    if (isWebAuthnSupported()) {
-      setBiometricSupported(true);
-      const isEnabled = hasRegisteredPasskey();
-      setBiometricEnabled(isEnabled);
-      if (isEnabled) {
-        setBiometricProfile(getBiometricProfile());
-      }
-    }
-  }, []);
-
-  const handleToggleBiometric = async () => {
-    setIsBiometricActionLoading(true);
-    setBiometricStatusMsg("");
-
-    if (biometricEnabled) {
-      const res = await removePasskey();
-      if (res.success) {
-        setBiometricEnabled(false);
-        setBiometricProfile(null);
-        setBiometricStatusMsg("Biometric login & App Lock removed.");
-      } else {
-        setBiometricStatusMsg(res.error || "Failed to remove biometric login.");
-      }
-      setIsBiometricActionLoading(false);
-      return;
-    }
-
-    const enteredPassword = window.prompt("Enter your account password to enable 1-touch login after logout (optional):")?.trim() || undefined;
-    const res = await registerPasskey(undefined, enteredPassword);
-    if (res.success) {
-      setBiometricEnabled(true);
-      setBiometricProfile(getBiometricProfile());
-      setBiometricStatusMsg("Biometric login & App Lock enabled!");
-    } else {
-      setBiometricStatusMsg(res.error || "Biometric registration failed.");
-    }
-    setIsBiometricActionLoading(false);
-  };
 
   // Auto-close mobile drawer on route change
   useEffect(() => {
@@ -447,11 +391,7 @@ export default function AdminLayout({
 
   const handleLogout = async () => {
     const supabase = createClient();
-    if (hasRegisteredPasskey()) {
-      await supabase.auth.signOut({ scope: "local" });
-    } else {
-      await supabase.auth.signOut();
-    }
+    await supabase.auth.signOut();
     clearInactivityTracking();
     router.push("/login");
   };
@@ -479,8 +419,6 @@ export default function AdminLayout({
       <meta name="robots" content="noindex, nofollow" />
       <title>{`Admin Portal | ${BRAND_CONFIG.fullName}`}</title>
 
-      {/* Biometric App Lock Overlay for Admin */}
-      <BiometricAppLock userName={adminUser.name} userRole={adminUser.role} />
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
@@ -574,60 +512,6 @@ export default function AdminLayout({
             </div>
           </div>
 
-          {/* Biometric Passkey Quick Toggle */}
-          {biometricSupported && (
-            <div className="rounded-2xl border border-zinc-800 bg-[#0A2E5C]/70 p-3 shadow-xs">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
-                    biometricEnabled
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                      : "bg-[#FFC107]/20 text-[#FFC107] border border-[#FFC107]/30"
-                  }`}>
-                    <Fingerprint className={`h-4 w-4 ${isBiometricActionLoading ? "animate-spin" : ""}`} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-bold text-white truncate flex items-center gap-1.5">
-                      <span>{biometricEnabled ? "Biometric & App Lock" : "Touch / Face ID"}</span>
-                      {biometricEnabled && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      )}
-                    </p>
-                    <p className="text-[10px] text-zinc-400 truncate">
-                      {biometricEnabled ? "1-Touch Login & Screen Lock Active" : "1-Touch Quick Sign In & App Lock"}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleToggleBiometric}
-                  disabled={isBiometricActionLoading}
-                  className={`shrink-0 rounded-xl px-2.5 py-1.5 text-[10px] font-black transition active:scale-95 cursor-pointer ${
-                    biometricEnabled
-                      ? "bg-zinc-800 text-zinc-300 hover:bg-rose-950/60 hover:text-rose-400 border border-zinc-700 hover:border-rose-800"
-                      : "bg-[#FFC107] text-[#0A2E5C] hover:bg-[#FFA000] shadow-xs"
-                  }`}
-                >
-                  {isBiometricActionLoading
-                    ? "..."
-                    : biometricEnabled
-                    ? "Disable"
-                    : "Enable"}
-                </button>
-              </div>
-
-              {biometricStatusMsg && (
-                <p className={`mt-2 text-[10px] font-medium leading-tight ${
-                  biometricStatusMsg.includes("success") || biometricStatusMsg.includes("enabled")
-                    ? "text-emerald-400"
-                    : "text-amber-400"
-                }`}>
-                  {biometricStatusMsg}
-                </p>
-              )}
-            </div>
-          )}
 
           <button 
             onClick={handleLogout}

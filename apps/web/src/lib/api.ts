@@ -147,7 +147,7 @@ export interface NotificationRecord {
   recipientId?: string | null;
   title: string;
   message: string;
-  type: 'fee_reminder' | 'signup' | 'payment' | 'message' | 'attendance' | 'general';
+  type: 'fee_reminder' | 'signup' | 'payment' | 'message' | 'attendance' | 'general' | 'announcement' | 'exam' | 'exam_result';
   actionUrl?: string | null;
   isRead: boolean;
   createdAt: string;
@@ -1569,22 +1569,44 @@ export async function getFeesHistory(studentId?: string): Promise<FeeRecord[]> {
 }
 
 /**
- * Generate formatted student code: YYMMXXX (e.g. 2609001)
- * Year last 2 digits + current month 2 digits + 3-digit sequence
+ * Generate formatted student code: SDL-YYYY-XXX (e.g. SDL-2026-001)
+ * Standard identifier used across all library portals and sections
  */
 export function generateStudentCode(existingCodes?: (string | undefined | null)[]): string {
   const now = new Date();
-  const yy = now.getFullYear().toString().slice(-2);
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const prefix = `${yy}${mm}`;
+  const year = now.getFullYear();
+  const prefix = `SDL-${year}-`;
 
   let maxSeq = 0;
   if (existingCodes && existingCodes.length > 0) {
     for (const raw of existingCodes) {
       if (!raw) continue;
-      const clean = String(raw).replace(/[^0-9]/g, "");
-      if (clean.startsWith(prefix) && clean.length >= prefix.length + 3) {
-        const num = parseInt(clean.slice(prefix.length, prefix.length + 3), 10);
+      const str = String(raw).trim().toUpperCase();
+
+      // Match SDL-YYYY-XXX (e.g. SDL-2026-001)
+      const matchYearSeq = str.match(/SDL-\d{4}-(\d+)/i);
+      if (matchYearSeq) {
+        const num = parseInt(matchYearSeq[1], 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
+        }
+        continue;
+      }
+
+      // Match SDL-XXX (e.g. SDL-001)
+      const matchSimple = str.match(/SDL-(\d+)/i);
+      if (matchSimple) {
+        const num = parseInt(matchSimple[1], 10);
+        if (!isNaN(num) && num > maxSeq) {
+          maxSeq = num;
+        }
+        continue;
+      }
+
+      // Match legacy numeric codes like 2610001 (YYMMXXX)
+      const matchLegacy = str.match(/^\d{4}(\d{3})$/);
+      if (matchLegacy) {
+        const num = parseInt(matchLegacy[1], 10);
         if (!isNaN(num) && num > maxSeq) {
           maxSeq = num;
         }
@@ -2082,15 +2104,28 @@ export async function createAnnouncement(data: {
     console.warn('[createAnnouncement] Supabase notice:', sbErr);
   }
 
-  // 2. Worker / D1 API sync (cold backup)
-  try {
-    await fetchApi<{ success: boolean; announcement: Announcement }>('/api/announcements', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  } catch {}
+    // 2. Broadcast notification across tabs & trigger native notification
+    try {
+      const { broadcastNotification, triggerNativeNotification } = await import('./pushNotify');
+      broadcastNotification({
+        id: annId,
+        recipientRole: 'all',
+        title: `📢 ${data.title}`,
+        message: data.message,
+        type: 'announcement',
+        actionUrl: '/student/messages',
+      });
+      if (typeof window !== 'undefined') {
+        triggerNativeNotification({
+          title: `📢 ${data.title}`,
+          body: data.message,
+          url: '/student/messages',
+          tag: annId,
+        }).catch(() => {});
+      }
+    } catch {}
 
-  return { success: true, announcement: newAnn };
+    return { success: true, announcement: newAnn };
 }
 
 export async function deleteAnnouncement(id: string) {
@@ -2525,6 +2560,13 @@ export async function updateStudentComplete(student: {
   fee_status?: string;
   due_amount?: number;
   address?: string;
+  dob?: string | null;
+  gender?: string | null;
+  join_date?: string | null;
+  continue_date?: string | null;
+  is_service_stopped?: boolean;
+  service_stopped_at?: string | null;
+  service_stop_reason?: string | null;
 }): Promise<boolean> {
   // 1. Standardize and normalize phone numbers
   const cleanDigits = (student.phone || '').replace(/\D/g, '').slice(-10);
@@ -2550,6 +2592,14 @@ export async function updateStudentComplete(student: {
     address: student.address || 'Madhupur, Sonbhadra, UP',
     updated_at: new Date().toISOString(),
   };
+
+  if (student.dob !== undefined) supaPayload.dob = student.dob;
+  if (student.gender !== undefined) supaPayload.gender = student.gender;
+  if (student.join_date !== undefined) supaPayload.join_date = student.join_date;
+  if (student.continue_date !== undefined) supaPayload.continue_date = student.continue_date;
+  if (student.is_service_stopped !== undefined) supaPayload.is_service_stopped = student.is_service_stopped;
+  if (student.service_stopped_at !== undefined) supaPayload.service_stopped_at = student.service_stopped_at;
+  if (student.service_stop_reason !== undefined) supaPayload.service_stop_reason = student.service_stop_reason;
 
   // 2. Primary: Update Supabase profiles by id, student_code and email
   try {

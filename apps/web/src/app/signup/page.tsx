@@ -32,7 +32,8 @@ import {
   Check,
   Camera,
   Upload,
-  Trash2
+  Trash2,
+  Calendar
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
@@ -167,6 +168,9 @@ function SignupForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState(emailParam);
   const [phone, setPhone] = useState("");
+  const [dob, setDob] = useState("");
+  const [gender, setGender] = useState<"Male" | "Female" | "Other">("Male");
+  const [joinDate, setJoinDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [parentName, setParentName] = useState("");
   const [parentPhone, setParentPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -322,6 +326,9 @@ function SignupForm() {
                 full_name: studentName,
                 email: user.email,
                 phone: formattedPhone,
+                dob: parsed.dob || null,
+                gender: parsed.gender || "Male",
+                join_date: parsed.joinDate || new Date().toISOString().split("T")[0],
                 parent_name: parsed.parentName,
                 parent_phone: formattedParentPhone,
                 address: parsed.address,
@@ -398,6 +405,9 @@ function SignupForm() {
     setName("");
     setEmail("");
     setPhone("");
+    setDob("");
+    setGender("Male");
+    setJoinDate(new Date().toISOString().split("T")[0]);
     setParentName("");
     setParentPhone("");
     setAddress("");
@@ -568,6 +578,9 @@ function SignupForm() {
         full_name: name,
         email: cleanEmail,
         phone: fullPhone,
+        dob: dob || null,
+        gender: gender || "Male",
+        join_date: joinDate || new Date().toISOString().split("T")[0],
         parent_name: parentName,
         parent_phone: fullParentPhone,
         address: address,
@@ -638,6 +651,9 @@ function SignupForm() {
     sessionStorage.setItem("pending_student_signup", JSON.stringify({
       name,
       phone: `+91 ${phone}`,
+      dob,
+      gender,
+      joinDate,
       parentName,
       parentPhone: `+91 ${parentPhone}`,
       address,
@@ -947,7 +963,65 @@ function SignupForm() {
                   </div>
                 </div>
 
-                <div className="sm:col-span-2">
+                <div>
+                  <label className="block text-xs font-semibold text-[#0A2E5C] dark:text-zinc-200 mb-1.5">
+                    Date of Birth (DOB) <span className="text-zinc-400 font-normal">(Optional)</span>
+                  </label>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-400">
+                      <Calendar className="h-4 w-4" />
+                    </div>
+                    <input
+                      type="date"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      max={new Date().toISOString().split("T")[0]}
+                      className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 py-2.5 pl-10 pr-3 text-xs text-[#0A2E5C] placeholder-zinc-400 focus:border-[#FFC107] focus:outline-none focus:ring-2 focus:ring-[#FFC107]/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white transition-all font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#0A2E5C] dark:text-zinc-200 mb-1.5">
+                    Gender <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["Male", "Female", "Other"] as const).map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setGender(g)}
+                        className={`py-2 px-3 rounded-xl text-xs font-semibold border transition-all text-center cursor-pointer ${
+                          gender === g
+                            ? "bg-[#0A2E5C] text-white border-[#0A2E5C] dark:bg-[#FFC107] dark:text-[#0A2E5C] dark:border-[#FFC107] shadow-xs"
+                            : "bg-[#F8FAFC]/50 text-zinc-600 border-[#E5E7EB] hover:bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700"
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#0A2E5C] dark:text-zinc-200 mb-1.5">
+                    Admission / Join Date <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-400">
+                      <Calendar className="h-4 w-4" />
+                    </div>
+                    <input
+                      type="date"
+                      required
+                      value={joinDate}
+                      onChange={(e) => setJoinDate(e.target.value)}
+                      className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 py-2.5 pl-10 pr-3 text-xs text-[#0A2E5C] placeholder-zinc-400 focus:border-[#FFC107] focus:outline-none focus:ring-2 focus:ring-[#FFC107]/20 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white transition-all font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
                   <label className="block text-xs font-semibold text-[#0A2E5C] dark:text-zinc-200 mb-1.5">
                     Course / Target Exam <span className="text-rose-500">*</span>
                   </label>

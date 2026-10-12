@@ -247,8 +247,17 @@ export default function StudentMessagesPage() {
       }
     };
     window.addEventListener("admin_contact_updated", handleAdminPhoneUpdate);
+
+    const handleAnnouncementUpdate = () => {
+      getAnnouncements().then((list) => {
+        if (list) setAnnouncements(list);
+      }).catch(() => {});
+    };
+    window.addEventListener("genius_announcement_updated", handleAnnouncementUpdate);
+
     return () => {
       window.removeEventListener("admin_contact_updated", handleAdminPhoneUpdate);
+      window.removeEventListener("genius_announcement_updated", handleAnnouncementUpdate);
     };
   }, []);
 

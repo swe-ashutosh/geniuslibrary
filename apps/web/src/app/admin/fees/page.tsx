@@ -247,7 +247,9 @@ export default function FeesAndExpensesManagement() {
           if (!isMasterAdminEmail(p.email) && p.role !== "admin" && hasPhone) {
             const stdObj: StudentProfile = {
               id: p.id,
-              studentCode: p.student_code || p.member_id || `SDL-${p.id.slice(-4).toUpperCase()}`,
+              studentCode: (p.student_code && !/^\d+$/.test(p.student_code))
+                ? p.student_code
+                : `SDL-${new Date().getFullYear()}-${String(unifiedStudents.length + 1).padStart(3, "0")}`,
               fullName: p.full_name || "Student Member",
               phone: p.phone || "",
               email: p.email || "",

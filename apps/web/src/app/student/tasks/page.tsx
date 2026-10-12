@@ -40,9 +40,12 @@ import { createClient } from "@/lib/supabase/client";
 import { 
   LibraryExam, 
   StudentExamMark, 
+  StudentExamResultItem,
   getLibraryExams, 
   getResultsForStudent,
-  fetchResultsForStudent
+  fetchResultsForStudent,
+  enrollStudentInExam,
+  unenrollStudentFromExam
 } from "@/lib/examResults";
 
 interface TaskItem {
@@ -54,22 +57,28 @@ interface TaskItem {
   targetTime?: string;
 }
 
-interface StudentExamResultItem {
-  exam: LibraryExam;
-  mark?: StudentExamMark;
-  rank?: number;
-  totalAppeared: number;
-}
-
 export default function StudentActivityPage() {
-  const [activeTab, setActiveTab] = useState<"tasks" | "results">("results");
+  const [activeTab, setActiveTab] = useState<"results" | "tasks">("results");
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [mounted, setMounted] = useState(false);
   const [studentExams, setStudentExams] = useState<StudentExamResultItem[]>([]);
+  const [actionToast, setActionToast] = useState<string | null>(null);
+  const [currentUserInfo, setCurrentUserInfo] = useState<{
+    id?: string;
+    email?: string;
+    studentCode?: string;
+    fullName?: string;
+    seatNumber?: string;
+  }>({});
   
   // Modals
   const [selectedScorecard, setSelectedScorecard] = useState<StudentExamResultItem | null>(null);
   const [selectedAnswerKeyExam, setSelectedAnswerKeyExam] = useState<LibraryExam | null>(null);
+
+  const showToast = (msg: string) => {
+    setActionToast(msg);
+    setTimeout(() => setActionToast(null), 4000);
+  };
 
   // Load persistent personal tasks from local storage
   useEffect(() => {
@@ -88,13 +97,23 @@ export default function StudentActivityPage() {
         const { data: { user } } = await supabase.auth.getUser();
         let studentCode = "";
         let fullName = user?.user_metadata?.full_name || "";
+        let seatNumber = "";
         if (user) {
-          const { data: profile } = await supabase.from("profiles").select("student_code, full_name").eq("id", user.id).maybeSingle();
+          const { data: profile } = await supabase.from("profiles").select("student_code, full_name, seat_number").eq("id", user.id).maybeSingle();
           if (profile) {
             studentCode = profile.student_code || "";
             if (profile.full_name) fullName = profile.full_name;
+            seatNumber = profile.seat_number || "";
           }
         }
+        setCurrentUserInfo({
+          id: user?.id,
+          email: user?.email,
+          studentCode,
+          fullName,
+          seatNumber,
+        });
+
         const results = await fetchResultsForStudent({
           id: user?.id,
           email: user?.email,
@@ -107,6 +126,16 @@ export default function StudentActivityPage() {
       }
     }
     loadExams();
+
+    const handleExamsUpdated = () => {
+      loadExams();
+    };
+    window.addEventListener("genius_exams_updated", handleExamsUpdated);
+    window.addEventListener("genius_enrollment_updated", handleExamsUpdated);
+    return () => {
+      window.removeEventListener("genius_exams_updated", handleExamsUpdated);
+      window.removeEventListener("genius_enrollment_updated", handleExamsUpdated);
+    };
   }, []);
 
   const saveTasks = (newTasks: TaskItem[]) => {
@@ -171,9 +200,60 @@ export default function StudentActivityPage() {
     setNewTaskTitle("");
   };
 
+  const handleEnroll = async (exam: LibraryExam) => {
+    try {
+      await enrollStudentInExam({
+        id: `enroll_${exam.id}_${currentUserInfo.id || "student"}`,
+        examId: exam.id,
+        examTitle: exam.title,
+        studentId: currentUserInfo.id || "student",
+        studentName: currentUserInfo.fullName || "Student Member",
+        studentEmail: currentUserInfo.email || "",
+        studentCode: currentUserInfo.studentCode,
+        seatNumber: currentUserInfo.seatNumber,
+      });
+
+      setStudentExams((prev) =>
+        prev.map((item) =>
+          item.exam.id === exam.id
+            ? { ...item, isEnrolled: true, enrolledCount: (item.enrolledCount || 0) + 1 }
+            : item
+        )
+      );
+
+      showToast(`✓ You are enrolled in "${exam.title}"! Candidate count updated.`);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleUnenroll = async (exam: LibraryExam) => {
+    if (!confirm(`Do you want to withdraw/cancel your enrollment for "${exam.title}"?`)) return;
+    try {
+      await unenrollStudentFromExam(exam.id, {
+        id: currentUserInfo.id,
+        email: currentUserInfo.email,
+        studentCode: currentUserInfo.studentCode,
+      });
+
+      setStudentExams((prev) =>
+        prev.map((item) =>
+          item.exam.id === exam.id
+            ? { ...item, isEnrolled: false, enrolledCount: Math.max(0, (item.enrolledCount || 1) - 1) }
+            : item
+        )
+      );
+
+      showToast(`Enrollment withdrawn for "${exam.title}". Removed from candidates.`);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Metrics for exams
   const evaluatedExams = studentExams.filter((item) => item.mark !== undefined);
   const totalExamsTaken = evaluatedExams.length;
+  const myEnrolledCount = studentExams.filter((item) => item.isEnrolled).length;
   const avgScore = totalExamsTaken > 0 
     ? Math.round(evaluatedExams.reduce((acc, curr) => acc + (curr.mark?.percentage || 0), 0) / totalExamsTaken)
     : 0;
@@ -185,6 +265,25 @@ export default function StudentActivityPage() {
 
   return (
     <div className="space-y-6">
+      {/* Action Confirmation Toast */}
+      {actionToast && (
+        <aside
+          aria-label="Action Status"
+          className="fixed top-4 right-4 sm:top-6 sm:right-6 z-[999] max-w-sm w-[calc(100%-2rem)] animate-slideDown shadow-2xl"
+        >
+          <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#0A2E5C] text-white border-2 border-[#FFC107] shadow-xl">
+            <Sparkles className="h-4 w-4 text-[#FFC107] shrink-0" />
+            <p className="text-xs font-bold flex-1 leading-snug">{actionToast}</p>
+            <button
+              onClick={() => setActionToast(null)}
+              className="text-white/70 hover:text-white p-1 cursor-pointer shrink-0"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </aside>
+      )}
+
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -236,7 +335,7 @@ export default function StudentActivityPage() {
               { label: "Tests Attempted", val: `${totalExamsTaken}`, sub: "Library Conducted", icon: FileText, color: "blue" },
               { label: "Average Score", val: `${avgScore}%`, sub: "Across all tests", icon: Percent, color: "emerald" },
               { label: "Top Library Rank", val: bestRank === 999 ? "--" : `#${bestRank}`, sub: "Among batch students", icon: Trophy, color: "amber" },
-              { label: "Upcoming Tests", val: `${studentExams.filter(e => !e.mark).length}`, sub: "Scheduled in hall", icon: Calendar, color: "purple" },
+              { label: "Upcoming Tests", val: `${studentExams.filter(e => !e.mark).length}`, sub: myEnrolledCount > 0 ? `${myEnrolledCount} Enrolled by You` : "Open for Enrollment", icon: Calendar, color: "purple" },
             ].map((m, idx) => (
               <div key={idx} className="rounded-3xl border border-[#E5E7EB] bg-white p-4 sm:p-5 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C]">
                 <div className="flex items-center gap-2 mb-2">
@@ -282,13 +381,24 @@ export default function StudentActivityPage() {
                         <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-[#F8FAFC] dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
                           {exam.category}
                         </span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          isDeclared
-                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" 
-                            : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
-                        }`}>
-                          {isDeclared ? "Result Declared" : "Under Evaluation"}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 flex items-center gap-1">
+                            👥 {item.enrolledCount || 0} Enrolled
+                          </span>
+                          {item.isEnrolled ? (
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 flex items-center gap-1">
+                              ✓ Enrolled
+                            </span>
+                          ) : (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              isDeclared
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" 
+                                : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                            }`}>
+                              {isDeclared ? "Result Declared" : "Open"}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <h3 className="text-sm font-black text-[#0A2E5C] dark:text-white leading-snug">
@@ -333,11 +443,39 @@ export default function StudentActivityPage() {
                         <p className="text-[11px] text-purple-600 dark:text-purple-400 leading-relaxed">
                           Conducted at {BRAND_CONFIG.fullName} examination hall. Marks will be declared here once evaluated.
                         </p>
+                        {item.isEnrolled && (
+                          <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 pt-1">
+                            ✓ Your seat is registered for this mock test.
+                          </p>
+                        )}
                       </div>
                     )}
 
-                    {/* Action Buttons: View Scorecard & Answer Key */}
+                    {/* Action Buttons: Enroll / Withdraw, View Scorecard & Answer Key */}
                     <div className="pt-1 flex flex-col sm:flex-row items-center gap-2">
+                      {!isDeclared && (
+                        <>
+                          {item.isEnrolled ? (
+                            <button
+                              onClick={() => handleUnenroll(exam)}
+                              className="w-full flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800 p-2 text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+                              title="Click to withdraw/cancel your exam enrollment"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              <span>Withdraw / Cancel Enrollment</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleEnroll(exam)}
+                              className="w-full flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white p-2 text-xs font-black transition shadow-xs cursor-pointer active:scale-95"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              <span>✓ Enroll in Exam</span>
+                            </button>
+                          )}
+                        </>
+                      )}
+
                       {isDeclared && (
                         <button
                           onClick={() => setSelectedScorecard(item)}

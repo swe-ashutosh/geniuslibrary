@@ -326,7 +326,8 @@ export default function StaffPortal() {
         const isCheckedIn = activeStudentCheckInMap.has(s.id) || (s.fullName && activeStudentCheckInMap.has(s.fullName.toLowerCase()));
         const checkInTime = isCheckedIn ? (activeStudentCheckInMap.get(s.id) || activeStudentCheckInMap.get(s.fullName.toLowerCase())) : undefined;
 
-        const code = s.studentCode || (s.id ? `SDL-${String(s.id).slice(-4).toUpperCase()}` : `SDL-${String(idx + 1).padStart(3, "0")}`);
+        const rawCode = ((s as any).student_code || s.studentCode || "").trim();
+        const code = rawCode && !/^\d+$/.test(rawCode) ? rawCode : `SDL-2026-${String(idx + 1).padStart(3, "0")}`;
         const plan = s.membershipPlan || (s as any).membership_plan || "General";
         const isReserved = plan === "Reserved Seat" || (s as any).is_reserved === true || String(plan).toLowerCase().includes("reserved");
 
