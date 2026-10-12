@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import jsQR from "jsqr";
 import QRCode from "qrcode";
-import { smartQrScanAttendance, reportEmptyDeskDispute } from "@/lib/api";
+import { smartQrScanAttendance, reportEmptyDeskDispute, sanitizeSeatNumber } from "@/lib/api";
 import { uploadAttendancePhoto } from "@/lib/supabase/storage";
 
 interface LiveAttendanceCameraModalProps {
@@ -169,35 +169,7 @@ function playScanBeep() {
   };
 
   const formatSeat = (raw: string): string | null => {
-    if (!raw) return null;
-    const clean = raw.toUpperCase().trim().replace(/^#/, "");
-
-    // e.g. S-01, S-15, S-100
-    if (/^S-[0-9]{1,3}$/i.test(clean)) {
-      const num = clean.replace(/^S-/, "");
-      return `S-${String(parseInt(num, 10)).padStart(2, "0")}`;
-    }
-
-    // e.g. S15 or S01
-    const sMatch = clean.match(/^S([0-9]{1,3})$/i);
-    if (sMatch) {
-      return `S-${String(parseInt(sMatch[1], 10)).padStart(2, "0")}`;
-    }
-
-    // e.g. A-01, B-05
-    const zoneMatch = clean.match(/^([A-Z])[\s_-]?([0-9]{1,3})$/);
-    if (zoneMatch) {
-      const zone = zoneMatch[1];
-      const num = String(parseInt(zoneMatch[2], 10)).padStart(2, "0");
-      return `${zone}-${num}`;
-    }
-
-    // Just numbers: e.g. "15" -> "S-15"
-    if (/^[0-9]{1,3}$/.test(clean)) {
-      return `S-${clean.padStart(2, "0")}`;
-    }
-
-    return clean;
+    return sanitizeSeatNumber(raw);
   };
 
   // Helper to grab a silent snapshot from the video feed covering the 100% full camera area

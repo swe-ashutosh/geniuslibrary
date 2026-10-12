@@ -43,6 +43,7 @@ import {
   type BiometricProfile 
 } from "@/lib/webauthn";
 import { BrandLogo } from "@/components/BrandLogo";
+import { BiometricAppLock } from "@/components/BiometricAppLock";
 import { AdminStudentQrScannerModal } from "@/components/AdminStudentQrScannerModal";
 import { 
   getNotifications, 
@@ -153,7 +154,7 @@ export default function AdminLayout({
       if (res.success) {
         setBiometricEnabled(false);
         setBiometricProfile(null);
-        setBiometricStatusMsg("Biometric login removed for this device.");
+        setBiometricStatusMsg("Biometric login & App Lock removed.");
       } else {
         setBiometricStatusMsg(res.error || "Failed to remove biometric login.");
       }
@@ -161,11 +162,12 @@ export default function AdminLayout({
       return;
     }
 
-    const res = await registerPasskey();
+    const enteredPassword = window.prompt("Enter your account password to enable 1-touch login after logout (optional):")?.trim() || undefined;
+    const res = await registerPasskey(undefined, enteredPassword);
     if (res.success) {
       setBiometricEnabled(true);
       setBiometricProfile(getBiometricProfile());
-      setBiometricStatusMsg("Biometric login enabled successfully!");
+      setBiometricStatusMsg("Biometric login & App Lock enabled!");
     } else {
       setBiometricStatusMsg(res.error || "Biometric registration failed.");
     }
@@ -476,6 +478,10 @@ export default function AdminLayout({
     <div className="flex h-screen overflow-hidden bg-[#F3F4F6] dark:bg-[#141A24] print:h-auto print:overflow-visible print:bg-white print:block">
       <meta name="robots" content="noindex, nofollow" />
       <title>{`Admin Portal | ${BRAND_CONFIG.fullName}`}</title>
+
+      {/* Biometric App Lock Overlay for Admin */}
+      <BiometricAppLock userName={adminUser.name} userRole={adminUser.role} />
+
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
         <div 
@@ -582,13 +588,13 @@ export default function AdminLayout({
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-bold text-white truncate flex items-center gap-1.5">
-                      <span>{biometricEnabled ? "Biometric Active" : "Touch / Face ID"}</span>
+                      <span>{biometricEnabled ? "Biometric & App Lock" : "Touch / Face ID"}</span>
                       {biometricEnabled && (
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       )}
                     </p>
                     <p className="text-[10px] text-zinc-400 truncate">
-                      {biometricEnabled ? (biometricProfile?.deviceName || "This Device") : "1-Touch Quick Sign In"}
+                      {biometricEnabled ? "1-Touch Login & Screen Lock Active" : "1-Touch Quick Sign In & App Lock"}
                     </p>
                   </div>
                 </div>

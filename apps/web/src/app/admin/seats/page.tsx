@@ -184,84 +184,107 @@ export default function SeatManagementPage() {
           });
         }
 
-        if (allAssignedStudents.length > 0) {
-          setSeats((prev) => {
-            const nextSeats = prev.map((seat) => {
-              const matched = allAssignedStudents.find((p: any) => {
-                return matchSeatNumber(p.seatNumber, seat.id);
-              });
+        setSeats((prev) => {
+          const nextSeats = prev.map((seat) => {
+            const matched = allAssignedStudents.find((p: any) => {
+              return matchSeatNumber(p.seatNumber, seat.id);
+            });
 
-              if (matched) {
-                const studentFees = (feesList || []).filter((f: any) => f.studentId === matched.studentId || f.studentName?.toLowerCase() === matched.fullName?.toLowerCase());
-                const dueFees = studentFees.filter((f: any) => !f.paid);
-                const totalDueFromFees = dueFees.reduce((sum: number, f: any) => sum + (f.amount || 0), 0);
+            if (matched) {
+              const studentFees = (feesList || []).filter((f: any) => f.studentId === matched.studentId || f.studentName?.toLowerCase() === matched.fullName?.toLowerCase());
+              const dueFees = studentFees.filter((f: any) => !f.paid);
+              const totalDueFromFees = dueFees.reduce((sum: number, f: any) => sum + (f.amount || 0), 0);
 
-                // Authoritative Single Source of Truth: Supabase profiles
-                const profileDueAmount = matched.dueAmount || 0;
-                const effectiveDueAmount = profileDueAmount > 0 ? profileDueAmount : totalDueFromFees;
-                const isDue = matched.feeStatus === "Due" || effectiveDueAmount > 0;
+              // Authoritative Single Source of Truth: Supabase profiles
+              const profileDueAmount = matched.dueAmount || 0;
+              const effectiveDueAmount = profileDueAmount > 0 ? profileDueAmount : totalDueFromFees;
+              const isDue = matched.feeStatus === "Due" || effectiveDueAmount > 0;
 
-                const todayAtt = (attendanceList || []).find((att: any) => 
-                  att.studentId === matched.studentId || 
-                  matchSeatNumber(att.seatNumber, seat.id) ||
-                  (att.studentName && matched.fullName && att.studentName.toLowerCase() === matched.fullName.toLowerCase())
-                );
+              const todayAtt = (attendanceList || []).find((att: any) => 
+                att.studentId === matched.studentId || 
+                matchSeatNumber(att.seatNumber, seat.id) ||
+                (att.studentName && matched.fullName && att.studentName.toLowerCase() === matched.fullName.toLowerCase())
+              );
 
-                const hasCheckedInToday = !!todayAtt && (todayAtt.status === "in_progress" || todayAtt.status === "completed" || !!todayAtt.checkIn);
-                const hasCheckedOutToday = !!todayAtt && !!todayAtt.checkOut && todayAtt.checkOut !== "In Progress" && todayAtt.checkOut !== "—";
+              const hasCheckedInToday = !!todayAtt && (todayAtt.status === "in_progress" || todayAtt.status === "completed" || !!todayAtt.checkIn);
+              const hasCheckedOutToday = !!todayAtt && !!todayAtt.checkOut && todayAtt.checkOut !== "In Progress" && todayAtt.checkOut !== "—";
 
-                let todayStatus: "active" | "present" | "absent" = "absent";
-                if (hasCheckedInToday) {
-                  todayStatus = hasCheckedOutToday ? "present" : "active";
-                }
-
-                // If student has a Reserved Seat membership plan, the seat is strictly "reserved" (Red)
-                // If regular/flexi/general student, the seat is "occupied" (Blue)
-                const assignedStatus: SeatData["status"] = matched.isReserved ? "reserved" : "occupied";
-
-                return {
-                  ...seat,
-                  status: assignedStatus,
-                  occupantName: matched.fullName,
-                  occupantEmail: matched.email,
-                  occupantPhone: matched.phone,
-                  occupantShift: matched.shift || "Evening Shift (06:00 PM - 10:00 PM)",
-                  feeStatus: (isDue ? "Due" : "Paid") as "Paid" | "Due",
-                  dueAmount: isDue ? (effectiveDueAmount || 800) : 0,
-                  yesterdayAttendance: (hasCheckedInToday ? "Present" : "Absent") as "Present" | "Absent",
-                  yesterdayTime: hasCheckedInToday ? "08:30 AM - 01:00 PM" : "-",
-                  lastCheckedIn: todayAtt?.checkIn ? `Today, ${todayAtt.checkIn}` : "-",
-                  todayAttendanceStatus: todayStatus,
-                  todayCheckInTime: todayAtt?.checkIn || undefined,
-                  todayCheckOutTime: todayAtt?.checkOut || undefined,
-                };
+              let todayStatus: "active" | "present" | "absent" = "absent";
+              if (hasCheckedInToday) {
+                todayStatus = hasCheckedOutToday ? "present" : "active";
               }
+
+              // If student has a Reserved Seat membership plan, the seat is strictly "reserved" (Red)
+              // If regular/flexi/general student, the seat is "occupied" (Blue)
+              const assignedStatus: SeatData["status"] = matched.isReserved ? "reserved" : "occupied";
 
               return {
                 ...seat,
-                occupantName: undefined,
+                status: assignedStatus,
+                occupantName: matched.fullName,
+                occupantEmail: matched.email,
+                occupantPhone: matched.phone,
+                occupantShift: matched.shift || "Evening Shift (06:00 PM - 10:00 PM)",
+                feeStatus: (isDue ? "Due" : "Paid") as "Paid" | "Due",
+                dueAmount: isDue ? (effectiveDueAmount || 800) : 0,
+                yesterdayAttendance: (hasCheckedInToday ? "Present" : "Absent") as "Present" | "Absent",
+                yesterdayTime: hasCheckedInToday ? "08:30 AM - 01:00 PM" : "-",
+                lastCheckedIn: todayAtt?.checkIn ? `Today, ${todayAtt.checkIn}` : "-",
+                todayAttendanceStatus: todayStatus,
+                todayCheckInTime: todayAtt?.checkIn || undefined,
+                todayCheckOutTime: todayAtt?.checkOut || undefined,
+              };
+            }
+
+            // Check if an unreserved student has been randomly allocated this desk today and is currently active
+            const activeWalkInAtt = (attendanceList || []).find((att: any) => 
+              matchSeatNumber(att.seatNumber, seat.id) &&
+              (!att.checkOut || att.checkOut === "In Progress" || att.checkOut === "—")
+            );
+
+            if (activeWalkInAtt) {
+              return {
+                ...seat,
+                status: "occupied" as SeatData["status"],
+                occupantName: activeWalkInAtt.studentName || "Student Member",
                 occupantEmail: undefined,
                 occupantPhone: undefined,
-                occupantShift: undefined,
-                feeStatus: undefined,
-                dueAmount: undefined,
-                yesterdayAttendance: undefined,
-                yesterdayTime: undefined,
-                lastCheckedIn: undefined,
-                todayAttendanceStatus: undefined,
-                status: (seat.status === "disabled" ? "disabled" : seat.hasLocker ? "locker" : "available") as SeatData["status"],
+                occupantShift: activeWalkInAtt.shiftName || "Flexi Attendance",
+                feeStatus: "Paid" as const,
+                dueAmount: 0,
+                yesterdayAttendance: "Present" as const,
+                yesterdayTime: "-",
+                lastCheckedIn: `Today, ${activeWalkInAtt.checkIn || ""}`,
+                todayAttendanceStatus: "active" as const,
+                todayCheckInTime: activeWalkInAtt.checkIn || undefined,
+                todayCheckOutTime: undefined,
               };
-            });
+            }
 
-            try {
-              if (typeof window !== "undefined") {
-                localStorage.setItem("genius_seats_100_v2", JSON.stringify(nextSeats));
-              }
-            } catch (e) {}
-
-            return nextSeats;
+            return {
+              ...seat,
+              occupantName: undefined,
+              occupantEmail: undefined,
+              occupantPhone: undefined,
+              occupantShift: undefined,
+              feeStatus: undefined,
+              dueAmount: undefined,
+              yesterdayAttendance: undefined,
+              yesterdayTime: undefined,
+              lastCheckedIn: undefined,
+              todayAttendanceStatus: undefined,
+              status: (seat.status === "disabled" ? "disabled" : seat.hasLocker ? "locker" : "available") as SeatData["status"],
+            };
           });
-        }
+
+          try {
+            if (typeof window !== "undefined") {
+              localStorage.setItem("genius_seats_100_v2", JSON.stringify(nextSeats));
+            }
+          } catch (e) {}
+
+          return nextSeats;
+        });
         } catch (err) {
         console.error("Error fetching live student seat links:", err);
       }

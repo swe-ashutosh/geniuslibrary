@@ -6,6 +6,7 @@
 
 import { BRAND_CONFIG, isMasterAdminEmail } from './config';
 import { enqueueAttendanceWhatsApp } from './whatsappBotQueue';
+import { parseDeskNum, matchSeatNumber, formatDeskId } from './seatUtils';
 
 const API_BASE_URL = BRAND_CONFIG.apiUrl;
 
@@ -378,45 +379,292 @@ export async function getSeats(): Promise<{ total: number; available: number; oc
 
 export async function allocateSeat(seatNumber: string, studentId: string, studentName: string, shiftId?: string) {
   try {
-    return await fetchApi('/api/seats/allocate', {
-      method: 'POST',
-      body: JSON.stringify({ seatNumber, studentId, studentName, shiftId }),
-    });
-  } catch {
-    // Local fallback update
-    const seatsList = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
-    const updated = seatsList.map(s => s.seatNumber === seatNumber ? {
-      ...s,
-      isAvailable: false,
-      currentStudentId: studentId,
-      currentStudentName: studentName,
-      shiftId: shiftId || null,
-      occupiedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
-    } : s);
-    setLocalData(STORAGE_KEYS.SEATS, updated);
-    return { success: true, message: `Seat ${seatNumber} allocated to ${studentName}` };
-  }
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    await markSeatOccupiedInSupabase(supabase, seatNumber, studentId, studentName);
+  } catch {}
+  // Local cache update
+  const seatsList = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
+  const updated = seatsList.map(s => matchSeatNumber(s.seatNumber, seatNumber) ? {
+    ...s,
+    isAvailable: false,
+    currentStudentId: studentId,
+    currentStudentName: studentName,
+    shiftId: shiftId || null,
+    occupiedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+  } : s);
+  setLocalData(STORAGE_KEYS.SEATS, updated);
+  return { success: true, message: `Seat ${seatNumber} allocated to ${studentName}` };
 }
 
 export async function vacateSeat(seatNumber: string) {
   try {
-    return await fetchApi('/api/seats/vacate', {
-      method: 'POST',
-      body: JSON.stringify({ seatNumber }),
-    });
-  } catch {
-    const seatsList = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
-    const updated = seatsList.map(s => s.seatNumber === seatNumber ? {
-      ...s,
-      isAvailable: true,
-      currentStudentId: null,
-      currentStudentName: null,
-      shiftId: null,
-      occupiedAt: null,
-    } : s);
-    setLocalData(STORAGE_KEYS.SEATS, updated);
-    return { success: true, message: `Seat ${seatNumber} is now vacant` };
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    await markSeatVacantInSupabase(supabase, null, seatNumber);
+  } catch {}
+  const seatsList = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
+  const updated = seatsList.map(s => matchSeatNumber(s.seatNumber, seatNumber) ? {
+    ...s,
+    isAvailable: true,
+    currentStudentId: null,
+    currentStudentName: null,
+    shiftId: null,
+    occupiedAt: null,
+  } : s);
+  setLocalData(STORAGE_KEYS.SEATS, updated);
+  return { success: true, message: `Seat ${seatNumber} is now vacant` };
+}
+
+// ── SEAT NUMBER SANITIZATION HELPER ─────────────────────────
+// Strips URLs, gate keywords, and cleans desk strings so raw URLs never bleed into the UI or DB.
+export function formatSeatCode(raw: string): string | null {
+  if (!raw) return null;
+  const clean = raw.trim().toUpperCase().replace(/^#/, '');
+  if (!clean || clean === 'MASTER' || clean === 'AUTO' || clean === 'GATE' || clean === 'STAND' || clean === 'DESK') return null;
+
+  // Numbers only: "15" -> "S-15"
+  if (/^[0-9]{1,3}$/.test(clean)) {
+    return `S-${clean.padStart(2, '0')}`;
   }
+  // S15 -> S-15
+  if (/^S[0-9]{1,3}$/.test(clean)) {
+    return `S-${clean.slice(1).padStart(2, '0')}`;
+  }
+  // Standard format like S-01, A-01, B-12
+  if (/^[A-Z0-9_-]{1,8}$/.test(clean)) {
+    return clean;
+  }
+  return null;
+}
+
+export function sanitizeSeatNumber(raw?: string | null): string | null {
+  if (!raw) return null;
+  const str = String(raw).trim();
+  if (
+    !str ||
+    str === 'AUTO' ||
+    str === 'MASTER' ||
+    str === 'STAND' ||
+    str === 'GATE' ||
+    str === 'null' ||
+    str === 'undefined' ||
+    str === '—' ||
+    str === 'Desk' ||
+    str === 'Study Desk'
+  ) {
+    return null;
+  }
+
+  // If it's a URL or contains domain/protocol (e.g. "https://genius.librarywale.in/attendance", "https://genius.librarywale.in", etc.)
+  if (str.includes('http://') || str.includes('https://') || str.includes('librarywale') || str.includes('/attendance') || str.includes('.in') || str.includes('.com')) {
+    // Check if query params have ?seat=, &seat=, ?desk=, &desk=, /qr/, or /desk/
+    const match = str.match(/[?&/](?:seat|desk|seatNumber|seatId)[=/]([A-Za-z0-9_-]+)/i);
+    if (match && match[1]) {
+      return formatSeatCode(match[1]);
+    }
+    // No desk parameter found in URL -> this was a generic Master Gate / Entrance QR scan!
+    return null;
+  }
+
+  // Remove common prefixes: "Desk #", "Desk ", "Seat #", "Seat ", "#"
+  const cleaned = str.replace(/^(?:Desk|Seat|Desk\s*#|Seat\s*#|#)\s*/i, '').trim();
+  if (!cleaned || cleaned.includes('http') || cleaned.includes('/') || cleaned.length > 10) {
+    return null;
+  }
+
+  return formatSeatCode(cleaned);
+}
+
+// ── SUPABASE SEAT STATE & RANDOM ALLOCATION HELPERS ──────────
+export async function markSeatOccupiedInSupabase(
+  supabase: any,
+  seatNumber: string,
+  studentId: string,
+  studentName: string
+) {
+  try {
+    const deskNum = parseDeskNum(seatNumber);
+    const nowIso = new Date().toISOString();
+    const variants = Array.from(
+      new Set(
+        [
+          seatNumber,
+          deskNum ? String(deskNum) : null,
+          deskNum ? String(deskNum).padStart(2, '0') : null,
+          deskNum ? `S-${String(deskNum).padStart(2, '0')}` : null,
+        ].filter(Boolean)
+      )
+    ) as string[];
+
+    for (const v of variants) {
+      await supabase
+        .from('seats')
+        .update({
+          is_available: false,
+          current_student_id: studentId,
+          current_student_name: studentName,
+          occupied_at: nowIso,
+        })
+        .eq('seat_number', v);
+    }
+
+    if (deskNum) {
+      await supabase
+        .from('seats')
+        .update({
+          is_available: false,
+          current_student_id: studentId,
+          current_student_name: studentName,
+          occupied_at: nowIso,
+        })
+        .eq('id', `seat-${deskNum}`);
+    }
+  } catch (err) {
+    console.warn('markSeatOccupiedInSupabase notice:', err);
+  }
+}
+
+export async function markSeatVacantInSupabase(
+  supabase: any,
+  studentId?: string | null,
+  seatNumber?: string | null
+) {
+  try {
+    // 1. Release any seat held by this student ID
+    if (studentId) {
+      await supabase
+        .from('seats')
+        .update({
+          is_available: true,
+          current_student_id: null,
+          current_student_name: null,
+          occupied_at: null,
+        })
+        .eq('current_student_id', studentId);
+    }
+
+    // 2. Release by seat number variants
+    if (seatNumber) {
+      const deskNum = parseDeskNum(seatNumber);
+      const variants = Array.from(
+        new Set(
+          [
+            seatNumber,
+            deskNum ? String(deskNum) : null,
+            deskNum ? String(deskNum).padStart(2, '0') : null,
+            deskNum ? `S-${String(deskNum).padStart(2, '0')}` : null,
+          ].filter(Boolean)
+        )
+      ) as string[];
+
+      for (const v of variants) {
+        await supabase
+          .from('seats')
+          .update({
+            is_available: true,
+            current_student_id: null,
+            current_student_name: null,
+            occupied_at: null,
+          })
+          .eq('seat_number', v);
+      }
+
+      if (deskNum) {
+        await supabase
+          .from('seats')
+          .update({
+            is_available: true,
+            current_student_id: null,
+            current_student_name: null,
+            occupied_at: null,
+          })
+          .eq('id', `seat-${deskNum}`);
+      }
+    }
+  } catch (err) {
+    console.warn('markSeatVacantInSupabase notice:', err);
+  }
+}
+
+export async function findRandomAvailableSeat(
+  supabase: any,
+  excludeStudentId?: string,
+  todayStr?: string
+): Promise<string | null> {
+  const currentDateStr = todayStr || new Date().toLocaleDateString('en-CA');
+  const allDeskNumbers: number[] = Array.from({ length: 100 }, (_, i) => i + 1);
+  const unavailableDesks = new Set<number>();
+
+  // 1. Desks permanently reserved by active students in profiles
+  try {
+    const { data: reservedProfiles } = await supabase
+      .from('profiles')
+      .select('seat_number, membership_plan, is_reserved, status')
+      .not('seat_number', 'is', null);
+
+    if (Array.isArray(reservedProfiles)) {
+      for (const p of reservedProfiles) {
+        if (p.status !== 'suspended' && p.seat_number) {
+          const num = parseDeskNum(p.seat_number);
+          if (num !== null) unavailableDesks.add(num);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error fetching reserved profiles:', err);
+  }
+
+  // 2. Desks currently occupied in seats table
+  try {
+    const { data: occupiedSeats } = await supabase
+      .from('seats')
+      .select('seat_number, is_available, current_student_id')
+      .eq('is_available', false);
+
+    if (Array.isArray(occupiedSeats)) {
+      for (const s of occupiedSeats) {
+        if (s.current_student_id !== excludeStudentId && s.seat_number) {
+          const num = parseDeskNum(s.seat_number);
+          if (num !== null) unavailableDesks.add(num);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error fetching occupied seats:', err);
+  }
+
+  // 3. Desks with active check-in today in attendance table
+  try {
+    const { data: activeAtt } = await supabase
+      .from('attendance')
+      .select('seat_number, student_id, check_out')
+      .eq('date', currentDateStr);
+
+    if (Array.isArray(activeAtt)) {
+      for (const a of activeAtt) {
+        const co = a.check_out;
+        const isActive = !co || co === 'In Progress' || co === '—' || String(co).trim() === '';
+        if (isActive && a.student_id !== excludeStudentId && a.seat_number) {
+          const num = parseDeskNum(a.seat_number);
+          if (num !== null) unavailableDesks.add(num);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error fetching active attendance:', err);
+  }
+
+  // Pool of available desks
+  const availableDesks = allDeskNumbers.filter((n) => !unavailableDesks.has(n));
+  if (availableDesks.length === 0) {
+    return null; // All 100 library desks occupied!
+  }
+
+  // Pick random available desk
+  const randomIndex = Math.floor(Math.random() * availableDesks.length);
+  const chosenNum = availableDesks[randomIndex];
+  return `S-${String(chosenNum).padStart(2, '0')}`;
 }
 
 // Attendance - Single Source of Truth: Supabase Primary Store (Permanent Retention)
@@ -443,7 +691,7 @@ export async function getAttendance(params?: string | { studentId?: string; date
         id: r.id,
         studentId: r.student_id,
         studentName: r.student_name,
-        seatNumber: r.seat_number,
+        seatNumber: sanitizeSeatNumber(r.seat_number),
         shiftName: r.shift_name,
         checkIn: r.check_in,
         checkOut: r.check_out,
@@ -463,11 +711,11 @@ export async function getAttendance(params?: string | { studentId?: string; date
   // Fallback to local cache only if network/Supabase call fails
   const localRecords = getLocalData<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, []);
   if (typeof params === 'string') {
-    return localRecords.filter(r => r.studentId === params);
+    return localRecords.filter(r => r.studentId === params).map(r => ({ ...r, seatNumber: sanitizeSeatNumber(r.seatNumber) }));
   } else if (params?.studentId) {
-    return localRecords.filter(r => r.studentId === params.studentId);
+    return localRecords.filter(r => r.studentId === params.studentId).map(r => ({ ...r, seatNumber: sanitizeSeatNumber(r.seatNumber) }));
   }
-  return localRecords;
+  return localRecords.map(r => ({ ...r, seatNumber: sanitizeSeatNumber(r.seatNumber) }));
 }
 
 // All historical attendance records are permanently stored and queried from Supabase
@@ -595,57 +843,100 @@ export async function markAttendance(params: {
 }
 
 export async function recordCheckIn(params: { studentId: string; studentName: string; seatNumber?: string; shiftId?: string; shiftName?: string; photoUrl?: string }) {
-  // Queue automated WhatsApp Check-in Alert
+  let cleanSeat = sanitizeSeatNumber(params.seatNumber);
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-CA');
+  const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  const attId = `att-${Date.now()}`;
+
+  // 1. Direct Supabase Upsert
+  try {
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+
+    // If no seat provided, check if reserved student or allocate random available seat
+    if (!cleanSeat && params.studentId) {
+      const { data: p } = await supabase
+        .from('profiles')
+        .select('seat_number, membership_plan, is_reserved')
+        .eq('id', params.studentId)
+        .maybeSingle();
+
+      const planStr = String(p?.membership_plan || '').toLowerCase();
+      const isReserved = Boolean(
+        p?.seat_number &&
+        (planStr.includes('reserved') || p?.is_reserved === true || (!planStr.includes('general') && !planStr.includes('trial')))
+      );
+
+      if (isReserved && p?.seat_number) {
+        cleanSeat = sanitizeSeatNumber(p.seat_number) || p.seat_number;
+      } else {
+        cleanSeat = await findRandomAvailableSeat(supabase, params.studentId, dateStr);
+      }
+    }
+
+    await supabase.from('attendance').upsert({
+      id: attId,
+      student_id: params.studentId,
+      student_name: params.studentName,
+      seat_number: cleanSeat || null,
+      shift_name: params.shiftName || 'Morning Shift',
+      check_in: timeStr,
+      check_out: null,
+      status: 'present',
+      photo_url: params.photoUrl || null,
+      date: dateStr,
+      updated_at: new Date().toISOString(),
+    });
+
+    if (cleanSeat) {
+      await markSeatOccupiedInSupabase(supabase, cleanSeat, params.studentId, params.studentName);
+    }
+  } catch (err) {
+    console.warn('Supabase recordCheckIn notice:', err);
+  }
+
+  // 2. Local cache update
+  const newRecord: AttendanceRecord = {
+    id: attId,
+    studentId: params.studentId || 'std-unknown',
+    studentName: params.studentName || 'Student',
+    seatNumber: cleanSeat || null,
+    shiftId: params.shiftId || null,
+    shiftName: params.shiftName || 'Morning Shift',
+    checkIn: timeStr,
+    checkOut: null,
+    status: 'present',
+    photoUrl: params.photoUrl || null,
+    date: dateStr,
+  };
+
+  const existing = getLocalData<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, []);
+  const updated = [newRecord, ...existing.filter(r => !(r.studentId === params.studentId && r.date === dateStr))];
+  setLocalData(STORAGE_KEYS.ATTENDANCE, updated);
+
+  // 3. Notification & WhatsApp
+  createNotification({
+    recipientRole: 'student',
+    recipientId: params.studentId,
+    title: '✓ Attendance Check-In Confirmed',
+    message: `Checked in successfully at ${timeStr}${cleanSeat ? ` (Desk #${cleanSeat})` : ''}.`,
+    type: 'attendance',
+    actionUrl: '/student/attendance',
+  }).catch(() => {});
+
   if (params.studentId) {
     enqueueAttendanceWhatsApp({
       studentId: params.studentId,
       studentName: params.studentName,
       action: 'checked_in',
-      seatNumber: params.seatNumber,
+      seatNumber: cleanSeat || undefined,
       shiftName: params.shiftName,
+      checkInTime: timeStr,
     }).catch(() => {});
   }
-  try {
-    const result = await fetchApi<{ success: boolean; message: string; record: AttendanceRecord }>('/api/attendance/check-in', {
-      method: 'POST',
-      body: JSON.stringify(params),
-    });
-    return result;
-  } catch {
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    const newRecord: AttendanceRecord = {
-      id: `att-${Date.now()}`,
-      studentId: params.studentId || 'std-unknown',
-      studentName: params.studentName || 'Student',
-      seatNumber: params.seatNumber || null,
-      shiftId: params.shiftId || null,
-      shiftName: params.shiftName || 'Morning Shift',
-      checkIn: timeStr,
-      checkOut: null,
-      status: 'present',
-      photoUrl: params.photoUrl || null,
-      date: dateStr,
-    };
-
-    const existing = getLocalData<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, []);
-    const updated = [newRecord, ...existing.filter(r => !(r.studentId === params.studentId && r.date === dateStr))];
-    setLocalData(STORAGE_KEYS.ATTENDANCE, updated);
-
-    // Trigger instant check-in confirmation notification & native popup for the student
-    createNotification({
-      recipientRole: 'student',
-      recipientId: params.studentId,
-      title: '✓ Attendance Check-In Confirmed',
-      message: `Checked in successfully at ${timeStr}${params.seatNumber ? ` (Desk #${params.seatNumber})` : ''}.`,
-      type: 'attendance',
-      actionUrl: '/student/attendance',
-    }).catch(() => {});
-
-    return { success: true, message: 'Check-in recorded with desk verification', record: newRecord };
-  }
+  return { success: true, message: 'Check-in recorded with desk verification', record: newRecord };
 }
 
 export async function smartQrScanAttendance(params: {
@@ -667,22 +958,39 @@ export async function smartQrScanAttendance(params: {
   message: string;
   record?: any;
 }> {
-  // If no seatNumber was passed or generic master scan, check if student already has a reserved seat
-  let assignedSeat = params.seatNumber;
-  if ((!assignedSeat || assignedSeat === 'AUTO' || assignedSeat === 'MASTER') && params.studentId) {
+  const { createClient } = await import('@/lib/supabase/client');
+  const supabase = createClient();
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-CA');
+  const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+  // 1. Fetch student's profile to check reserved seat status
+  let studentProfile: {
+    seat_number: string | null;
+    membership_plan: string | null;
+    is_reserved?: boolean;
+  } | null = null;
+
+  if (params.studentId) {
     try {
-      const { createClient } = await import('@/lib/supabase/client');
-      const supabase = createClient();
       const { data: p } = await supabase
         .from('profiles')
-        .select('seat_number, membership_plan')
+        .select('seat_number, membership_plan, is_reserved')
         .eq('id', params.studentId)
         .maybeSingle();
-      if (p?.seat_number) {
-        assignedSeat = p.seat_number;
-      }
+      studentProfile = p;
     } catch {}
   }
+
+  const planStr = String(studentProfile?.membership_plan || '').toLowerCase();
+  const isStudentReserved = Boolean(
+    studentProfile?.seat_number &&
+    (planStr.includes('reserved') || studentProfile?.is_reserved === true || (!planStr.includes('general') && !planStr.includes('trial')))
+  );
+  const reservedDesk = isStudentReserved ? sanitizeSeatNumber(studentProfile?.seat_number) : null;
+
+  // Sanitize the requested seat from scan/tap
+  let cleanSeat = sanitizeSeatNumber(params.seatNumber);
 
   const effectiveMethod = params.verificationMethod || (params.seatNumber === 'MASTER' ? 'nfc' : 'qr');
 
@@ -693,196 +1001,291 @@ export async function smartQrScanAttendance(params: {
     } catch {}
   }
 
-  const effectiveParams = {
-    ...params,
-    seatNumber: assignedSeat,
-    verificationMethod: effectiveMethod,
+  // 2. Query Supabase for student's attendance records today
+  let todayRecords: any[] = [];
+  try {
+    const { data, error } = await supabase
+      .from('attendance')
+      .select('*')
+      .eq('student_id', params.studentId)
+      .eq('date', dateStr)
+      .order('created_at', { ascending: false });
+    if (!error && Array.isArray(data)) {
+      todayRecords = data;
+    }
+  } catch (err) {
+    console.warn('Supabase query today attendance error:', err);
+  }
+
+  // Find if there is an active session (where check_out is null or in progress)
+  const activeRecord = todayRecords.find((r) => {
+    const co = r.check_out;
+    return !co || co === 'In Progress' || co === '—' || String(co).trim() === '';
+  });
+
+  // ══════════════════════════════════════════════════════════════════
+  // A. IF STUDENT IS ALREADY CHECKED IN -> PERFORM CHECK-OUT!
+  // ══════════════════════════════════════════════════════════════════
+  if (activeRecord) {
+    const seatToRelease = sanitizeSeatNumber(activeRecord.seat_number) || cleanSeat || reservedDesk;
+
+    // 1. Update Supabase attendance record to completed & checked out
+    try {
+      await supabase
+        .from('attendance')
+        .update({
+          check_out: timeStr,
+          status: 'completed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', activeRecord.id);
+
+      // Auto-complete any other dangling duplicate records for today
+      await supabase
+        .from('attendance')
+        .update({
+          check_out: timeStr,
+          status: 'completed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('student_id', params.studentId)
+        .eq('date', dateStr)
+        .is('check_out', null);
+    } catch (updErr) {
+      console.warn('Supabase checkout update error:', updErr);
+    }
+
+    // 2. Release seat in seats table (Supabase primary store)
+    await markSeatVacantInSupabase(supabase, params.studentId, seatToRelease);
+
+    // 3. Update local cache
+    try {
+      const cached = getLocalData<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, []);
+      const updatedCache = cached.map((c) =>
+        c.studentId === params.studentId && c.date === dateStr && (!c.checkOut || c.checkOut === 'In Progress')
+          ? { ...c, checkOut: timeStr, status: 'completed' as const }
+          : c
+      );
+      setLocalData(STORAGE_KEYS.ATTENDANCE, updatedCache);
+
+      const cachedSeats = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
+      if (cachedSeats.length > 0) {
+        const updatedSeats = cachedSeats.map(s => {
+          const match = (seatToRelease && matchSeatNumber(s.seatNumber, seatToRelease)) || s.currentStudentId === params.studentId;
+          return match ? { ...s, isAvailable: true, currentStudentId: null, currentStudentName: null, occupiedAt: null } : s;
+        });
+        setLocalData(STORAGE_KEYS.SEATS, updatedSeats);
+      }
+    } catch {}
+
+    // 4. Notifications & WhatsApp
+    const notifTitle = '✓ Attendance Check-Out Confirmed';
+    const notifBody = `Checked out at ${timeStr}${seatToRelease ? ` from Desk #${seatToRelease}` : ''}. Desk is now free. Have a great study day!`;
+
+    createNotification({
+      recipientRole: 'student',
+      recipientId: params.studentId,
+      title: notifTitle,
+      message: notifBody,
+      type: 'attendance',
+      actionUrl: '/student/attendance',
+    }).catch(() => {});
+
+    try {
+      const { triggerNativeNotification } = await import('./pushNotify');
+      triggerNativeNotification({
+        title: notifTitle,
+        body: notifBody,
+        url: '/student/attendance',
+        tag: `att-out-${params.studentId}-${dateStr}`,
+      }).catch(() => {});
+    } catch {}
+
+    enqueueAttendanceWhatsApp({
+      studentId: params.studentId,
+      studentName: params.studentName,
+      action: 'checked_out',
+      seatNumber: seatToRelease || undefined,
+      checkInTime: activeRecord.check_in,
+      checkOutTime: timeStr,
+    }).catch(() => {});
+
+    return {
+      success: true,
+      action: 'checked_out',
+      seatNumber: seatToRelease || undefined,
+      checkInTime: activeRecord.check_in,
+      checkOutTime: timeStr,
+      message: `Checked out successfully${seatToRelease ? ` from Desk #${seatToRelease}` : ''}! Desk is now free.`,
+      record: {
+        ...activeRecord,
+        checkOut: timeStr,
+        status: 'completed',
+      },
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // B. IF STUDENT IS NOT CHECKED IN -> PERFORM CHECK-IN!
+  // ══════════════════════════════════════════════════════════════════
+  let allocatedSeat: string | null = null;
+  let isReservedAllocation = false;
+
+  if (isStudentReserved && reservedDesk) {
+    // 1. Reserved student: Always allocate & show their reserved seat
+    allocatedSeat = reservedDesk;
+    isReservedAllocation = true;
+  } else {
+    // 2. Unreserved student:
+    // If a specific desk QR was scanned, check if it's available and not someone else's reserved seat
+    if (cleanSeat) {
+      let isReservedByOther = false;
+      try {
+        const { data: otherRes } = await supabase
+          .from('profiles')
+          .select('id, seat_number')
+          .not('seat_number', 'is', null);
+        if (Array.isArray(otherRes)) {
+          isReservedByOther = otherRes.some(
+            (p) => p.id !== params.studentId && matchSeatNumber(p.seat_number, cleanSeat)
+          );
+        }
+      } catch {}
+
+      let isOccupied = false;
+      try {
+        const { data: seatRow } = await supabase
+          .from('seats')
+          .select('is_available, current_student_id')
+          .eq('seat_number', cleanSeat)
+          .maybeSingle();
+        if (seatRow && !seatRow.is_available && seatRow.current_student_id && seatRow.current_student_id !== params.studentId) {
+          isOccupied = true;
+        }
+      } catch {}
+
+      if (!isReservedByOther && !isOccupied) {
+        allocatedSeat = cleanSeat;
+      }
+    }
+
+    // If entrance QR/NFC/in-app or scanned desk unavailable: pick random available seat!
+    if (!allocatedSeat) {
+      allocatedSeat = await findRandomAvailableSeat(supabase, params.studentId, dateStr);
+      if (!allocatedSeat) {
+        return {
+          success: false,
+          action: 'all_occupied',
+          message: 'All 100 library desks are currently occupied. Please contact admin.',
+        };
+      }
+    }
+  }
+
+  const newRecordId = `att-${Date.now()}`;
+  const newRecordData = {
+    id: newRecordId,
+    student_id: params.studentId,
+    student_name: params.studentName,
+    seat_number: allocatedSeat,
+    shift_name: params.shiftName || 'Morning Shift',
+    check_in: timeStr,
+    check_out: null,
+    status: 'present',
+    photo_url: params.photoUrl || null,
+    date: dateStr,
+    verification_method: effectiveMethod,
+    updated_at: new Date().toISOString(),
   };
 
   try {
-    const apiRes = await fetchApi<{
-      success: boolean;
-      action: 'checked_in' | 'checked_out' | 'seat_occupied' | 'all_occupied';
-      seatNumber?: string;
-      occupiedBy?: string;
-      occupantStudentId?: string;
-      checkInTime?: string;
-      checkOutTime?: string;
-      message: string;
-      record?: any;
-    }>('/api/attendance/qr-scan', {
-      method: 'POST',
-      body: JSON.stringify(effectiveParams),
-    });
-
-    if (apiRes.success && (apiRes.action === 'checked_in' || apiRes.action === 'checked_out')) {
-      enqueueAttendanceWhatsApp({
-        studentId: params.studentId,
-        studentName: params.studentName,
-        action: apiRes.action,
-        seatNumber: apiRes.seatNumber || effectiveParams.seatNumber,
-        shiftName: params.shiftName,
-        checkInTime: apiRes.checkInTime,
-        checkOutTime: apiRes.checkOutTime,
-      }).catch(() => {});
-    }
-
-    return apiRes;
-  } catch {
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-
-    const records = getLocalData<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, []);
-    const todayRecordIndex = records.findIndex(r => r.studentId === params.studentId && r.date === dateStr);
-
-    if (todayRecordIndex >= 0 && !records[todayRecordIndex].checkOut) {
-      // Toggle checkout
-      records[todayRecordIndex].checkOut = timeStr;
-      records[todayRecordIndex].verificationMethod = effectiveMethod;
-      setLocalData(STORAGE_KEYS.ATTENDANCE, [...records]);
-
-      // 1. Sync checkout to Supabase attendance (Single Source of Truth)
-      try {
-        const { createClient } = await import('@/lib/supabase/client');
-        const supabase = createClient();
-        await supabase
-          .from('attendance')
-          .update({
-            check_out: timeStr,
-            status: 'completed',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('student_id', params.studentId)
-          .eq('date', dateStr);
-      } catch (sbErr) {
-        console.warn('Supabase checkout update notice:', sbErr);
-      }
-
-      const notifTitle = '✓ Attendance Check-Out Confirmed';
-      const notifBody = `Checked out at ${timeStr}${effectiveParams.seatNumber ? ` from Desk #${effectiveParams.seatNumber}` : ''}. Have a great day!`;
-
-      // 2. Persist notification in database
-      createNotification({
-        recipientRole: 'student',
-        recipientId: params.studentId,
-        title: notifTitle,
-        message: notifBody,
-        type: 'attendance',
-        actionUrl: '/student/attendance',
-      }).catch(() => {});
-
-      // 3. Trigger immediate OS native popup notification
-      try {
-        const { triggerNativeNotification } = await import('./pushNotify');
-        triggerNativeNotification({
-          title: notifTitle,
-          body: notifBody,
-          url: '/student/attendance',
-          tag: `att-out-${params.studentId}-${dateStr}`,
-        }).catch(() => {});
-      } catch {}
-
-      // 4. Automated WhatsApp Check-Out Alert
-      enqueueAttendanceWhatsApp({
-        studentId: params.studentId,
-        studentName: params.studentName,
-        action: 'checked_out',
-        seatNumber: effectiveParams.seatNumber,
-        checkOutTime: timeStr,
-      }).catch(() => {});
-
-      return {
-        success: true,
-        action: 'checked_out',
-        seatNumber: effectiveParams.seatNumber,
-        checkOutTime: timeStr,
-        message: `Checked out successfully from Desk #${effectiveParams.seatNumber || 'Library'}`,
-        record: records[todayRecordIndex],
-      };
-    } else {
-      // Toggle check-in
-      const newRecord: AttendanceRecord = {
-        id: `att-${Date.now()}`,
-        studentId: params.studentId,
-        studentName: params.studentName,
-        seatNumber: effectiveParams.seatNumber || null,
-        shiftId: params.shiftId || null,
-        shiftName: params.shiftName || 'Morning Shift',
-        checkIn: timeStr,
-        checkOut: null,
-        status: 'present',
-        photoUrl: params.photoUrl || null,
-        date: dateStr,
-        verificationMethod: effectiveMethod,
-      };
-      setLocalData(STORAGE_KEYS.ATTENDANCE, [newRecord, ...records]);
-
-      // 1. Sync check-in to Supabase attendance (Single Source of Truth)
-      try {
-        const { createClient } = await import('@/lib/supabase/client');
-        const supabase = createClient();
-        await supabase.from('attendance').upsert({
-          id: newRecord.id,
-          student_id: params.studentId,
-          student_name: params.studentName,
-          seat_number: effectiveParams.seatNumber || null,
-          shift_name: params.shiftName || 'Morning Shift',
-          check_in: timeStr,
-          check_out: null,
-          status: 'present',
-          photo_url: params.photoUrl || null,
-          date: dateStr,
-          updated_at: new Date().toISOString(),
-        });
-      } catch (sbErr) {
-        console.warn('Supabase check-in upsert notice:', sbErr);
-      }
-
-      const notifTitle = '✓ Attendance Check-In Confirmed';
-      const notifBody = `Checked in successfully at ${timeStr}${effectiveParams.seatNumber ? ` (Desk #${effectiveParams.seatNumber})` : ' (Library Entrance Stand)'}. Happy studying!`;
-
-      // 2. Persist notification in database
-      createNotification({
-        recipientRole: 'student',
-        recipientId: params.studentId,
-        title: notifTitle,
-        message: notifBody,
-        type: 'attendance',
-        actionUrl: '/student/attendance',
-      }).catch(() => {});
-
-      // 3. Trigger immediate OS native popup notification
-      try {
-        const { triggerNativeNotification } = await import('./pushNotify');
-        triggerNativeNotification({
-          title: notifTitle,
-          body: notifBody,
-          url: '/student/attendance',
-          tag: `att-in-${params.studentId}-${dateStr}`,
-        }).catch(() => {});
-      } catch {}
-
-      // 4. Automated WhatsApp Check-In Alert
-      enqueueAttendanceWhatsApp({
-        studentId: params.studentId,
-        studentName: params.studentName,
-        action: 'checked_in',
-        seatNumber: effectiveParams.seatNumber,
-        shiftName: params.shiftName,
-        checkInTime: timeStr,
-      }).catch(() => {});
-
-      return {
-        success: true,
-        action: 'checked_in',
-        seatNumber: effectiveParams.seatNumber,
-        checkInTime: timeStr,
-        message: `Checked in successfully at Desk #${effectiveParams.seatNumber || 'Library'}`,
-        record: newRecord,
-      };
-    }
+    await supabase.from('attendance').insert(newRecordData);
+  } catch (insErr) {
+    console.warn('Supabase check-in insert error:', insErr);
   }
+
+  // Mark seat occupied in seats table
+  if (allocatedSeat) {
+    await markSeatOccupiedInSupabase(supabase, allocatedSeat, params.studentId, params.studentName);
+  }
+
+  // Update local cache
+  try {
+    const cached = getLocalData<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, []);
+    const localRec: AttendanceRecord = {
+      id: newRecordId,
+      studentId: params.studentId,
+      studentName: params.studentName,
+      seatNumber: allocatedSeat,
+      shiftName: params.shiftName || 'Morning Shift',
+      checkIn: timeStr,
+      checkOut: null,
+      status: 'present',
+      photoUrl: params.photoUrl || null,
+      date: dateStr,
+      verificationMethod: effectiveMethod,
+    };
+    setLocalData(STORAGE_KEYS.ATTENDANCE, [localRec, ...cached]);
+
+    const cachedSeats = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
+    if (cachedSeats.length > 0) {
+      const updatedSeats = cachedSeats.map(s => {
+        const match = matchSeatNumber(s.seatNumber, allocatedSeat);
+        return match ? { ...s, isAvailable: false, currentStudentId: params.studentId, currentStudentName: params.studentName, occupiedAt: timeStr } : s;
+      });
+      setLocalData(STORAGE_KEYS.SEATS, updatedSeats);
+    }
+  } catch {}
+
+  const notifTitle = '✓ Attendance Check-In Confirmed';
+  const notifBody = `Checked in successfully at ${timeStr}${allocatedSeat ? ` (${isReservedAllocation ? 'Reserved' : 'Allocated'} Desk #${allocatedSeat})` : ''}. Happy studying!`;
+
+  createNotification({
+    recipientRole: 'student',
+    recipientId: params.studentId,
+    title: notifTitle,
+    message: notifBody,
+    type: 'attendance',
+    actionUrl: '/student/attendance',
+  }).catch(() => {});
+
+  try {
+    const { triggerNativeNotification } = await import('./pushNotify');
+    triggerNativeNotification({
+      title: notifTitle,
+      body: notifBody,
+      url: '/student/attendance',
+      tag: `att-in-${params.studentId}-${dateStr}`,
+    }).catch(() => {});
+  } catch {}
+
+  enqueueAttendanceWhatsApp({
+    studentId: params.studentId,
+    studentName: params.studentName,
+    action: 'checked_in',
+    seatNumber: allocatedSeat || undefined,
+    checkInTime: timeStr,
+  }).catch(() => {});
+
+  return {
+    success: true,
+    action: 'checked_in',
+    seatNumber: allocatedSeat || undefined,
+    checkInTime: timeStr,
+    message: isReservedAllocation
+      ? `Checked in successfully at ${timeStr} (Reserved Desk #${allocatedSeat})!`
+      : `Checked in successfully at ${timeStr} (Allocated Desk #${allocatedSeat})!`,
+    record: {
+      id: newRecordId,
+      studentId: params.studentId,
+      studentName: params.studentName,
+      seatNumber: allocatedSeat || null,
+      checkIn: timeStr,
+      checkOut: null,
+      status: 'present',
+      date: dateStr,
+    },
+  };
 }
 
 export interface DeskDispute {
@@ -966,55 +1369,82 @@ export async function resolveDeskDispute(params: {
 }
 
 export async function recordCheckOut(studentId: string, studentName?: string) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-CA');
+  const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+  let seatToRelease: string | null = null;
+
+  // 1. Direct Supabase Update (Single Source of Truth)
+  try {
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+
+    // Query active attendance to get allocated desk
+    const { data: activeRec } = await supabase
+      .from('attendance')
+      .select('seat_number')
+      .eq('student_id', studentId)
+      .eq('date', dateStr)
+      .is('check_out', null)
+      .maybeSingle();
+
+    if (activeRec?.seat_number) {
+      seatToRelease = sanitizeSeatNumber(activeRec.seat_number) || activeRec.seat_number;
+    }
+
+    await supabase
+      .from('attendance')
+      .update({ check_out: timeStr, status: 'completed', updated_at: new Date().toISOString() })
+      .eq('student_id', studentId)
+      .eq('date', dateStr);
+
+    // Free the seat in Supabase seats table
+    await markSeatVacantInSupabase(supabase, studentId, seatToRelease);
+  } catch (sbErr) {
+    console.warn('Supabase checkout update notice:', sbErr);
+  }
+
+  // 2. Local cache update
+  const records = getLocalData<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, []);
+  const updated = records.map(r => (r.studentId === studentId && r.date === dateStr) ? {
+    ...r,
+    checkOut: timeStr,
+    status: 'completed' as const,
+  } : r);
+  setLocalData(STORAGE_KEYS.ATTENDANCE, updated);
+
+  try {
+    const cachedSeats = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
+    if (cachedSeats.length > 0) {
+      const updatedSeats = cachedSeats.map(s => {
+        const match = (seatToRelease && matchSeatNumber(s.seatNumber, seatToRelease)) || s.currentStudentId === studentId;
+        return match ? { ...s, isAvailable: true, currentStudentId: null, currentStudentName: null, occupiedAt: null } : s;
+      });
+      setLocalData(STORAGE_KEYS.SEATS, updatedSeats);
+    }
+  } catch {}
+
+  // 3. Notification & WhatsApp
+  createNotification({
+    recipientRole: 'student',
+    recipientId: studentId,
+    title: '✓ Attendance Check-Out Confirmed',
+    message: `Checked out successfully at ${timeStr}${seatToRelease ? ` from Desk #${seatToRelease}` : ''}. Desk is now free. Have a great study day!`,
+    type: 'attendance',
+    actionUrl: '/student/attendance',
+  }).catch(() => {});
+
   if (studentId) {
     enqueueAttendanceWhatsApp({
       studentId,
       studentName: studentName || '',
       action: 'checked_out',
+      seatNumber: seatToRelease || undefined,
+      checkOutTime: timeStr,
     }).catch(() => {});
   }
-  try {
-    return await fetchApi<{ success: boolean; message: string }>('/api/attendance/check-out', {
-      method: 'POST',
-      body: JSON.stringify({ studentId }),
-    });
-  } catch {
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    // Sync checkout to Supabase attendance
-    try {
-      const { createClient } = await import('@/lib/supabase/client');
-      const supabase = createClient();
-      await supabase
-        .from('attendance')
-        .update({ check_out: timeStr, status: 'completed', updated_at: new Date().toISOString() })
-        .eq('student_id', studentId)
-        .eq('date', dateStr);
-    } catch (sbErr) {
-      console.warn('Supabase checkout update notice:', sbErr);
-    }
-
-    const records = getLocalData<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, []);
-    const updated = records.map(r => (r.studentId === studentId && r.date === dateStr) ? {
-      ...r,
-      checkOut: timeStr,
-    } : r);
-    setLocalData(STORAGE_KEYS.ATTENDANCE, updated);
-
-    // Trigger instant check-out confirmation notification & native popup for the student
-    createNotification({
-      recipientRole: 'student',
-      recipientId: studentId,
-      title: '✓ Attendance Check-Out Confirmed',
-      message: `Checked out successfully at ${timeStr}. Have a great study day!`,
-      type: 'attendance',
-      actionUrl: '/student/attendance',
-    }).catch(() => {});
-
-    return { success: true, message: 'Check-out recorded successfully' };
-  }
+  return { success: true, message: `Check-out recorded successfully${seatToRelease ? ` (Desk #${seatToRelease} is now free)` : ''}` };
 }
 
 // Books

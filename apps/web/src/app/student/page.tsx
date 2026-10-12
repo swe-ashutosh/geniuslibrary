@@ -30,7 +30,8 @@ import {
   AttendanceRecord,
   FeeRecord,
   getLibraryHolidays,
-  LibraryHoliday
+  LibraryHoliday,
+  sanitizeSeatNumber
 } from "@/lib/api";
 import { 
   getResultsForStudent, 
@@ -436,10 +437,15 @@ export default function StudentDashboard() {
           .then((records) => {
             setAttendanceLogs(records);
             const dateStr = new Date().toISOString().split("T")[0];
-            const today = records.find((r) => r.date === dateStr);
-            if (today) {
-              setIsCheckedIn(!today.checkOut);
-              if (today.seatNumber) setAssignedSeat(today.seatNumber);
+            const activeToday = records.find(
+              (r) => r.date === dateStr && (!r.checkOut || r.checkOut === "In Progress" || r.checkOut === "—")
+            );
+            if (activeToday) {
+              setIsCheckedIn(true);
+              if (activeToday.seatNumber) setAssignedSeat(activeToday.seatNumber);
+            } else {
+              setIsCheckedIn(false);
+              setAssignedSeat(profile.seat_number || "");
             }
           })
           .catch(() => {});
@@ -512,6 +518,7 @@ export default function StudentDashboard() {
   const handleCameraCheckInSuccess = (record: any) => {
     if (record.action === "checked_out") {
       setIsCheckedIn(false);
+      setAssignedSeat(profile.seat_number || "");
       setFeedbackMsg({
         type: "success",
         text: `✓ Checked out successfully! Desk #${record.seatNumber || assignedSeat} has been released.`
@@ -896,7 +903,7 @@ export default function StudentDashboard() {
               <span>•</span>
               <span>Shift: <strong className="text-[#0B5ED7] dark:text-[#FFC107]">{activeShiftInfo.name}</strong></span>
               <span>•</span>
-              <span>Seat: <strong className="text-purple-600 dark:text-purple-400 font-mono font-bold">{assignedSeat ? `#${assignedSeat}` : "Flexible Desk"}</strong></span>
+              <span>Seat: <strong className="text-purple-600 dark:text-purple-400 font-mono font-bold">{sanitizeSeatNumber(assignedSeat) ? `#${sanitizeSeatNumber(assignedSeat)}` : "Flexible Desk"}</strong></span>
             </p>
           </div>
 
@@ -1359,20 +1366,27 @@ export default function StudentDashboard() {
                       className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-[#FAF9F6] dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-700/80 gap-3 hover:border-[#FFC107]/50 transition-colors"
                     >
                       <div className="flex items-center gap-3.5">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#0A2E5C] text-[#FFC107] font-mono font-bold text-xs border border-[#FFC107]/30">
-                          {att.seatNumber || assignedSeat || "Desk"}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-xs font-black text-[#0A2E5C] dark:text-white">{att.date}</p>
-                            <span className="text-[10px] font-bold text-[#0B5ED7] dark:text-[#FFC107] bg-[#FFC107]/15 px-2 py-0.5 rounded-md">
-                              {att.seatNumber ? `Desk #${att.seatNumber}` : assignedSeat ? `Desk #${assignedSeat}` : "Study Desk"}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                            Check-In: <strong className="text-emerald-600">{att.checkIn}</strong> • Check-Out: <strong className="text-rose-600">{att.checkOut || "In Progress"}</strong>
-                          </p>
-                        </div>
+                        {(() => {
+                          const seatBadge = sanitizeSeatNumber(att.seatNumber) || sanitizeSeatNumber(assignedSeat);
+                          return (
+                            <>
+                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#0A2E5C] text-[#FFC107] font-mono font-bold text-xs border border-[#FFC107]/30 overflow-hidden text-center">
+                                {seatBadge || "Desk"}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs font-black text-[#0A2E5C] dark:text-white">{att.date}</p>
+                                  <span className="text-[10px] font-bold text-[#0B5ED7] dark:text-[#FFC107] bg-[#FFC107]/15 px-2 py-0.5 rounded-md">
+                                    {seatBadge ? `Desk #${seatBadge}` : "Study Desk"}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                                  Check-In: <strong className="text-emerald-600">{att.checkIn}</strong> • Check-Out: <strong className="text-rose-600">{att.checkOut || "In Progress"}</strong>
+                                </p>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
 
                       <div className="flex items-center gap-2.5 self-end sm:self-center">

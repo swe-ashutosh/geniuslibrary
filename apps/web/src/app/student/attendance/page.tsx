@@ -27,7 +27,7 @@ import {
   ArrowRight
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { getAttendanceWaterfall, AttendanceRecord, getLibraryHolidays, LibraryHoliday } from "@/lib/api";
+import { getAttendanceWaterfall, AttendanceRecord, getLibraryHolidays, LibraryHoliday, sanitizeSeatNumber } from "@/lib/api";
 import { LiveAttendanceCameraModal } from "@/components/LiveAttendanceCameraModal";
 import { IntersectionLazyItem } from "@/components/VirtualizedList";
 
@@ -346,7 +346,7 @@ export default function StudentAttendancePage() {
     day.sessions.map(s => ({
       ...s,
       date: day.date,
-      seatNumber: day.seatNumber || (profile?.seat_number ? `Desk #${profile.seat_number}` : "Library"),
+      seatNumber: sanitizeSeatNumber(day.seatNumber) || (sanitizeSeatNumber(profile?.seat_number) ? `Desk #${sanitizeSeatNumber(profile?.seat_number)}` : "Library"),
       shiftName: day.shiftName || profile?.shift || "General Shift",
       dayStatus: day.status || "present",
     }))
@@ -563,25 +563,32 @@ export default function StudentAttendancePage() {
                   {/* Day Header */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#0A2E5C] text-[#FFC107] font-mono font-black text-xs border border-[#FFC107]/30 shadow-xs">
-                        {att.seatNumber ? (att.seatNumber.startsWith("#") ? att.seatNumber : `#${att.seatNumber}`) : (profile?.seat_number ? `#${profile.seat_number}` : "Desk")}
-                      </div>
+                      {(() => {
+                        const cleanSeat = sanitizeSeatNumber(att.seatNumber) || sanitizeSeatNumber(profile?.seat_number);
+                        return (
+                          <>
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#0A2E5C] text-[#FFC107] font-mono font-black text-xs border border-[#FFC107]/30 shadow-xs overflow-hidden text-center">
+                              {cleanSeat ? (cleanSeat.startsWith("#") ? cleanSeat : `#${cleanSeat}`) : "Desk"}
+                            </div>
 
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-black text-[#0A2E5C] dark:text-white">{att.date}</p>
-                          <span className="px-2 py-0.5 rounded bg-[#0A2E5C] text-[#FFC107] font-mono text-[10px] font-bold">
-                            {att.seatNumber ? `Desk ${att.seatNumber.startsWith('#') ? att.seatNumber : `#${att.seatNumber}`}` : "Desk Reserved"}
-                          </span>
-                          <span className="text-[10px] text-zinc-400 font-semibold hidden sm:inline">•</span>
-                          <span className="text-[11px] text-zinc-500 font-medium hidden sm:inline">
-                            {att.shiftName || profile?.shift || "Evening Shift"}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 sm:hidden">
-                          {att.shiftName || profile?.shift || "Evening Shift"}
-                        </p>
-                      </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-black text-[#0A2E5C] dark:text-white">{att.date}</p>
+                                <span className="px-2 py-0.5 rounded bg-[#0A2E5C] text-[#FFC107] font-mono text-[10px] font-bold">
+                                  {cleanSeat ? `Desk #${cleanSeat}` : "Study Desk"}
+                                </span>
+                                <span className="text-[10px] text-zinc-400 font-semibold hidden sm:inline">•</span>
+                                <span className="text-[11px] text-zinc-500 font-medium hidden sm:inline">
+                                  {att.shiftName || profile?.shift || "Evening Shift"}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 sm:hidden">
+                                {att.shiftName || profile?.shift || "Evening Shift"}
+                              </p>
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
 
                     <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">

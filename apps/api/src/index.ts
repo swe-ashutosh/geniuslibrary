@@ -1450,13 +1450,13 @@ app.post('/api/attendance/qr-scan', async (c) => {
         .select('*')
         .eq('student_id', studentId)
         .eq('date', dateStr)
-        .is('check_out', null)
-        .limit(1);
+        .order('created_at', { ascending: false });
 
-      if (supaAtt && supaAtt.length > 0) {
+      const activeSupa = supaAtt?.find((a: any) => !a.check_out || a.check_out === 'In Progress' || a.check_out === '—' || String(a.check_out).trim() === '');
+      if (activeSupa) {
         activeTodayRecord = {
-          id: supaAtt[0].id,
-          seatNumber: supaAtt[0].seat_number,
+          id: activeSupa.id,
+          seatNumber: activeSupa.seat_number,
         };
       }
     } catch (e) {

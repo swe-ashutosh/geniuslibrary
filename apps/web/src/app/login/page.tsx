@@ -51,6 +51,7 @@ import {
   getBiometricProfile,
   authenticateWithPasskey,
   updateBiometricSession,
+  saveBiometricSecret,
   type BiometricProfile
 } from "@/lib/webauthn";
 
@@ -462,6 +463,10 @@ function LoginForm() {
 
     if (data.session) {
       updateBiometricSession(data.session);
+    }
+
+    if (hasRegisteredPasskey() && password) {
+      saveBiometricSecret(password);
     }
 
     // 1. Instant Navigation based on authenticated user session

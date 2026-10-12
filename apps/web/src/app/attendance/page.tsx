@@ -31,7 +31,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { smartQrScanAttendance } from "@/lib/api";
+import { smartQrScanAttendance, sanitizeSeatNumber } from "@/lib/api";
 import { BRAND_CONFIG } from "@/lib/config";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LiveAttendanceCameraModal } from "@/components/LiveAttendanceCameraModal";
@@ -128,10 +128,14 @@ function AttendanceGateContent() {
       try { window.navigator.vibrate([80, 50, 80]); } catch {}
     }
 
+    const scannedDesk = sanitizeSeatNumber(searchParams.get("seat") || searchParams.get("desk") || searchParams.get("seatNumber"));
+    const effectiveDesk = scannedDesk || sanitizeSeatNumber(currentUser?.seatNumber) || undefined;
+
     try {
       const res = await smartQrScanAttendance({
         studentId,
         studentName,
+        seatNumber: effectiveDesk,
         shiftName: currentUser?.shift || "General Shift",
         verificationMethod,
         photoUrl, // Only provided for QR, undefined for NFC!
@@ -300,7 +304,7 @@ function AttendanceGateContent() {
                   <p className="text-[10px] font-bold text-emerald-700/80 uppercase">Desk / Seat</p>
                   <p className="text-lg font-black text-[#0A2E5C] flex items-center gap-1">
                     <Armchair className="h-4 w-4 text-emerald-600" />
-                    <span>#{result.seatNumber || "General"}</span>
+                    <span>{result.seatNumber ? `Desk #${result.seatNumber}` : "General Desk"}</span>
                   </p>
                 </div>
                 <div>

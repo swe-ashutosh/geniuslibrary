@@ -49,6 +49,7 @@ import {
   removePasskey, 
   type BiometricProfile 
 } from "@/lib/webauthn";
+import { BiometricAppLock } from "@/components/BiometricAppLock";
 import { 
   getStudents, 
   getAnnouncements,
@@ -57,7 +58,8 @@ import {
   markAllNotificationsAsRead, 
   clearAllNotifications,
   NotificationRecord,
-  smartQrScanAttendance
+  smartQrScanAttendance,
+  sanitizeSeatNumber
 } from "@/lib/api";
 import { LiveAttendanceCameraModal } from "@/components/LiveAttendanceCameraModal";
 import { recordUserActivity, checkInactivityExpiry, clearInactivityTracking, getSavedUserRole, saveUserRole } from "@/lib/authInactivity";
@@ -169,7 +171,7 @@ export default function StudentLayout({
       if (res.success) {
         setBiometricEnabled(false);
         setBiometricProfile(null);
-        setBiometricStatusMsg("Biometric login removed for this device.");
+        setBiometricStatusMsg("Biometric login & App Lock removed.");
       } else {
         setBiometricStatusMsg(res.error || "Failed to remove biometric login.");
       }
@@ -177,11 +179,12 @@ export default function StudentLayout({
       return;
     }
 
-    const res = await registerPasskey();
+    const enteredPassword = window.prompt("Enter your account password to enable 1-touch login after logout (optional):")?.trim() || undefined;
+    const res = await registerPasskey(undefined, enteredPassword);
     if (res.success) {
       setBiometricEnabled(true);
       setBiometricProfile(getBiometricProfile());
-      setBiometricStatusMsg("Biometric login enabled successfully!");
+      setBiometricStatusMsg("Biometric login & App Lock enabled!");
     } else {
       setBiometricStatusMsg(res.error || "Biometric registration failed.");
     }
@@ -287,10 +290,9 @@ export default function StudentLayout({
             try { window.navigator.vibrate([100, 50, 100]); } catch {}
           }
           try {
-            const cleanTag = tagData.trim().toUpperCase();
-            const isMaster = cleanTag.includes("MASTER") || cleanTag.includes("GATE") || cleanTag.includes("STAND");
+            const parsedSeat = sanitizeSeatNumber(tagData);
             // If student already has an assigned/reserved seat, preserve it!
-            const effectiveSeat = userProfile.seatNumber || (isMaster ? undefined : tagData.trim());
+            const effectiveSeat = sanitizeSeatNumber(userProfile.seatNumber) || parsedSeat || undefined;
             const res = await smartQrScanAttendance({
               studentId: userProfile.id!,
               studentName: userProfile.fullName,
@@ -757,6 +759,10 @@ export default function StudentLayout({
     <div className="flex h-screen overflow-hidden bg-[#F8FAFC] dark:bg-[#141A24]">
       <meta name="robots" content="noindex, nofollow" />
       <title>{`Student Portal | ${BRAND_CONFIG.fullName}`}</title>
+
+      {/* Biometric App Lock Overlay for Student */}
+      <BiometricAppLock userName={userProfile.fullName} userRole="student" />
+
       {/* Desktop-Only Sidebar: No Sidebar on Mobile per Requirements */}
       <aside className="hidden lg:flex lg:w-64 lg:flex-col bg-[#0A2E5C]">
         <div className="flex h-16 items-center px-6 border-b border-zinc-800/50 justify-between">
