@@ -33,10 +33,10 @@ import {
   FileSpreadsheet,
   Download,
   FileText,
-  Fingerprint
+  Smartphone,
+  QrCode,
+  Camera
 } from "lucide-react";
-import { AdminStampCalibrationModal } from "@/components/AdminStampCalibrationModal";
-import { getRegisteredStampPattern, type StampPattern } from "@/lib/stampPattern";
 import { 
   resetAllAdminData, 
   getStorageStatus, 
@@ -71,9 +71,6 @@ export default function AdminSettingsPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
 
-  // Touch Stamp State
-  const [isStampModalOpen, setIsStampModalOpen] = useState(false);
-  const [activeStampPattern, setActiveStampPattern] = useState<StampPattern | null>(null);
 
   const [settings, setSettings] = useState({
     libraryName: BRAND_CONFIG.name,
@@ -104,7 +101,6 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     loadStorageMetrics();
-    getRegisteredStampPattern().then((pat) => setActiveStampPattern(pat));
     getAdminContactInfo().then((adminInfo) => {
       setSettings((prev) => ({
         ...prev,
@@ -329,13 +325,67 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* Anti-Proxy Verification Rules */}
-        <div className="lg:col-span-2 rounded-3xl border border-[#E5E7EB] bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] space-y-4">
-          <h3 className="text-sm font-black text-[#0A2E5C] dark:text-white flex items-center gap-2 pb-2 border-b border-zinc-100 dark:border-zinc-800">
-            <ShieldCheck className="h-4 w-4 text-[#0B5ED7]" /> Anti-Proxy & Smart QR Policies
-          </h3>
+        {/* Anti-Proxy & Authorized Verification Policies */}
+        <div className="lg:col-span-2 rounded-3xl border border-[#E5E7EB] bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 gap-2">
+            <div>
+              <h3 className="text-sm font-black text-[#0A2E5C] dark:text-white flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-[#0B5ED7]" /> Authorized Attendance Verification Methods
+              </h3>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                Genius Library strictly authorizes only 2 verified attendance channels.
+              </p>
+            </div>
+            <span className="self-start sm:self-auto text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              2 Methods Active
+            </span>
+          </div>
 
+          {/* 2 Authorized Attendance Channels */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            {/* Method 1: NFC Tap Based */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/30 flex items-start gap-3.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40">
+                <Smartphone className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-xs font-black text-[#0A2E5C] dark:text-white uppercase tracking-wide">
+                    1. NFC Tap Verification
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                    Active
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-600 dark:text-zinc-300 mt-1 leading-relaxed">
+                  Students tap physical NFC gate stand / smart tag for instant check-in or checkout. Zero photo required for high throughput.
+                </p>
+              </div>
+            </div>
+
+            {/* Method 2: Smart QR Scan with Silent Picture */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent border border-blue-500/30 flex items-start gap-3.5">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/40">
+                <QrCode className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-xs font-black text-[#0A2E5C] dark:text-white uppercase tracking-wide">
+                    2. QR Scan (Silent Picture)
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                    Active
+                  </span>
+                </div>
+                <p className="text-[11px] text-zinc-600 dark:text-zinc-300 mt-1 leading-relaxed">
+                  Scans library desk QR code while silently capturing desk verification photo to prevent proxy attendance.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Verification Policies / Controls */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-2">
             <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#F8FAFC]/50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700">
               <div>
                 <p className="font-bold text-[#0A2E5C] dark:text-white">Require Live Camera Verification</p>
@@ -345,45 +395,18 @@ export default function AdminSettingsPage() {
                 type="checkbox"
                 checked={settings.requireLiveCameraAttendance}
                 onChange={(e) => setSettings({ ...settings, requireLiveCameraAttendance: e.target.checked })}
-                className="h-5 w-5 accent-[#0B5ED7] rounded"
+                className="h-5 w-5 accent-[#0B5ED7] rounded cursor-pointer"
               />
             </div>
 
             <div className="p-3.5 rounded-2xl bg-[#F8FAFC]/50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
               <div>
                 <p className="font-bold text-[#0A2E5C] dark:text-white">Auto-Prune Verification Photos</p>
-                <p className="text-[11px] text-zinc-400">Automatically delete old verification photos after 7 days to save storage.</p>
+                <p className="text-[11px] text-zinc-400">Automatically delete old verification photos after 1 week (7 days) to save storage.</p>
               </div>
               <span className="font-bold text-[#0B5ED7] dark:text-[#FFC107] bg-white dark:bg-zinc-800 px-3 py-1 rounded-xl border border-zinc-200">
-                7 Days
+                7 Days (1 Week)
               </span>
-            </div>
-
-            {/* Capacitive 3-Point Touch Stamp Configuration */}
-            <div className="md:col-span-2 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-500 border border-amber-500/40">
-                  <Fingerprint className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-black text-amber-400 uppercase tracking-wide">
-                    Capacitive Touch Stamp Hardware Calibration
-                  </h4>
-                  <p className="text-[11px] text-zinc-300 mt-0.5">
-                    {activeStampPattern
-                      ? `Registered Stamp: "${activeStampPattern.name}" (Ratios: [${activeStampPattern.ratios.join(", ")}], ±${Math.round((activeStampPattern.tolerance || 0.2) * 100)}%)`
-                      : "Default Mode: Accepting any 3-point physical conductive stamp. Calibrate your library's stamp to restrict attendance to authorized hardware only."}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsStampModalOpen(true)}
-                className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black text-xs font-black shadow-md shadow-amber-500/20 transition active:scale-95 cursor-pointer"
-              >
-                <Fingerprint className="h-4 w-4" />
-                <span>{activeStampPattern ? "Re-Calibrate Stamp" : "Calibrate Physical Stamp"}</span>
-              </button>
             </div>
           </div>
 
@@ -766,12 +789,6 @@ export default function AdminSettingsPage() {
           </button>
         </div>
       </div>
-      {/* Admin Stamp Calibration Modal */}
-      <AdminStampCalibrationModal
-        isOpen={isStampModalOpen}
-        onClose={() => setIsStampModalOpen(false)}
-        onSaved={(pat) => setActiveStampPattern(pat)}
-      />
 
     </div>
   );

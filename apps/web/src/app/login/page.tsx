@@ -6,7 +6,7 @@
  * Email/password sign-in via Supabase Auth; admins land on /admin,
  * students on /student. Uses security.ts lockout.
  */
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -27,7 +27,8 @@ import {
   UserX,
   Mail,
   Eye,
-  EyeOff
+  EyeOff,
+  Fingerprint
 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
@@ -44,6 +45,14 @@ import {
   saveUserRole
 } from "@/lib/authInactivity";
 import { BRAND_CONFIG, isMasterAdminEmail } from "@/lib/config";
+import {
+  isWebAuthnSupported,
+  hasRegisteredPasskey,
+  getBiometricProfile,
+  authenticateWithPasskey,
+  updateBiometricSession,
+  type BiometricProfile
+} from "@/lib/webauthn";
 
 function LoginForm() {
   const router = useRouter();
@@ -68,6 +77,12 @@ function LoginForm() {
   const [unapprovedName, setUnapprovedName] = useState("");
   const [unregisteredEmail, setUnregisteredEmail] = useState("");
 
+  // Biometric Passkey States
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricProfile, setBiometricProfile] = useState<BiometricProfile | null>(null);
+  const [isBiometricLoading, setIsBiometricLoading] = useState(false);
+  const autoPromptRef = useRef(false);
+
   // Check if user already has an active session (e.g. after reopening app or clearing taskbar)
   useEffect(() => {
     async function checkExistingSession() {
@@ -75,6 +90,7 @@ function LoginForm() {
         const supabase = createClient();
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
+          updateBiometricSession(session);
           const user = session.user;
           const role = user.user_metadata?.role;
           const isAdmin = isMasterAdminEmail(user.email) || role === "admin";
@@ -128,6 +144,23 @@ function LoginForm() {
     } catch {}
   }, [router, errorQuery]);
 
+  // Check if biometric passkey is available on this device & auto-prompt on PWA open
+  useEffect(() => {
+    if (isWebAuthnSupported() && hasRegisteredPasskey()) {
+      setBiometricAvailable(true);
+      setBiometricProfile(getBiometricProfile());
+
+      // Auto-trigger biometric identifier when user opens PWA
+      if (!autoPromptRef.current && !errorQuery) {
+        autoPromptRef.current = true;
+        const timer = setTimeout(() => {
+          handleBiometricLogin(true);
+        }, 400);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [errorQuery]);
+
   useEffect(() => {
     if (emailQuery) {
       setEmail(emailQuery);
@@ -151,6 +184,105 @@ function LoginForm() {
       setErrorMsg(msgParam ? `Google authentication failed: ${msgParam}` : "Google authentication failed. Please try again.");
     }
   }, [errorQuery, emailQuery, searchParams]);
+
+  const handleBiometricLogin = async (isAuto: boolean = false) => {
+    setIsBiometricLoading(true);
+    if (!isAuto) setErrorMsg("");
+
+    try {
+      const res = await authenticateWithPasskey();
+      if (!res.success || !res.user) {
+        // If automatic prompt was cancelled or user dismissed it, silently return without red error
+        if (isAuto) {
+          setIsBiometricLoading(false);
+          return;
+        }
+        setErrorMsg(res.error || "Biometric authentication failed. Please try again or sign in with password.");
+        setIsBiometricLoading(false);
+        return;
+      }
+
+      const user = res.user;
+      recordUserActivity(true);
+
+      const supabase = createClient();
+      const userEmail = (user.email || "").toLowerCase();
+      const isAdmin = isMasterAdminEmail(userEmail) || user.user_metadata?.role === "admin";
+      const assignedRole = isAdmin ? "admin" : (user.user_metadata?.role === "staff" ? "staff" : "student");
+
+      // Sync FCM push token
+      try {
+        const { requestFCMToken, syncFCMTokenWithUser } = await import("@/lib/firebase");
+        requestFCMToken().then((token) => {
+          if (token) syncFCMTokenWithUser(token, assignedRole);
+        }).catch(() => {});
+      } catch {}
+
+      if (isAdmin) {
+        saveUserRole("admin");
+        router.replace("/admin/");
+        return;
+      }
+
+      if (user.user_metadata?.role === "staff") {
+        saveUserRole("staff");
+        router.replace("/staff/");
+        return;
+      }
+
+      // Student profile verification
+      const { data: pData } = await supabase
+        .from("profiles")
+        .select("id, status, phone, full_name, role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (pData?.role === "admin") {
+        saveUserRole("admin");
+        router.replace("/admin/");
+        return;
+      }
+
+      if (!pData || !pData.phone) {
+        await supabase.auth.signOut({ scope: "local" });
+        setUnregisteredEmail(userEmail);
+        setShowNotRegisteredModal(true);
+        setIsBiometricLoading(false);
+        return;
+      }
+
+      if (pData.status === "pending") {
+        await supabase.auth.signOut({ scope: "local" });
+        setUnapprovedEmail(userEmail);
+        setUnapprovedName(pData.full_name || "");
+        setShowNotApprovedModal(true);
+        setIsBiometricLoading(false);
+        return;
+      }
+
+      if (pData.status === "suspended") {
+        await supabase.auth.signOut({ scope: "local" });
+        setUnapprovedEmail(userEmail);
+        setShowSuspendedModal(true);
+        setIsBiometricLoading(false);
+        return;
+      }
+
+      if (pData.status !== "active") {
+        await supabase.auth.signOut({ scope: "local" });
+        setUnregisteredEmail(userEmail);
+        setShowNotRegisteredModal(true);
+        setIsBiometricLoading(false);
+        return;
+      }
+
+      saveUserRole("student");
+      router.replace("/student/");
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Biometric login error occurred.");
+      setIsBiometricLoading(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -328,6 +460,10 @@ function LoginForm() {
       return;
     }
 
+    if (data.session) {
+      updateBiometricSession(data.session);
+    }
+
     // 1. Instant Navigation based on authenticated user session
     recordUserActivity(true);
     const role = user.user_metadata?.role;
@@ -354,6 +490,21 @@ function LoginForm() {
       return;
     }
 
+    // Check staff_profiles table in Supabase
+    try {
+      const { data: staffData } = await supabase
+        .from("staff_profiles")
+        .select("id, role, status")
+        .or(`id.eq.${user.id},email.eq.${(user.email || targetVal).toLowerCase().trim()}`)
+        .maybeSingle();
+
+      if (staffData && staffData.status === "active") {
+        saveUserRole("staff");
+        router.replace("/staff/");
+        return;
+      }
+    } catch {}
+
     // Student: Strictly verify active status BEFORE navigating to /student/
     let studentProfile: any = null;
     try {
@@ -368,6 +519,12 @@ function LoginForm() {
     if (studentProfile?.role === "admin") {
       saveUserRole("admin");
       router.replace("/admin/");
+      return;
+    }
+
+    if (studentProfile?.role === "staff") {
+      saveUserRole("staff");
+      router.replace("/staff/");
       return;
     }
 
@@ -467,6 +624,58 @@ function LoginForm() {
             }`}>
               <Clock className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
               <div className="leading-relaxed">{errorMsg}</div>
+            </div>
+          )}
+
+          {/* Biometric Passkey Quick Sign-In Button */}
+          {biometricAvailable && (
+            <div className="mb-6">
+              <button
+                type="button"
+                onClick={() => handleBiometricLogin(false)}
+                disabled={isBiometricLoading || isLoading}
+                className="w-full relative group overflow-hidden rounded-2xl bg-gradient-to-r from-[#0A2E5C] via-[#0B5ED7] to-[#0A2E5C] p-[1.5px] shadow-lg shadow-[#0A2E5C]/10 hover:shadow-[#FFC107]/20 transition-all active:scale-[0.98] cursor-pointer"
+              >
+                <div className="flex items-center justify-between gap-3 rounded-2xl bg-white dark:bg-[#0A2E5C] px-4 py-3.5 transition group-hover:bg-zinc-50 dark:group-hover:bg-[#141A24]">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#FFC107] to-[#FFA000] text-[#0A2E5C] shadow-md shadow-[#FFC107]/20">
+                      <Fingerprint className={`h-5 w-5 ${isBiometricLoading ? "animate-pulse" : ""}`} />
+                    </div>
+                    <div className="text-left">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-black text-[#0A2E5C] dark:text-white">
+                          {isBiometricLoading
+                            ? "Waiting for sensor..."
+                            : `Sign in with ${biometricProfile?.deviceName || "Fingerprint"}`}
+                        </span>
+                        <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider ${
+                          isBiometricLoading
+                            ? "bg-emerald-400/20 text-emerald-600 dark:text-emerald-400 border border-emerald-400/40 animate-pulse"
+                            : "bg-[#FFC107]/20 text-[#0A2E5C] dark:text-[#FFC107] border border-[#FFC107]/40"
+                        }`}>
+                          {isBiometricLoading ? "Active" : "1-Touch"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-300 truncate max-w-[210px]">
+                        {isBiometricLoading
+                          ? "Touch sensor now to log in"
+                          : biometricProfile?.userEmail || "Touch sensor to sign in instantly"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-[#0B5ED7] dark:text-[#FFC107] group-hover:translate-x-0.5 transition-transform">
+                    <ArrowRight className="h-4 w-4" />
+                  </div>
+                </div>
+              </button>
+
+              <div className="mt-5 flex items-center justify-center gap-3">
+                <div className="h-px bg-[#E5E7EB] dark:bg-zinc-700 flex-1" />
+                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                  or sign in with password
+                </span>
+                <div className="h-px bg-[#E5E7EB] dark:bg-zinc-700 flex-1" />
+              </div>
             </div>
           )}
 

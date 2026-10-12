@@ -278,10 +278,6 @@ CREATE TABLE IF NOT EXISTS staff (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
--- Seed Initial Staff Members
-INSERT OR IGNORE INTO staff (id, name, email, phone, role, category, shift_assigned, status, password, last_login) VALUES
-('staff-prime-01', 'Rajesh Sharma (Senior Librarian)', 'rajesh.librarian@thegenius.com', '+91 98765 12340', 'prime_staff', 'Prime Staff', 'Morning Shift', 'active', 'prime123', 'Today 09:00 AM'),
-('staff-sub-01', 'Vikas Patel (Library Assistant)', 'vikas.assistant@thegenius.com', '+91 98765 54321', 'sub_staff', 'Sub Staff', 'Evening Shift', 'active', 'sub123', 'Yesterday');
 
 -- 11. Notifications Table
 CREATE TABLE IF NOT EXISTS notifications (

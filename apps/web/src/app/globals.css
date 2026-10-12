@@ -62,8 +62,8 @@ body {
 }
 
 /* =========================================================
-   A4 Professional Invoice Print Isolation Rules
-   Ensures ONLY the invoice is printed and no web chrome / URLs
+   A4 Professional Print Isolation Rules
+   Ensures ONLY the target report/document content is printed and no web chrome / navigation
    ========================================================= */
 @page {
   size: A4 portrait;
@@ -73,13 +73,37 @@ body {
 @media print {
   html, body {
     background: #ffffff !important;
-    color: #000000 !important;
+    color: #111827 !important;
     margin: 0 !important;
     padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
   }
 
-  /* When printing directly, hide page headers, footers, navs */
-  header, nav, footer, aside, .no-print {
+  /* When printing directly, hide page headers, footers, navs, sidebars, modals, floating buttons */
+  header, nav, footer, aside, .no-print, [role="navigation"], .print\:hidden {
     display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Remove screen scrollbars, flex clipping, and viewport locks */
+  .overflow-hidden, .overflow-y-auto, .overflow-x-auto, .h-screen {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* Retain element print colors cleanly */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Prevent awkward page cuts in print cards and table rows */
+  .break-inside-avoid, tr, .card {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 }
+

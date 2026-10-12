@@ -652,15 +652,25 @@ export default function AdminReportsPage() {
 
   // Trigger High-Def Print / PDF
   const handlePrintPDF = () => {
-    window.print();
+    setToastMessage(null);
+    const prevTitle = document.title;
+    const cleanRange = `${dateRangeBounds.start}_to_${dateRangeBounds.end}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+    document.title = `${BRAND_CONFIG.shortName || BRAND_CONFIG.name || "Genius_Library"}_Report_${cleanRange}`;
+
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        document.title = prevTitle;
+      }, 1000);
+    }, 50);
   };
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-12 print:space-y-4 print:pb-0 print:p-0">
       {/* Toast Notification */}
       {toastMessage && (
         <div
-          className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between shadow-lg transition-all animate-fadeIn ${
+          className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between shadow-lg transition-all animate-fadeIn print:hidden ${
             toastMessage.type === "success"
               ? "bg-emerald-50 border-emerald-300 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-700 dark:text-emerald-200"
               : "bg-rose-50 border-rose-300 text-rose-900 dark:bg-rose-950/40 dark:border-rose-700 dark:text-rose-200"
@@ -731,6 +741,9 @@ export default function AdminReportsPage() {
       <div className="hidden print:block border-b-2 border-[#0A2E5C] pb-4 mb-6">
         <div className="flex justify-between items-start">
           <div>
+            <div className="text-[10px] font-black uppercase tracking-wider text-[#0B5ED7] mb-1">
+              Official Executive Operations &amp; Financial Audit Ledger
+            </div>
             <h1 className="text-2xl font-black text-[#0A2E5C] tracking-tight uppercase">
               {BRAND_CONFIG.fullName || "Abhishek Genius Library"}
             </h1>
@@ -878,86 +891,86 @@ export default function AdminReportsPage() {
       </div>
 
       {/* 2. Executive Summary (Key Numbers in Box) */}
-      <div className="rounded-3xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C]">
-        <div className="flex items-center justify-between mb-4">
+      <div className="rounded-3xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] print:bg-white print:border-zinc-300 print:shadow-none print:p-4 print:rounded-2xl break-inside-avoid">
+        <div className="flex items-center justify-between mb-4 print:mb-2">
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-5 bg-blue-600 rounded-full" />
-            <h2 className="text-sm font-black uppercase tracking-wider text-[#0A2E5C] dark:text-white">
+            <h2 className="text-sm font-black uppercase tracking-wider text-[#0A2E5C] dark:text-white print:text-[#0A2E5C]">
               Executive Summary (Key Financial &amp; Capacity Indicators)
             </h2>
           </div>
-          <span className="text-[11px] font-bold text-zinc-400 hidden sm:inline-block">
+          <span className="text-[11px] font-bold text-zinc-400 print:text-zinc-600 hidden sm:inline-block">
             Single-Glance Health Metric
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 print:grid-cols-5 print:gap-2">
           {/* Total Revenue */}
-          <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800/60">
-            <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 text-xs font-bold">
+          <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800/60 print:bg-emerald-50 print:border-emerald-200 print:p-2.5">
+            <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 print:text-emerald-800 text-xs font-bold">
               <span>Total Revenue Generated</span>
               <IndianRupee className="h-4 w-4" />
             </div>
-            <div className="mt-2 text-2xl font-black text-emerald-700 dark:text-emerald-300">
+            <div className="mt-2 text-2xl font-black text-emerald-700 dark:text-emerald-300 print:text-emerald-800 print:text-xl">
               ₹{stats.feeCollected.toLocaleString("en-IN")}
             </div>
-            <div className="mt-1 text-[11px] text-emerald-600/80">
+            <div className="mt-1 text-[11px] text-emerald-600/80 print:text-emerald-700">
               Collected fees in this period
             </div>
           </div>
 
           {/* Pending Fees */}
-          <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/60">
-            <div className="flex items-center justify-between text-amber-700 dark:text-amber-400 text-xs font-bold">
+          <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800/60 print:bg-amber-50 print:border-amber-200 print:p-2.5">
+            <div className="flex items-center justify-between text-amber-700 dark:text-amber-400 print:text-amber-800 text-xs font-bold">
               <span>Remaining Due Fees</span>
               <AlertCircle className="h-4 w-4" />
             </div>
-            <div className="mt-2 text-2xl font-black text-amber-700 dark:text-amber-300">
+            <div className="mt-2 text-2xl font-black text-amber-700 dark:text-amber-300 print:text-amber-800 print:text-xl">
               ₹{stats.feePending.toLocaleString("en-IN")}
             </div>
-            <div className="mt-1 text-[11px] text-amber-600/80">
+            <div className="mt-1 text-[11px] text-amber-600/80 print:text-amber-700">
               Pending dues across students
             </div>
           </div>
 
           {/* Total Active Students */}
-          <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-200 dark:bg-blue-950/20 dark:border-blue-800/60">
-            <div className="flex items-center justify-between text-blue-700 dark:text-blue-400 text-xs font-bold">
+          <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-200 dark:bg-blue-950/20 dark:border-blue-800/60 print:bg-blue-50 print:border-blue-200 print:p-2.5">
+            <div className="flex items-center justify-between text-blue-700 dark:text-blue-400 print:text-blue-800 text-xs font-bold">
               <span>Active Students</span>
               <Users className="h-4 w-4" />
             </div>
-            <div className="mt-2 text-2xl font-black text-[#0A2E5C] dark:text-blue-200">
+            <div className="mt-2 text-2xl font-black text-[#0A2E5C] dark:text-blue-200 print:text-[#0A2E5C] print:text-xl">
               {stats.activeStudents}
             </div>
-            <div className="mt-1 text-[11px] text-blue-600/80">
+            <div className="mt-1 text-[11px] text-blue-600/80 print:text-blue-700">
               Regular active memberships
             </div>
           </div>
 
           {/* New Admissions */}
-          <div className="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-200 dark:bg-indigo-950/20 dark:border-indigo-800/60">
-            <div className="flex items-center justify-between text-indigo-700 dark:text-indigo-400 text-xs font-bold">
+          <div className="p-4 rounded-2xl bg-indigo-50/60 border border-indigo-200 dark:bg-indigo-950/20 dark:border-indigo-800/60 print:bg-indigo-50 print:border-indigo-200 print:p-2.5">
+            <div className="flex items-center justify-between text-indigo-700 dark:text-indigo-400 print:text-indigo-800 text-xs font-bold">
               <span>New Admissions</span>
               <UserPlus className="h-4 w-4" />
             </div>
-            <div className="mt-2 text-2xl font-black text-indigo-700 dark:text-indigo-300">
+            <div className="mt-2 text-2xl font-black text-indigo-700 dark:text-indigo-300 print:text-indigo-800 print:text-xl">
               +{stats.totalJoined}
             </div>
-            <div className="mt-1 text-[11px] text-indigo-600/80">
+            <div className="mt-1 text-[11px] text-indigo-600/80 print:text-indigo-700">
               New admissions in window
             </div>
           </div>
 
           {/* Seat Occupancy Rate */}
-          <div className="p-4 rounded-2xl bg-purple-50/60 border border-purple-200 dark:bg-purple-950/20 dark:border-purple-800/60 col-span-2 sm:col-span-1">
-            <div className="flex items-center justify-between text-purple-700 dark:text-purple-400 text-xs font-bold">
+          <div className="p-4 rounded-2xl bg-purple-50/60 border border-purple-200 dark:bg-purple-950/20 dark:border-purple-800/60 col-span-2 sm:col-span-1 print:col-span-1 print:bg-purple-50 print:border-purple-200 print:p-2.5">
+            <div className="flex items-center justify-between text-purple-700 dark:text-purple-400 print:text-purple-800 text-xs font-bold">
               <span>Seat Occupancy Rate</span>
               <Armchair className="h-4 w-4" />
             </div>
-            <div className="mt-2 text-2xl font-black text-purple-700 dark:text-purple-300">
+            <div className="mt-2 text-2xl font-black text-purple-700 dark:text-purple-300 print:text-purple-800 print:text-xl">
               {stats.seatOccupancyRate}%
             </div>
-            <div className="mt-1 text-[11px] text-purple-600/80">
+            <div className="mt-1 text-[11px] text-purple-600/80 print:text-purple-700">
               {stats.occupiedSeatsCount} of {stats.totalSeatsCount} seats filled
             </div>
           </div>
@@ -965,130 +978,130 @@ export default function AdminReportsPage() {
       </div>
 
       {/* 3. Complete Student Lifecycle Breakdown */}
-      <div className="rounded-3xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C]">
-        <div className="flex items-center justify-between mb-4">
+      <div className="rounded-3xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] print:bg-white print:border-zinc-300 print:shadow-none print:p-4 print:rounded-2xl break-inside-avoid">
+        <div className="flex items-center justify-between mb-4 print:mb-2">
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-5 bg-emerald-600 rounded-full" />
-            <h2 className="text-sm font-black uppercase tracking-wider text-[#0A2E5C] dark:text-white">
+            <h2 className="text-sm font-black uppercase tracking-wider text-[#0A2E5C] dark:text-white print:text-[#0A2E5C]">
               Complete Student Lifecycle &amp; Retention Analytics
             </h2>
           </div>
-          <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full">
+          <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full print:border print:border-emerald-300">
             Retention Health: {stats.retentionRate}%
           </span>
         </div>
 
         {/* 4 Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 mb-5 print:grid-cols-4 print:gap-2 print:mb-3">
           {/* Card 1: Total Inflows */}
-          <div className="p-4 rounded-2xl bg-[#F8FAFC] dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700">
+          <div className="p-4 rounded-2xl bg-[#F8FAFC] dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 print:bg-zinc-50 print:border-zinc-300 print:p-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-zinc-500 uppercase">1. Total Inflows (Joined)</span>
+              <span className="text-xs font-bold text-zinc-500 uppercase print:text-zinc-600">1. Total Inflows (Joined)</span>
               <UserPlus className="h-4 w-4 text-emerald-600" />
             </div>
-            <div className="mt-2 text-2xl font-black text-emerald-600 dark:text-emerald-400">
+            <div className="mt-2 text-2xl font-black text-emerald-600 dark:text-emerald-400 print:text-emerald-700 print:text-xl">
               {stats.totalJoined} Students
             </div>
-            <p className="mt-1 text-[11px] text-zinc-500 leading-relaxed">
+            <p className="mt-1 text-[11px] text-zinc-500 leading-relaxed print:text-zinc-600">
               Total naye admission hue selected period mein.
             </p>
           </div>
 
           {/* Card 2: Active Students */}
-          <div className="p-4 rounded-2xl bg-[#F8FAFC] dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700">
+          <div className="p-4 rounded-2xl bg-[#F8FAFC] dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 print:bg-zinc-50 print:border-zinc-300 print:p-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-zinc-500 uppercase">2. Active Students</span>
+              <span className="text-xs font-bold text-zinc-500 uppercase print:text-zinc-600">2. Active Students</span>
               <Users className="h-4 w-4 text-blue-600" />
             </div>
-            <div className="mt-2 text-2xl font-black text-[#0A2E5C] dark:text-white">
+            <div className="mt-2 text-2xl font-black text-[#0A2E5C] dark:text-white print:text-[#0A2E5C] print:text-xl">
               {stats.activeStudents} Students
             </div>
-            <p className="mt-1 text-[11px] text-zinc-500 leading-relaxed">
+            <p className="mt-1 text-[11px] text-zinc-500 leading-relaxed print:text-zinc-600">
               Current strength jo library regular padhne aa rahe hain.
             </p>
           </div>
 
           {/* Card 3: Left / Discontinued */}
-          <div className="p-4 rounded-2xl bg-[#F8FAFC] dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700">
+          <div className="p-4 rounded-2xl bg-[#F8FAFC] dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 print:bg-zinc-50 print:border-zinc-300 print:p-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-zinc-500 uppercase">3. Left / Discontinued</span>
+              <span className="text-xs font-bold text-zinc-500 uppercase print:text-zinc-600">3. Left / Discontinued</span>
               <UserMinus className="h-4 w-4 text-rose-600" />
             </div>
-            <div className="mt-2 text-2xl font-black text-rose-600 dark:text-rose-400">
+            <div className="mt-2 text-2xl font-black text-rose-600 dark:text-rose-400 print:text-rose-700 print:text-xl">
               {stats.leftOrDiscontinued} Students
             </div>
-            <p className="mt-1 text-[11px] text-zinc-500 leading-relaxed">
+            <p className="mt-1 text-[11px] text-zinc-500 leading-relaxed print:text-zinc-600">
               Jinhone library chhod di ya plan renew nahi karwaya.
             </p>
           </div>
 
           {/* Card 4: Retention Rate */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800">
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200 dark:border-emerald-800 print:bg-emerald-50 print:border-emerald-200 print:p-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-emerald-900 dark:text-emerald-300 uppercase">4. Retention Rate (%)</span>
+              <span className="text-xs font-bold text-emerald-900 dark:text-emerald-300 uppercase print:text-emerald-900">4. Retention Rate (%)</span>
               <Percent className="h-4 w-4 text-emerald-600" />
             </div>
-            <div className="mt-2 text-3xl font-black text-emerald-700 dark:text-emerald-300">
+            <div className="mt-2 text-3xl font-black text-emerald-700 dark:text-emerald-300 print:text-emerald-800 print:text-2xl">
               {stats.retentionRate}%
             </div>
-            <p className="mt-1 text-[11px] text-emerald-800/80 dark:text-emerald-400 leading-relaxed font-mono">
+            <p className="mt-1 text-[11px] text-emerald-800/80 dark:text-emerald-400 leading-relaxed font-mono print:text-emerald-800">
               (Active Students ÷ Total Joined) × 100
             </p>
           </div>
         </div>
 
         {/* Growth Cycle Balance Strip */}
-        <div className="p-4 rounded-2xl bg-linear-to-r from-blue-50/80 via-indigo-50/80 to-purple-50/80 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20 border border-blue-200/80 dark:border-blue-900/40 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-          <div className="font-bold text-[#0A2E5C] dark:text-blue-200">
+        <div className="p-4 rounded-2xl bg-linear-to-r from-blue-50/80 via-indigo-50/80 to-purple-50/80 dark:from-blue-950/20 dark:via-indigo-950/20 dark:to-purple-950/20 border border-blue-200/80 dark:border-blue-900/40 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs print:bg-blue-50/80 print:border-blue-200 print:p-2.5 print:flex-row">
+          <div className="font-bold text-[#0A2E5C] dark:text-blue-200 print:text-[#0A2E5C]">
             Growth Cycle Formula:
           </div>
           <div className="flex flex-wrap items-center gap-2 font-mono font-bold text-xs">
-            <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 shadow-2xs">
+            <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 shadow-2xs print:border print:border-zinc-300">
               Starting Active: {stats.startingActive}
             </span>
             <span className="text-emerald-600">+</span>
-            <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shadow-2xs">
+            <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 shadow-2xs print:border print:border-emerald-300">
               New Joined: +{stats.totalJoined}
             </span>
             <span className="text-rose-600">-</span>
-            <span className="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 shadow-2xs">
+            <span className="px-2.5 py-1 rounded-lg bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 shadow-2xs print:border print:border-rose-300">
               Left: -{stats.leftOrDiscontinued}
             </span>
             <span className="text-zinc-400">=</span>
-            <span className="px-2.5 py-1 rounded-lg bg-[#0A2E5C] text-[#FFC107] shadow-xs">
+            <span className="px-2.5 py-1 rounded-lg bg-[#0A2E5C] text-[#FFC107] shadow-xs print:bg-[#0A2E5C] print:text-white">
               Ending Strength: {stats.endingActive}
             </span>
           </div>
-          <div className="text-[11px] font-extrabold text-[#0B5ED7] dark:text-[#FFC107]">
+          <div className="text-[11px] font-extrabold text-[#0B5ED7] dark:text-[#FFC107] print:text-[#0B5ED7]">
             Net Growth: {stats.netGrowth >= 0 ? `+${stats.netGrowth}` : stats.netGrowth} Students ({stats.growthPercent}%)
           </div>
         </div>
       </div>
 
       {/* 4. Plan-Wise Revenue & Admissions Breakdown (Table 1) */}
-      <div className="rounded-3xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C]">
-        <div className="flex items-center justify-between mb-4">
+      <div className="rounded-3xl border border-[#E5E7EB] bg-white p-5 sm:p-6 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] print:bg-white print:border-zinc-300 print:shadow-none print:p-4 print:rounded-2xl break-inside-avoid">
+        <div className="flex items-center justify-between mb-4 print:mb-2">
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-5 bg-amber-500 rounded-full" />
-            <h2 className="text-sm font-black uppercase tracking-wider text-[#0A2E5C] dark:text-white">
+            <h2 className="text-sm font-black uppercase tracking-wider text-[#0A2E5C] dark:text-white print:text-[#0A2E5C]">
               Plan-Wise Revenue &amp; Demand Breakdown
             </h2>
           </div>
-          <span className="text-[11px] font-bold text-zinc-400">
+          <span className="text-[11px] font-bold text-zinc-400 print:text-zinc-600">
             Updated Hourly &amp; Dedicated Seating Plans
           </span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs whitespace-nowrap">
-            <thead className="bg-[#101726] text-white uppercase tracking-wider font-black text-[10px]">
+        <div className="overflow-x-auto print:overflow-visible">
+          <table className="w-full text-left text-xs whitespace-nowrap print:text-[10px]">
+            <thead className="bg-[#101726] text-white uppercase tracking-wider font-black text-[10px] print:bg-[#0A2E5C] print:text-white">
               <tr>
-                <th className="py-3 px-4">Plan Category</th>
-                <th className="py-3 px-4">Price / Rate</th>
-                <th className="py-3 px-4 text-center">Total Sold / Active</th>
-                <th className="py-3 px-4 text-right">Total Revenue</th>
-                <th className="py-3 px-4 text-center">Demand Share (%)</th>
-                <th className="py-3 px-4 text-center">Regular Attendance (%)</th>
+                <th className="py-3 px-4 print:py-2 print:px-2">Plan Category</th>
+                <th className="py-3 px-4 print:py-2 print:px-2">Price / Rate</th>
+                <th className="py-3 px-4 text-center print:py-2 print:px-2">Total Sold / Active</th>
+                <th className="py-3 px-4 text-right print:py-2 print:px-2">Total Revenue</th>
+                <th className="py-3 px-4 text-center print:py-2 print:px-2">Demand Share (%)</th>
+                <th className="py-3 px-4 text-center print:py-2 print:px-2">Regular Attendance (%)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 font-medium">
@@ -1159,52 +1172,64 @@ export default function AdminReportsPage() {
       </div>
 
       {/* 5. Daily / Monthly Footfall & Trend Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 print:grid-cols-3 print:gap-2 break-inside-avoid">
         {/* Peak Rush Hours */}
-        <div className="p-5 rounded-3xl bg-white border border-[#E5E7EB] dark:border-zinc-800 dark:bg-[#0A2E5C] shadow-xs">
-          <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 text-xs font-bold mb-2">
+        <div className="p-5 rounded-3xl bg-white border border-[#E5E7EB] dark:border-zinc-800 dark:bg-[#0A2E5C] shadow-xs print:bg-white print:border-zinc-300 print:shadow-none print:p-3 print:rounded-2xl">
+          <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 text-xs font-bold mb-2 print:text-blue-700">
             <Clock className="h-4 w-4" />
             <span>Peak Rush Hours</span>
           </div>
-          <div className="text-xl font-black text-[#0A2E5C] dark:text-white">
+          <div className="text-xl font-black text-[#0A2E5C] dark:text-white print:text-[#0A2E5C]">
             {stats.peakHourFormatted}
           </div>
-          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+          <p className="mt-1 text-xs text-zinc-500 leading-relaxed print:text-zinc-600">
             Kis time me sabse zyada library seats bhari rahti hain.
           </p>
         </div>
 
         {/* Peak Revenue Day */}
-        <div className="p-5 rounded-3xl bg-white border border-[#E5E7EB] dark:border-zinc-800 dark:bg-[#0A2E5C] shadow-xs">
-          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-xs font-bold mb-2">
+        <div className="p-5 rounded-3xl bg-white border border-[#E5E7EB] dark:border-zinc-800 dark:bg-[#0A2E5C] shadow-xs print:bg-white print:border-zinc-300 print:shadow-none print:p-3 print:rounded-2xl">
+          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 text-xs font-bold mb-2 print:text-emerald-700">
             <TrendingUp className="h-4 w-4" />
             <span>Peak Revenue Day</span>
           </div>
-          <div className="text-xl font-black text-[#0A2E5C] dark:text-white">
+          <div className="text-xl font-black text-[#0A2E5C] dark:text-white print:text-[#0A2E5C]">
             {stats.peakRevenueDay}
           </div>
-          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+          <p className="mt-1 text-xs text-zinc-500 leading-relaxed print:text-zinc-600">
             Mahine ka din jab sabse zyada admissions &amp; renewals hue.
           </p>
         </div>
 
         {/* Renewals vs New Students */}
-        <div className="p-5 rounded-3xl bg-white border border-[#E5E7EB] dark:border-zinc-800 dark:bg-[#0A2E5C] shadow-xs">
-          <div className="flex items-center gap-2 text-purple-600 dark:text-purple-400 text-xs font-bold mb-2">
+        <div className="p-5 rounded-3xl bg-white border border-[#E5E7EB] dark:border-zinc-800 dark:bg-[#0A2E5C] shadow-xs print:bg-white print:border-zinc-300 print:shadow-none print:p-3 print:rounded-2xl">
+          <div className="flex items-center gap-2 text-purple-600 dark:text-purple-400 text-xs font-bold mb-2 print:text-purple-700">
             <BarChart3 className="h-4 w-4" />
             <span>Renewals vs New Admissions</span>
           </div>
-          <div className="text-xl font-black text-[#0A2E5C] dark:text-white">
+          <div className="text-xl font-black text-[#0A2E5C] dark:text-white print:text-[#0A2E5C]">
             {Math.max(0, stats.activeStudents - stats.totalJoined)} Renewals / {stats.totalJoined} New
           </div>
-          <p className="mt-1 text-xs text-zinc-500 leading-relaxed">
+          <p className="mt-1 text-xs text-zinc-500 leading-relaxed print:text-zinc-600">
             Purane bache jinhone renew kiya aur naye admission.
           </p>
         </div>
       </div>
 
       {/* 6. Main Detailed Operational Table (Tabs: Students, Attendance, Fees) */}
-      <div className="rounded-3xl border border-[#E5E7EB] bg-white shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] overflow-hidden">
+      <div className="rounded-3xl border border-[#E5E7EB] bg-white shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] overflow-hidden print:bg-white print:border-zinc-300 print:shadow-none print:rounded-2xl print:overflow-visible break-inside-avoid">
+        
+        {/* Printable Register Header (Strictly Visible ONLY on PDF Print) */}
+        <div className="hidden print:flex items-center justify-between p-3.5 border-b border-zinc-200 bg-[#FAF9F6]">
+          <h3 className="text-xs font-black uppercase tracking-wider text-[#0A2E5C]">
+            {activeTab === "students" && `Operational Student Register (${masterStudentRows.length} Students)`}
+            {activeTab === "attendance" && `Attendance History (${filteredAttendance.length} Logs)`}
+            {activeTab === "fees" && `Revenue & Invoices (${filteredFees.length} Records)`}
+          </h3>
+          <span className="text-[10px] font-bold text-zinc-500 uppercase">
+            Plan Filter: {selectedShift === "all" ? "All Shifts & Plans" : selectedShift}
+          </span>
+        </div>
         
         {/* Table Tabs & Search */}
         <div className="p-4 sm:p-5 border-b border-zinc-100 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
@@ -1255,24 +1280,24 @@ export default function AdminReportsPage() {
 
         {/* Tab 1: Comprehensive 14-Column Master Student Register */}
         {activeTab === "students" && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs whitespace-nowrap">
-              <thead className="bg-[#101726] text-white uppercase tracking-wider font-black text-[10px]">
+          <div className="overflow-x-auto print:overflow-visible">
+            <table className="w-full text-left text-xs whitespace-nowrap print:whitespace-normal print:text-[8.5px]">
+              <thead className="bg-[#101726] text-white uppercase tracking-wider font-black text-[10px] print:bg-[#0A2E5C] print:text-white print:text-[8px]">
                 <tr>
-                  <th className="py-3 px-3 text-center">NO</th>
-                  <th className="py-3 px-3">STUDENT ID</th>
-                  <th className="py-3 px-3">STUDENT NAME</th>
-                  <th className="py-3 px-3">MEMBERSHIP PLAN</th>
-                  <th className="py-3 px-3 text-center">STATUS</th>
-                  <th className="py-3 px-3 text-center">FEES</th>
-                  <th className="py-3 px-3">RENEW DATE</th>
-                  <th className="py-3 px-3 text-center">ATTENDANCE</th>
-                  <th className="py-3 px-3">CHECK-IN</th>
-                  <th className="py-3 px-3">CHECKOUT</th>
-                  <th className="py-3 px-3">UPI CLAIMS</th>
-                  <th className="py-3 px-3">MOBILE NO</th>
-                  <th className="py-3 px-3">COURSE</th>
-                  <th className="py-3 px-3">JOIN DATE</th>
+                  <th className="py-3 px-3 text-center print:py-1.5 print:px-1">NO</th>
+                  <th className="py-3 px-3 print:py-1.5 print:px-1">STUDENT ID</th>
+                  <th className="py-3 px-3 print:py-1.5 print:px-1">STUDENT NAME</th>
+                  <th className="py-3 px-3 print:py-1.5 print:px-1">MEMBERSHIP PLAN</th>
+                  <th className="py-3 px-3 text-center print:py-1.5 print:px-1">STATUS</th>
+                  <th className="py-3 px-3 text-center print:py-1.5 print:px-1">FEES</th>
+                  <th className="py-3 px-3 print:py-1.5 print:px-1">RENEW DATE</th>
+                  <th className="py-3 px-3 text-center print:py-1.5 print:px-1">ATTENDANCE</th>
+                  <th className="py-3 px-3 print:py-1.5 print:px-1">CHECK-IN</th>
+                  <th className="py-3 px-3 print:py-1.5 print:px-1">CHECKOUT</th>
+                  <th className="py-3 px-3 print:py-1.5 print:px-1">UPI CLAIMS</th>
+                  <th className="py-3 px-3 print:py-1.5 print:px-1">MOBILE NO</th>
+                  <th className="py-3 px-3 print:py-1.5 print:px-1">COURSE</th>
+                  <th className="py-3 px-3 print:py-1.5 print:px-1">JOIN DATE</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 font-medium">
@@ -1373,17 +1398,17 @@ export default function AdminReportsPage() {
 
         {/* Tab 2: Attendance History */}
         {activeTab === "attendance" && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[#FAF9F6] text-zinc-500 uppercase tracking-wider font-extrabold text-[10px] border-b border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-800">
+          <div className="overflow-x-auto print:overflow-visible">
+            <table className="w-full text-left text-xs print:text-[10px]">
+              <thead className="bg-[#FAF9F6] text-zinc-500 uppercase tracking-wider font-extrabold text-[10px] border-b border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-800 print:bg-[#0A2E5C] print:text-white">
                 <tr>
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4">Student Name</th>
-                  <th className="py-3 px-4">Desk Allotted</th>
-                  <th className="py-3 px-4">Shift Name</th>
-                  <th className="py-3 px-4">Gate Check-In</th>
-                  <th className="py-3 px-4">Gate Check-Out</th>
-                  <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-4 print:py-2 print:px-2">Date</th>
+                  <th className="py-3 px-4 print:py-2 print:px-2">Student Name</th>
+                  <th className="py-3 px-4 print:py-2 print:px-2">Desk Allotted</th>
+                  <th className="py-3 px-4 print:py-2 print:px-2">Shift Name</th>
+                  <th className="py-3 px-4 print:py-2 print:px-2">Gate Check-In</th>
+                  <th className="py-3 px-4 print:py-2 print:px-2">Gate Check-Out</th>
+                  <th className="py-3 px-4 text-center print:py-2 print:px-2">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 font-medium">
@@ -1432,17 +1457,17 @@ export default function AdminReportsPage() {
 
         {/* Tab 3: Revenue & Invoices */}
         {activeTab === "fees" && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[#FAF9F6] text-zinc-500 uppercase tracking-wider font-extrabold text-[10px] border-b border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-800">
+          <div className="overflow-x-auto print:overflow-visible">
+            <table className="w-full text-left text-xs print:text-[10px]">
+              <thead className="bg-[#FAF9F6] text-zinc-500 uppercase tracking-wider font-extrabold text-[10px] border-b border-zinc-200 dark:bg-zinc-900/60 dark:border-zinc-800 print:bg-[#0A2E5C] print:text-white">
                 <tr>
-                  <th className="py-3 px-4">Receipt / Invoice #</th>
-                  <th className="py-3 px-4">Student Name</th>
-                  <th className="py-3 px-4">Fee Description</th>
-                  <th className="py-3 px-4">Payment Date</th>
-                  <th className="py-3 px-4 text-right">Amount Paid</th>
-                  <th className="py-3 px-4 text-right">Balance Due</th>
-                  <th className="py-3 px-4 text-center">Payment Status</th>
+                  <th className="py-3 px-4 print:py-2 print:px-2">Receipt / Invoice #</th>
+                  <th className="py-3 px-4 print:py-2 print:px-2">Student Name</th>
+                  <th className="py-3 px-4 print:py-2 print:px-2">Fee Description</th>
+                  <th className="py-3 px-4 print:py-2 print:px-2">Payment Date</th>
+                  <th className="py-3 px-4 text-right print:py-2 print:px-2">Amount Paid</th>
+                  <th className="py-3 px-4 text-right print:py-2 print:px-2">Balance Due</th>
+                  <th className="py-3 px-4 text-center print:py-2 print:px-2">Payment Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80 font-medium">
@@ -1497,16 +1522,16 @@ export default function AdminReportsPage() {
       </div>
 
       {/* Official Signatory Line (Strictly Visible ONLY on PDF Print) */}
-      <div className="hidden print:block pt-12 mt-8 border-t border-zinc-300 text-xs text-zinc-500">
+      <div className="hidden print:block pt-8 mt-6 border-t border-zinc-300 text-xs text-zinc-600 break-inside-avoid">
         <div className="flex justify-between items-end">
           <div>
             <p className="font-bold text-zinc-800">Prepared By: Library Operations Desk</p>
-            <p className="text-[10px]">Verified against Supabase secure database ledger</p>
+            <p className="text-[10px] text-zinc-500">Verified against Supabase secure database ledger</p>
           </div>
           <div className="text-right">
-            <div className="w-48 border-b border-zinc-400 mb-2"></div>
+            <div className="w-48 border-b border-zinc-400 mb-2 inline-block"></div>
             <p className="font-bold text-zinc-800">Authorized Signatory</p>
-            <p className="text-[10px]">Abhishek Genius Library Management</p>
+            <p className="text-[10px] text-zinc-500">{BRAND_CONFIG.fullName || "Abhishek Genius Library Management"}</p>
           </div>
         </div>
       </div>

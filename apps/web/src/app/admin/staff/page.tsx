@@ -84,6 +84,16 @@ export default function AdminStaffPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
+      // Clean any legacy dummy records from Supabase if they exist
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        const supabase = createClient();
+        await supabase
+          .from("staff_profiles")
+          .delete()
+          .or("id.eq.staff-prime-01,id.eq.staff-sub-01,email.ilike.%rajesh.librarian%,email.ilike.%vikas.assistant%");
+      } catch {}
+
       const data = await getStaffMembers();
       setStaffList(data || []);
     } catch (e) {
@@ -128,6 +138,11 @@ export default function AdminStaffPage() {
       return;
     }
 
+    if (!newStaff.phone.trim() || newStaff.phone.trim().replace(/\D/g, "").length < 10) {
+      alert("Please enter a valid 10-digit mobile number for the staff member.");
+      return;
+    }
+
     if (!newStaff.password || newStaff.password.length < 6) {
       alert("Password must be at least 6 characters long for Supabase authentication.");
       return;
@@ -140,7 +155,7 @@ export default function AdminStaffPage() {
       const res = await createStaffMember({
         name: newStaff.name.trim(),
         email: newStaff.email.trim().toLowerCase(),
-        phone: newStaff.phone.trim() || "+91 98765 00000",
+        phone: newStaff.phone.trim(),
         address: newStaff.address.trim(),
         aadharNumber: newStaff.aadharNumber.trim(),
         avatarUrl: newStaff.avatarUrl || undefined,
@@ -375,159 +390,184 @@ export default function AdminStaffPage() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {staffList.map((member) => {
-            const isPrime = member.role === "prime_staff";
-            return (
-              <div 
-                key={member.id}
-                className={`rounded-3xl border p-5 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition bg-white dark:bg-[#0A2E5C] ${
-                  isPrime 
-                    ? "border-[#FFC107]/60 dark:border-[#FFC107]/40" 
-                    : "border-zinc-200 dark:border-zinc-800"
-                }`}
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      {member.avatarUrl ? (
-                        <img
-                          src={member.avatarUrl}
-                          alt={member.name}
-                          className="h-12 w-12 rounded-2xl object-cover border border-[#FFC107]/40 shadow-xs shrink-0"
-                        />
-                      ) : (
-                        <div className="h-12 w-12 rounded-2xl bg-[#0A2E5C] text-[#FFC107] border border-[#FFC107]/30 font-bold flex items-center justify-center text-sm shadow-xs shrink-0">
-                          {member.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .slice(0, 2)
-                            .join("")
-                            .toUpperCase() || "ST"}
-                        </div>
-                      )}
-                      <div>
-                        <h3 className="font-bold text-sm text-[#0A2E5C] dark:text-white">
-                          {member.name}
-                        </h3>
-                        <div className="mt-1 flex items-center gap-1.5">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
-                              isPrime
-                                ? "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300"
-                                : "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300"
-                            }`}
-                          >
-                            {isPrime ? <Sparkles className="h-3 w-3" /> : <Award className="h-3 w-3" />}
-                            {isPrime ? "PRIME STAFF" : "SUB STAFF"}
-                          </span>
+        {isLoading ? (
+          <div className="rounded-3xl border border-[#E5E7EB] dark:border-zinc-800 bg-white dark:bg-[#0A2E5C] p-12 text-center flex flex-col items-center justify-center space-y-3">
+            <RefreshCw className="h-6 w-6 text-[#0B5ED7] dark:text-[#FFC107] animate-spin" />
+            <p className="text-xs text-zinc-500 font-bold">Loading staff directory from Supabase...</p>
+          </div>
+        ) : staffList.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-[#E5E7EB] dark:border-zinc-800 bg-white/70 dark:bg-[#0A2E5C]/70 p-12 text-center flex flex-col items-center justify-center space-y-3 shadow-xs">
+            <div className="h-14 w-14 rounded-2xl bg-[#0A2E5C]/10 dark:bg-white/10 text-[#0B5ED7] dark:text-[#FFC107] flex items-center justify-center">
+              <UserCog className="h-7 w-7" />
+            </div>
+            <h3 className="text-base font-bold text-[#0A2E5C] dark:text-white">
+              No Staff Members Registered Yet
+            </h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-md">
+              Add library duty staff (Prime Staff or Sub Staff) to grant student attendance scanning, exam results desk, or seat allocation permissions.
+            </p>
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="mt-2 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0A2E5C] text-[#FFC107] text-xs font-black shadow-md hover:bg-[#141A24] cursor-pointer"
+            >
+              <Plus className="h-4 w-4" /> Add First Staff Member
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {staffList.map((member) => {
+              const isPrime = member.role === "prime_staff";
+              return (
+                <div 
+                  key={member.id}
+                  className={`rounded-3xl border p-5 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition bg-white dark:bg-[#0A2E5C] ${
+                    isPrime 
+                      ? "border-[#FFC107]/60 dark:border-[#FFC107]/40" 
+                      : "border-zinc-200 dark:border-zinc-800"
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {member.avatarUrl ? (
+                          <img
+                            src={member.avatarUrl}
+                            alt={member.name}
+                            className="h-12 w-12 rounded-2xl object-cover border border-[#FFC107]/40 shadow-xs shrink-0"
+                          />
+                        ) : (
+                          <div className="h-12 w-12 rounded-2xl bg-[#0A2E5C] text-[#FFC107] border border-[#FFC107]/30 font-bold flex items-center justify-center text-sm shadow-xs shrink-0">
+                            {member.name
+                              .split(" ")
+                              .map((n) => n[0])
+                              .slice(0, 2)
+                              .join("")
+                              .toUpperCase() || "ST"}
+                          </div>
+                        )}
+                        <div>
+                          <h3 className="font-bold text-sm text-[#0A2E5C] dark:text-white">
+                            {member.name}
+                          </h3>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                                isPrime
+                                  ? "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300"
+                                  : "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300"
+                              }`}
+                            >
+                              {isPrime ? <Sparkles className="h-3 w-3" /> : <Award className="h-3 w-3" />}
+                              {isPrime ? "PRIME STAFF" : "SUB STAFF"}
+                            </span>
+                          </div>
                         </div>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(member.id)}
+                        className={`px-2 py-0.5 text-[10px] font-bold rounded-full border cursor-pointer shrink-0 ${
+                          member.status === "active"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300"
+                            : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300"
+                        }`}
+                        title="Click to toggle status"
+                      >
+                        {member.status === "active" ? "● On Duty" : "○ On Leave"}
+                      </button>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleToggleStatus(member.id)}
-                      className={`px-2 py-0.5 text-[10px] font-bold rounded-full border cursor-pointer shrink-0 ${
-                        member.status === "active"
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300"
-                          : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300"
-                      }`}
-                      title="Click to toggle status"
-                    >
-                      {member.status === "active" ? "● On Duty" : "○ On Leave"}
-                    </button>
-                  </div>
-
-                  {/* Contact & Verification Info */}
-                  <div className="mt-4 space-y-2 text-xs text-zinc-600 dark:text-zinc-300">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-                      <span className="truncate">{member.email}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-                      <span>{member.phone}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-                      <span className="text-[11px] font-medium">{member.shiftAssigned}</span>
-                    </div>
-                    {member.address && (
+                    {/* Contact & Verification Info */}
+                    <div className="mt-4 space-y-2 text-xs text-zinc-600 dark:text-zinc-300">
                       <div className="flex items-center gap-2">
-                        <MapPin className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
-                        <span className="truncate text-[11px]">{member.address}</span>
+                        <Mail className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                        <span className="truncate">{member.email}</span>
                       </div>
-                    )}
-                    {member.aadharNumber && (
-                      <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-500">
-                        <CreditCard className="h-3.5 w-3.5 text-[#0B5ED7] shrink-0" />
-                        <span>
-                          Aadhar: •••• •••• {member.aadharNumber.replace(/\s+/g, '').slice(-4)}
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                        <span>{member.phone}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                        <span className="text-[11px] font-medium">{member.shiftAssigned}</span>
+                      </div>
+                      {member.address && (
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                          <span className="truncate text-[11px]">{member.address}</span>
+                        </div>
+                      )}
+                      {member.aadharNumber && (
+                        <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-500">
+                          <CreditCard className="h-3.5 w-3.5 text-[#0B5ED7] shrink-0" />
+                          <span>
+                            Aadhar: •••• •••• {member.aadharNumber.replace(/\s+/g, '').slice(-4)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Operational Capabilities Pills */}
+                    <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-2">
+                        Allowed Counter Privileges:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900">
+                          ✓ Attendance Scans
                         </span>
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900">
+                          ✓ Exam Results Desk
+                        </span>
+                        {isPrime ? (
+                          <>
+                            <span className="px-2 py-0.5 rounded-md bg-[#FFC107]/15 text-[#0B5ED7] text-[10px] font-bold border border-[#FFC107]/30 dark:text-[#FFC107]">
+                              ✓ Seat Allotment
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-[#FFC107]/15 text-[#0B5ED7] text-[10px] font-bold border border-[#FFC107]/30 dark:text-[#FFC107]">
+                              ✓ Monthly Fees Only
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-[#FFC107]/15 text-[#0B5ED7] text-[10px] font-bold border border-[#FFC107]/30 dark:text-[#FFC107]">
+                              ✓ 2-Way Messages
+                            </span>
+                            <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200 dark:bg-purple-950/30 dark:border-purple-900 dark:text-purple-300">
+                              ✓ Add & Approve Students
+                            </span>
+                          </>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-500 text-[10px] font-bold border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700">
+                            🔒 Restricted from Fees, Seats, Msgs, Approvals
+                          </span>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
 
-                  {/* Operational Capabilities Pills */}
-                  <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-2">
-                      Allowed Counter Privileges:
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900">
-                        ✓ Attendance Scans
-                      </span>
-                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900">
-                        ✓ Exam Results Desk
-                      </span>
-                      {isPrime ? (
-                        <>
-                          <span className="px-2 py-0.5 rounded-md bg-[#FFC107]/15 text-[#0B5ED7] text-[10px] font-bold border border-[#FFC107]/30 dark:text-[#FFC107]">
-                            ✓ Seat Allotment
-                          </span>
-                          <span className="px-2 py-0.5 rounded-md bg-[#FFC107]/15 text-[#0B5ED7] text-[10px] font-bold border border-[#FFC107]/30 dark:text-[#FFC107]">
-                            ✓ Monthly Fees Only
-                          </span>
-                          <span className="px-2 py-0.5 rounded-md bg-[#FFC107]/15 text-[#0B5ED7] text-[10px] font-bold border border-[#FFC107]/30 dark:text-[#FFC107]">
-                            ✓ 2-Way Messages
-                          </span>
-                          <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200 dark:bg-purple-950/30 dark:border-purple-900 dark:text-purple-300">
-                            ✓ Add & Approve Students
-                          </span>
-                        </>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-500 text-[10px] font-bold border border-zinc-200 dark:bg-zinc-800 dark:border-zinc-700">
-                          🔒 Restricted from Fees, Seats, Msgs, Approvals
-                        </span>
-                      )}
+                  <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-[11px] text-zinc-400">
+                    <span>Last active: {member.lastLogin || "Never"}</span>
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={() => setEditingStaff(member)}
+                        className="text-zinc-500 hover:text-[#0B5ED7] dark:hover:text-[#FFC107] p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
+                        title="Edit Staff Member"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteStaff(member.id, member.name)}
+                        className="text-rose-500 hover:text-rose-700 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
+                        title="Remove"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 </div>
-
-                <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-[11px] text-zinc-400">
-                  <span>Last active: {member.lastLogin || "Never"}</span>
-                  <div className="flex items-center gap-1">
-                    <button 
-                      onClick={() => setEditingStaff(member)}
-                      className="text-zinc-500 hover:text-[#0B5ED7] dark:hover:text-[#FFC107] p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer"
-                      title="Edit Staff Member"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteStaff(member.id, member.name)}
-                      className="text-rose-500 hover:text-rose-700 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer"
-                      title="Remove"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Role Comparison Matrix */}
@@ -672,7 +712,7 @@ export default function AdminStaffPage() {
                   <label className="text-[11px] font-bold text-zinc-500 block mb-1">Full Name *</label>
                   <input
                     type="text"
-                    placeholder="e.g. Rajesh Sharma"
+                    placeholder="e.g. Rahul Singh"
                     value={newStaff.name}
                     onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
                     className="w-full p-2.5 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 text-xs text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:outline-none focus:border-[#FFC107]"
@@ -683,7 +723,7 @@ export default function AdminStaffPage() {
                   <label className="text-[11px] font-bold text-zinc-500 block mb-1">Email ID (Login User ID) *</label>
                   <input
                     type="email"
-                    placeholder="staff@thegenius.com"
+                    placeholder="staff@geniuslibrarymadhupur.com"
                     value={newStaff.email}
                     onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
                     className="w-full p-2.5 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 text-xs text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:outline-none focus:border-[#FFC107]"
@@ -720,7 +760,7 @@ export default function AdminStaffPage() {
                   <label className="text-[11px] font-bold text-zinc-500 block mb-1">Mobile Number *</label>
                   <input
                     type="tel"
-                    placeholder="+91 98765 43210"
+                    placeholder="+91 84234 48899"
                     value={newStaff.phone}
                     onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
                     className="w-full p-2.5 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 text-xs text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:outline-none focus:border-[#FFC107]"
@@ -734,7 +774,7 @@ export default function AdminStaffPage() {
                   <label className="text-[11px] font-bold text-zinc-500 block mb-1">Residential Address</label>
                   <input
                     type="text"
-                    placeholder="e.g. Flat 301, Civil Lines, Kota"
+                    placeholder="e.g. Near Station Road, Madhupur, Sonbhadra"
                     value={newStaff.address}
                     onChange={(e) => setNewStaff({ ...newStaff, address: e.target.value })}
                     className="w-full p-2.5 rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/50 text-xs text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:outline-none focus:border-[#FFC107]"

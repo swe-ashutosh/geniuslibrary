@@ -36,10 +36,19 @@ import {
   Settings,
   Download,
   KeyRound,
-  Newspaper
+  Newspaper,
+  Fingerprint
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { 
+  isWebAuthnSupported, 
+  hasRegisteredPasskey, 
+  getBiometricProfile, 
+  registerPasskey, 
+  removePasskey, 
+  type BiometricProfile 
+} from "@/lib/webauthn";
 import { 
   getStudents, 
   getAnnouncements,
@@ -131,6 +140,52 @@ export default function StudentLayout({
     if (e.key === "Enter" && searchQuery.trim()) {
       router.push(`/student/tasks?search=${encodeURIComponent(searchQuery.trim())}`);
     }
+  };
+
+  // Biometric Passkey state
+  const [biometricSupported, setBiometricSupported] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricProfile, setBiometricProfile] = useState<BiometricProfile | null>(null);
+  const [isBiometricActionLoading, setIsBiometricActionLoading] = useState(false);
+  const [biometricStatusMsg, setBiometricStatusMsg] = useState("");
+
+  useEffect(() => {
+    if (isWebAuthnSupported()) {
+      setBiometricSupported(true);
+      const isEnabled = hasRegisteredPasskey();
+      setBiometricEnabled(isEnabled);
+      if (isEnabled) {
+        setBiometricProfile(getBiometricProfile());
+      }
+    }
+  }, []);
+
+  const handleToggleBiometric = async () => {
+    setIsBiometricActionLoading(true);
+    setBiometricStatusMsg("");
+
+    if (biometricEnabled) {
+      const res = await removePasskey();
+      if (res.success) {
+        setBiometricEnabled(false);
+        setBiometricProfile(null);
+        setBiometricStatusMsg("Biometric login removed for this device.");
+      } else {
+        setBiometricStatusMsg(res.error || "Failed to remove biometric login.");
+      }
+      setIsBiometricActionLoading(false);
+      return;
+    }
+
+    const res = await registerPasskey();
+    if (res.success) {
+      setBiometricEnabled(true);
+      setBiometricProfile(getBiometricProfile());
+      setBiometricStatusMsg("Biometric login enabled successfully!");
+    } else {
+      setBiometricStatusMsg(res.error || "Biometric registration failed.");
+    }
+    setIsBiometricActionLoading(false);
   };
 
   const [userProfile, setUserProfile] = useState<{
@@ -663,7 +718,11 @@ export default function StudentLayout({
 
   const handleLogout = async () => {
     const supabase = createClient();
-    await supabase.auth.signOut();
+    if (hasRegisteredPasskey()) {
+      await supabase.auth.signOut({ scope: "local" });
+    } else {
+      await supabase.auth.signOut();
+    }
     clearInactivityTracking();
     router.push("/login/");
   };
@@ -750,6 +809,62 @@ export default function StudentLayout({
               </p>
             </div>
           </div>
+
+          {/* Biometric Passkey Quick Toggle */}
+          {biometricSupported && (
+            <div className="mt-2.5 rounded-2xl border border-zinc-800 bg-[#141A24]/90 p-2.5 shadow-xs">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                    biometricEnabled
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                      : "bg-[#FFC107]/20 text-[#FFC107] border border-[#FFC107]/30"
+                  }`}>
+                    <Fingerprint className={`h-4 w-4 ${isBiometricActionLoading ? "animate-spin" : ""}`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-bold text-white truncate flex items-center gap-1">
+                      <span>{biometricEnabled ? "Biometric Active" : "Touch / Face ID"}</span>
+                      {biometricEnabled && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      )}
+                    </p>
+                    <p className="text-[9px] text-zinc-400 truncate">
+                      {biometricEnabled ? (biometricProfile?.deviceName || "This Device") : "1-Touch Quick Sign In"}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleToggleBiometric}
+                  disabled={isBiometricActionLoading}
+                  className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-black transition active:scale-95 cursor-pointer ${
+                    biometricEnabled
+                      ? "bg-zinc-800 text-zinc-300 hover:bg-rose-950/60 hover:text-rose-400 border border-zinc-700 hover:border-rose-800"
+                      : "bg-[#FFC107] text-[#0A2E5C] hover:bg-[#FFA000] shadow-xs"
+                  }`}
+                >
+                  {isBiometricActionLoading
+                    ? "..."
+                    : biometricEnabled
+                    ? "Disable"
+                    : "Enable"}
+                </button>
+              </div>
+
+              {biometricStatusMsg && (
+                <p className={`mt-1.5 text-[9px] font-medium leading-tight ${
+                  biometricStatusMsg.includes("success") || biometricStatusMsg.includes("enabled")
+                    ? "text-emerald-400"
+                    : "text-amber-400"
+                }`}>
+                  {biometricStatusMsg}
+                </p>
+              )}
+            </div>
+          )}
+
           <button 
             onClick={handleLogout}
             className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-xl border border-zinc-700/60 bg-transparent py-2 text-xs font-bold text-zinc-400 hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
@@ -1085,6 +1200,62 @@ export default function StudentLayout({
               <p className="text-[10px] text-zinc-400">View ID Pass & Profile →</p>
             </div>
           </button>
+
+          {/* Biometric Passkey Quick Toggle (Mobile Drawer) */}
+          {biometricSupported && (
+            <div className="rounded-2xl border border-zinc-800 bg-[#141A24]/90 p-2.5 shadow-xs">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                    biometricEnabled
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                      : "bg-[#FFC107]/20 text-[#FFC107] border border-[#FFC107]/30"
+                  }`}>
+                    <Fingerprint className={`h-4 w-4 ${isBiometricActionLoading ? "animate-spin" : ""}`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-bold text-white truncate flex items-center gap-1">
+                      <span>{biometricEnabled ? "Biometric Active" : "Touch / Face ID"}</span>
+                      {biometricEnabled && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      )}
+                    </p>
+                    <p className="text-[9px] text-zinc-400 truncate">
+                      {biometricEnabled ? (biometricProfile?.deviceName || "This Device") : "1-Touch Quick Sign In"}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleToggleBiometric}
+                  disabled={isBiometricActionLoading}
+                  className={`shrink-0 rounded-lg px-2.5 py-1 text-[10px] font-black transition active:scale-95 cursor-pointer ${
+                    biometricEnabled
+                      ? "bg-zinc-800 text-zinc-300 hover:bg-rose-950/60 hover:text-rose-400 border border-zinc-700 hover:border-rose-800"
+                      : "bg-[#FFC107] text-[#0A2E5C] hover:bg-[#FFA000] shadow-xs"
+                  }`}
+                >
+                  {isBiometricActionLoading
+                    ? "..."
+                    : biometricEnabled
+                    ? "Disable"
+                    : "Enable"}
+                </button>
+              </div>
+
+              {biometricStatusMsg && (
+                <p className={`mt-1.5 text-[9px] font-medium leading-tight ${
+                  biometricStatusMsg.includes("success") || biometricStatusMsg.includes("enabled")
+                    ? "text-emerald-400"
+                    : "text-amber-400"
+                }`}>
+                  {biometricStatusMsg}
+                </p>
+              )}
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleLogout}
@@ -1352,6 +1523,27 @@ export default function StudentLayout({
                     </span>
                     <span className="text-[10px] text-zinc-400">→</span>
                   </Link>
+
+                  {biometricSupported && (
+                    <button
+                      type="button"
+                      onClick={handleToggleBiometric}
+                      disabled={isBiometricActionLoading}
+                      className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-800 rounded-xl transition cursor-pointer text-left"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Fingerprint className={`h-3.5 w-3.5 ${biometricEnabled ? "text-emerald-500" : "text-[#FFC107]"}`} />
+                        <span>{biometricEnabled ? "Biometric Login" : "Enable Touch / Face ID"}</span>
+                      </span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                        biometricEnabled
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                          : "bg-[#FFC107]/20 text-[#0A2E5C] dark:text-[#FFC107]"
+                      }`}>
+                        {isBiometricActionLoading ? "..." : biometricEnabled ? "Active ✓" : "Set up"}
+                      </span>
+                    </button>
+                  )}
 
                   <Link
                     href="/student/messages"

@@ -29,10 +29,19 @@ import {
   Sparkles,
   ShieldCheck,
   CheckCircle2,
-  QrCode
+  QrCode,
+  Fingerprint
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { 
+  isWebAuthnSupported, 
+  hasRegisteredPasskey, 
+  getBiometricProfile, 
+  registerPasskey, 
+  removePasskey, 
+  type BiometricProfile 
+} from "@/lib/webauthn";
 import { BrandLogo } from "@/components/BrandLogo";
 import { AdminStudentQrScannerModal } from "@/components/AdminStudentQrScannerModal";
 import { 
@@ -116,6 +125,52 @@ export default function AdminLayout({
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
+
+  // Biometric Passkey state
+  const [biometricSupported, setBiometricSupported] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricProfile, setBiometricProfile] = useState<BiometricProfile | null>(null);
+  const [isBiometricActionLoading, setIsBiometricActionLoading] = useState(false);
+  const [biometricStatusMsg, setBiometricStatusMsg] = useState("");
+
+  useEffect(() => {
+    if (isWebAuthnSupported()) {
+      setBiometricSupported(true);
+      const isEnabled = hasRegisteredPasskey();
+      setBiometricEnabled(isEnabled);
+      if (isEnabled) {
+        setBiometricProfile(getBiometricProfile());
+      }
+    }
+  }, []);
+
+  const handleToggleBiometric = async () => {
+    setIsBiometricActionLoading(true);
+    setBiometricStatusMsg("");
+
+    if (biometricEnabled) {
+      const res = await removePasskey();
+      if (res.success) {
+        setBiometricEnabled(false);
+        setBiometricProfile(null);
+        setBiometricStatusMsg("Biometric login removed for this device.");
+      } else {
+        setBiometricStatusMsg(res.error || "Failed to remove biometric login.");
+      }
+      setIsBiometricActionLoading(false);
+      return;
+    }
+
+    const res = await registerPasskey();
+    if (res.success) {
+      setBiometricEnabled(true);
+      setBiometricProfile(getBiometricProfile());
+      setBiometricStatusMsg("Biometric login enabled successfully!");
+    } else {
+      setBiometricStatusMsg(res.error || "Biometric registration failed.");
+    }
+    setIsBiometricActionLoading(false);
+  };
 
   // Auto-close mobile drawer on route change
   useEffect(() => {
@@ -390,7 +445,11 @@ export default function AdminLayout({
 
   const handleLogout = async () => {
     const supabase = createClient();
-    await supabase.auth.signOut();
+    if (hasRegisteredPasskey()) {
+      await supabase.auth.signOut({ scope: "local" });
+    } else {
+      await supabase.auth.signOut();
+    }
     clearInactivityTracking();
     router.push("/login");
   };
@@ -414,13 +473,13 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F3F4F6] dark:bg-[#141A24]">
+    <div className="flex h-screen overflow-hidden bg-[#F3F4F6] dark:bg-[#141A24] print:h-auto print:overflow-visible print:bg-white print:block">
       <meta name="robots" content="noindex, nofollow" />
       <title>{`Admin Portal | ${BRAND_CONFIG.fullName}`}</title>
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
         <div 
-          className="fixed inset-0 z-50 bg-[#0A2E5C]/80 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-50 bg-[#0A2E5C]/80 backdrop-blur-sm lg:hidden print:hidden"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
@@ -429,7 +488,7 @@ export default function AdminLayout({
       {/* 1. SIDEBAR (MATCHING IMAGE 1 WITH BRAND COLORS) */}
       {/* ========================================================================= */}
       <aside className={`
-        fixed inset-y-0 left-0 z-[60] flex w-64 flex-col bg-[#0A2E5C] text-white transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 border-r border-zinc-800/80 shadow-2xl lg:shadow-none
+        fixed inset-y-0 left-0 z-[60] flex w-64 flex-col bg-[#0A2E5C] text-white transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 border-r border-zinc-800/80 shadow-2xl lg:shadow-none print:hidden
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         {/* Brand Logo Header */}
@@ -509,6 +568,61 @@ export default function AdminLayout({
             </div>
           </div>
 
+          {/* Biometric Passkey Quick Toggle */}
+          {biometricSupported && (
+            <div className="rounded-2xl border border-zinc-800 bg-[#0A2E5C]/70 p-3 shadow-xs">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
+                    biometricEnabled
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                      : "bg-[#FFC107]/20 text-[#FFC107] border border-[#FFC107]/30"
+                  }`}>
+                    <Fingerprint className={`h-4 w-4 ${isBiometricActionLoading ? "animate-spin" : ""}`} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-white truncate flex items-center gap-1.5">
+                      <span>{biometricEnabled ? "Biometric Active" : "Touch / Face ID"}</span>
+                      {biometricEnabled && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      )}
+                    </p>
+                    <p className="text-[10px] text-zinc-400 truncate">
+                      {biometricEnabled ? (biometricProfile?.deviceName || "This Device") : "1-Touch Quick Sign In"}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleToggleBiometric}
+                  disabled={isBiometricActionLoading}
+                  className={`shrink-0 rounded-xl px-2.5 py-1.5 text-[10px] font-black transition active:scale-95 cursor-pointer ${
+                    biometricEnabled
+                      ? "bg-zinc-800 text-zinc-300 hover:bg-rose-950/60 hover:text-rose-400 border border-zinc-700 hover:border-rose-800"
+                      : "bg-[#FFC107] text-[#0A2E5C] hover:bg-[#FFA000] shadow-xs"
+                  }`}
+                >
+                  {isBiometricActionLoading
+                    ? "..."
+                    : biometricEnabled
+                    ? "Disable"
+                    : "Enable"}
+                </button>
+              </div>
+
+              {biometricStatusMsg && (
+                <p className={`mt-2 text-[10px] font-medium leading-tight ${
+                  biometricStatusMsg.includes("success") || biometricStatusMsg.includes("enabled")
+                    ? "text-emerald-400"
+                    : "text-amber-400"
+                }`}>
+                  {biometricStatusMsg}
+                </p>
+              )}
+            </div>
+          )}
+
           <button 
             onClick={handleLogout}
             className="flex w-full items-center gap-3 px-3 py-2 text-xs font-bold text-zinc-400 hover:text-rose-400 hover:bg-white/5 rounded-xl transition cursor-pointer"
@@ -522,10 +636,10 @@ export default function AdminLayout({
       {/* ========================================================================= */}
       {/* 2. MAIN VIEWPORT & NAVBAR (PIXEL-PERFECT TO IMAGE 2) */}
       {/* ========================================================================= */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden print:overflow-visible print:h-auto print:block">
         
         {/* Top Header Navbar */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200/80 bg-white px-3 sm:px-6 dark:border-zinc-800 dark:bg-[#0A2E5C] relative z-30 shadow-xs">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-zinc-200/80 bg-white px-3 sm:px-6 dark:border-zinc-800 dark:bg-[#0A2E5C] relative z-30 shadow-xs print:hidden">
           
           {/* Left Side: Mobile -> Hamburger + Fixed Brand Logo; Desktop -> Global Search Input + QR Scanner Button */}
           <div className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0 max-w-xl">
@@ -795,9 +909,9 @@ export default function AdminLayout({
         </header>
 
         {/* Page Content area */}
-        <main className="flex-1 overflow-y-auto pb-28 lg:pb-8">
+        <main className="flex-1 overflow-y-auto pb-28 lg:pb-8 print:overflow-visible print:h-auto print:p-0 print:m-0 print:pb-0 print:block">
           {/* Mobile Shifted Search Bar with Placeholder & QR Scanner Icon (Scrolls with page content) */}
-          <div className="lg:hidden border-b border-zinc-200/80 bg-white/95 dark:bg-[#0A2E5C]/95 backdrop-blur-md px-3 py-2 shadow-2xs mb-2">
+          <div className="lg:hidden border-b border-zinc-200/80 bg-white/95 dark:bg-[#0A2E5C]/95 backdrop-blur-md px-3 py-2 shadow-2xs mb-2 print:hidden">
             <div className="flex items-center gap-2 max-w-md mx-auto">
               {/* Search Input with Placeholder */}
               <div 
@@ -820,13 +934,13 @@ export default function AdminLayout({
             </div>
           </div>
 
-          <div className="p-4 sm:p-6 lg:p-8 pt-2 sm:pt-4 lg:pt-8">
+          <div className="p-4 sm:p-6 lg:p-8 pt-2 sm:pt-4 lg:pt-8 print:p-0 print:m-0">
             {children}
           </div>
         </main>
 
         {/* Mobile Bottom Navigation Bar styled like Native App Icons */}
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 border-t border-zinc-200/80 bg-white/95 backdrop-blur-md px-1.5 py-1 z-30 dark:bg-[#0A2E5C]/95 dark:border-zinc-800 shadow-[0_-6px_20px_rgba(0,0,0,0.06)] pb-[calc(0.25rem+env(safe-area-inset-bottom))]">
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 border-t border-zinc-200/80 bg-white/95 backdrop-blur-md px-1.5 py-1 z-30 dark:bg-[#0A2E5C]/95 dark:border-zinc-800 shadow-[0_-6px_20px_rgba(0,0,0,0.06)] pb-[calc(0.25rem+env(safe-area-inset-bottom))] print:hidden">
           <div className="flex justify-around items-center max-w-md mx-auto">
             {MOBILE_BOTTOM_NAV.map((item) => {
               const active = isNavActive(item.href);
@@ -864,7 +978,7 @@ export default function AdminLayout({
 
       {/* Quick Search Modal (Ctrl + K) */}
       {searchModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/60 backdrop-blur-xs p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/60 backdrop-blur-xs p-4 print:hidden">
           <div className="relative w-full max-w-lg rounded-3xl border border-zinc-200 bg-white p-4 shadow-2xl dark:border-zinc-800 dark:bg-[#0A2E5C] space-y-3">
             <div className="flex items-center gap-3 pb-3 border-b border-zinc-100 dark:border-zinc-800">
               <Search className="h-5 w-5 text-zinc-400" />
@@ -914,10 +1028,12 @@ export default function AdminLayout({
       )}
 
       {/* Student QR Inspection & Live Action Modal */}
-      <AdminStudentQrScannerModal
-        isOpen={qrScannerOpen}
-        onClose={() => setQrScannerOpen(false)}
-      />
+      <div className="print:hidden">
+        <AdminStudentQrScannerModal
+          isOpen={qrScannerOpen}
+          onClose={() => setQrScannerOpen(false)}
+        />
+      </div>
     </div>
   );
 }

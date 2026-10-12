@@ -210,8 +210,8 @@ function playScanBeep() {
       if (!vWidth || !vHeight) return null;
 
       const canvas = document.createElement("canvas");
-      // Scale down proportionally to max 960px preserving 100% full field of view
-      const maxDim = 960;
+      // Scale down proportionally to max 640px preserving 100% full field of view (strictly < 100KB compliance)
+      const maxDim = 640;
       let w = vWidth;
       let h = vHeight;
       if (Math.max(w, h) > maxDim) {
@@ -229,7 +229,7 @@ function playScanBeep() {
       if (!ctx) return null;
       // Capture full uncropped camera sensor frame
       ctx.drawImage(video, 0, 0, w, h);
-      return canvas.toDataURL("image/jpeg", 0.75);
+      return canvas.toDataURL("image/jpeg", 0.65);
     } catch {
       return null;
     }
@@ -253,7 +253,7 @@ function playScanBeep() {
       const isMaster = seat === "MASTER" || seat === "AUTO" || !seat;
       const effectiveSeat = defaultSeat ? defaultSeat : (isMaster ? undefined : seat);
 
-      // Silent Photo Upload in background (under 200KB, stealth anti-cheat)
+      // Silent Photo Upload in background (strictly under 100KB, stealth anti-cheat)
       let uploadedPhotoUrl: string | undefined = undefined;
       const snapshot = capturedSnapshot || captureSilentSnapshot();
       if (snapshot) {

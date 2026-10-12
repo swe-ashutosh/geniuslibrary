@@ -185,7 +185,7 @@ function SignupForm() {
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const compressed = await compressAndResizeImage(file, 480, 0.78, 120 * 1024);
+        const compressed = await compressAndResizeImage(file, 480, 0.72, 90 * 1024);
         setAvatarFile(compressed);
         setAvatarSizeStr(`${(compressed.size / 1024).toFixed(0)} KB`);
         const preview = await fileToDataUrl(compressed);

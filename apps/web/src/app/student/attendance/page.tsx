@@ -585,15 +585,10 @@ export default function StudentAttendancePage() {
                     </div>
 
                     <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
-                      {att.verificationMethod === "stamp" ? (
-                        <span className="text-[10px] font-bold text-amber-800 bg-amber-50 dark:bg-amber-950/60 dark:text-amber-300 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800 flex items-center gap-1.5 shadow-xs">
-                          <CheckCircle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                          <span>Touch Stamp Verified</span>
-                        </span>
-                      ) : att.verificationMethod === "nfc" ? (
+                      {att.verificationMethod === "nfc" ? (
                         <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5 shadow-xs">
                           <Smartphone className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                          <span>NFC Stand Verified</span>
+                          <span>NFC Tap Verified</span>
                         </span>
                       ) : att.verificationMethod === "admin" ? (
                         <span className="text-[10px] font-bold text-purple-800 bg-purple-50 dark:bg-purple-950/60 dark:text-purple-300 px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-800 flex items-center gap-1.5 shadow-xs">
@@ -603,7 +598,7 @@ export default function StudentAttendancePage() {
                       ) : (
                         <span className="text-[10px] font-bold text-blue-800 bg-blue-50 dark:bg-blue-950/60 dark:text-blue-300 px-2.5 py-1 rounded-lg border border-blue-200 dark:border-blue-800 flex items-center gap-1.5 shadow-xs">
                           <QrCode className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                          <span>QR Scan Verified</span>
+                          <span>QR Scan (Silent Photo)</span>
                         </span>
                       )}
                       <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 dark:bg-emerald-950/80 dark:text-emerald-300 px-2.5 py-1 rounded-lg uppercase">
@@ -683,13 +678,9 @@ export default function StudentAttendancePage() {
                     </td>
                     <td className="py-3 px-4 text-zinc-500 font-bold whitespace-nowrap">⏱ {row.duration}</td>
                     <td className="py-3 px-4 whitespace-nowrap">
-                      {row.method === "stamp" ? (
-                        <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-amber-800 bg-amber-50 dark:bg-amber-950/60 dark:text-amber-300 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800">
-                          <CheckCircle className="h-3 w-3 text-amber-600" /> Touch Stamp
-                        </span>
-                      ) : row.method === "nfc" ? (
+                      {row.method === "nfc" ? (
                         <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-emerald-800 bg-emerald-50 dark:bg-emerald-950/60 dark:text-emerald-300 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
-                          <Smartphone className="h-3 w-3 text-emerald-600" /> NFC Stand
+                          <Smartphone className="h-3 w-3 text-emerald-600" /> NFC Tap
                         </span>
                       ) : row.method === "admin" ? (
                         <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-purple-800 bg-purple-50 dark:bg-purple-950/60 dark:text-purple-300 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800">

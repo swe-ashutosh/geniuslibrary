@@ -2551,7 +2551,7 @@ export interface StaffMember {
 }
 
 export async function getStaffMembers(): Promise<StaffMember[]> {
-  // 1. Try Supabase staff_profiles table first (primary source of truth)
+  // Supabase staff_profiles table is the sole primary source of truth
   try {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
@@ -2560,8 +2560,16 @@ export async function getStaffMembers(): Promise<StaffMember[]> {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (!error && Array.isArray(data) && data.length > 0) {
-      const formatted: StaffMember[] = data.map((row: any) => ({
+    if (!error && Array.isArray(data)) {
+      // Purge any legacy dummy records from the returned dataset
+      const realRows = data.filter((row: any) => 
+        row.id !== 'staff-prime-01' && 
+        row.id !== 'staff-sub-01' && 
+        !row.email?.toLowerCase().includes('rajesh.librarian') && 
+        !row.email?.toLowerCase().includes('vikas.assistant')
+      );
+
+      const formatted: StaffMember[] = realRows.map((row: any) => ({
         id: row.id,
         name: row.name,
         email: row.email,
@@ -2580,34 +2588,76 @@ export async function getStaffMembers(): Promise<StaffMember[]> {
       setLocalData(STORAGE_KEYS.STAFF, formatted);
       return formatted;
     }
-  } catch (err) {
-    console.warn('Supabase staff_profiles fetch note:', err);
-  }
-
-  // 2. Fallback to D1 API endpoint if available
-  try {
-    const data = await fetchApi<{ success: boolean; staff: StaffMember[] }>('/api/staff');
-    if (data.success && Array.isArray(data.staff) && data.staff.length > 0) {
-      setLocalData(STORAGE_KEYS.STAFF, data.staff);
-      return data.staff;
+    if (error) {
+      console.warn('[getStaffMembers] Supabase staff_profiles fetch note:', error.message);
     }
   } catch (err) {
-    console.warn('API getStaffMembers fallback notice:', err);
+    console.warn('[getStaffMembers] Supabase staff_profiles fetch exception:', err);
   }
 
-  // 3. Fallback to cached local data
-  return getLocalData<StaffMember[]>(STORAGE_KEYS.STAFF, []);
+  // Fallback to local storage (strictly filter out legacy dummy records)
+  const cached = getLocalData<StaffMember[]>(STORAGE_KEYS.STAFF, []);
+  const cleanCached = cached.filter(s => 
+    s.id !== 'staff-prime-01' && 
+    s.id !== 'staff-sub-01' && 
+    !s.email?.toLowerCase().includes('rajesh.librarian') && 
+    !s.email?.toLowerCase().includes('vikas.assistant')
+  );
+  if (cleanCached.length !== cached.length) {
+    setLocalData(STORAGE_KEYS.STAFF, cleanCached);
+  }
+  return cleanCached;
 }
 
 export async function createStaffMember(
   params: Partial<StaffMember> & { password?: string }
 ): Promise<{ success: boolean; staff?: StaffMember; error?: string }> {
-  const staffId = params.id || `staff-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
   const isPrime = params.role === 'prime_staff' || params.category === 'Prime Staff';
+  let staffId = params.id || `staff-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const cleanEmail = (params.email || '').toLowerCase().trim();
+
+  // 1. Supabase Auth account creation using a non-session client (keeps admin signed in)
+  if (params.password && params.password.length >= 6) {
+    try {
+      const { createClient: createSupabaseClient } = await import('@supabase/supabase-js');
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || BRAND_CONFIG.supabase.url;
+      const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || BRAND_CONFIG.supabase.anonKey;
+
+      const tempAuthClient = createSupabaseClient(url, key, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        }
+      });
+
+      const { data: signUpData, error: signUpError } = await tempAuthClient.auth.signUp({
+        email: cleanEmail,
+        password: params.password,
+        options: {
+          data: {
+            full_name: params.name || '',
+            phone: params.phone || '',
+            role: 'staff',
+            staff_role: isPrime ? 'prime_staff' : 'sub_staff',
+          }
+        }
+      });
+
+      if (signUpData?.user?.id) {
+        staffId = signUpData.user.id;
+      } else if (signUpError) {
+        console.warn('[createStaffMember] Supabase Auth signUp note:', signUpError.message);
+      }
+    } catch (authErr) {
+      console.warn('[createStaffMember] Supabase Auth signUp exception:', authErr);
+    }
+  }
+
   const newStaff: StaffMember = {
     id: staffId,
     name: params.name || '',
-    email: (params.email || '').toLowerCase().trim(),
+    email: cleanEmail,
     phone: params.phone || '',
     address: params.address || '',
     aadharNumber: params.aadharNumber || '',
@@ -2621,11 +2671,11 @@ export async function createStaffMember(
     updatedAt: new Date().toISOString(),
   };
 
-  // 1. Direct Supabase save (Primary Source of Truth)
+  // 2. Direct Supabase save (Primary Source of Truth)
   try {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
-    await supabase.from('staff_profiles').upsert([{
+    const { error: sbErr } = await supabase.from('staff_profiles').upsert([{
       id: staffId,
       name: newStaff.name,
       email: newStaff.email,
@@ -2641,18 +2691,28 @@ export async function createStaffMember(
       created_at: newStaff.createdAt,
       updated_at: newStaff.updatedAt,
     }]);
-  } catch (sbErr) {
-    console.warn('[createStaffMember] Supabase sync notice:', sbErr);
-  }
 
-  // 2. Worker / D1 API sync (cold backup)
-  try {
-    await fetchApi<{ success: boolean; staff?: StaffMember; error?: string }>('/api/staff', {
-      method: 'POST',
-      body: JSON.stringify({ ...params, id: staffId }),
-    });
-  } catch (err: any) {
-    console.warn('[createStaffMember] D1 sync notice:', err);
+    if (sbErr) {
+      console.warn('[createStaffMember] Supabase upsert error:', sbErr);
+      return { success: false, error: sbErr.message };
+    }
+
+    // Mirror to profiles table so universal role verification passes
+    try {
+      await supabase.from('profiles').upsert([{
+        id: staffId,
+        email: newStaff.email,
+        full_name: newStaff.name,
+        phone: newStaff.phone,
+        role: 'staff',
+        status: 'active',
+        created_at: newStaff.createdAt,
+        updated_at: newStaff.updatedAt,
+      }]);
+    } catch {}
+  } catch (sbErr: any) {
+    console.warn('[createStaffMember] Supabase sync notice:', sbErr);
+    return { success: false, error: sbErr?.message || 'Database error' };
   }
 
   const all = getLocalData<StaffMember[]>(STORAGE_KEYS.STAFF, []);
@@ -2664,12 +2724,13 @@ export async function updateStaffMember(
   id: string,
   params: Partial<StaffMember> & { password?: string }
 ): Promise<{ success: boolean; error?: string }> {
-  // 1. Direct Supabase update (Primary Source of Truth)
+  // Direct Supabase update (Primary Source of Truth)
   try {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
     const supaPayload: any = { updated_at: new Date().toISOString() };
     if (params.name !== undefined) supaPayload.name = params.name;
+    if (params.email !== undefined) supaPayload.email = params.email.toLowerCase().trim();
     if (params.phone !== undefined) supaPayload.phone = params.phone;
     if (params.address !== undefined) supaPayload.address = params.address;
     if (params.aadharNumber !== undefined) supaPayload.aadhar_number = params.aadharNumber;
@@ -2679,19 +2740,22 @@ export async function updateStaffMember(
     if (params.shiftAssigned !== undefined) supaPayload.shift_assigned = params.shiftAssigned;
     if (params.status !== undefined) supaPayload.status = params.status;
 
-    await supabase.from('staff_profiles').update(supaPayload).eq('id', id);
-  } catch (sbErr) {
-    console.warn('[updateStaffMember] Supabase sync notice:', sbErr);
-  }
+    const { error } = await supabase.from('staff_profiles').update(supaPayload).eq('id', id);
+    if (error) {
+      console.warn('[updateStaffMember] Supabase update error:', error);
+      return { success: false, error: error.message };
+    }
 
-  // 2. Worker / D1 API sync (cold backup)
-  try {
-    await fetchApi<{ success: boolean; staff?: StaffMember; error?: string }>(`/api/staff/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(params),
-    });
-  } catch (err: any) {
-    console.warn('[updateStaffMember] D1 sync notice:', err);
+    // Mirror name and phone updates to profiles table
+    try {
+      const profileUpdates: any = { updated_at: new Date().toISOString() };
+      if (params.name !== undefined) profileUpdates.full_name = params.name;
+      if (params.phone !== undefined) profileUpdates.phone = params.phone;
+      await supabase.from('profiles').update(profileUpdates).eq('id', id);
+    } catch {}
+  } catch (sbErr: any) {
+    console.warn('[updateStaffMember] Supabase sync notice:', sbErr);
+    return { success: false, error: sbErr?.message };
   }
 
   const all = getLocalData<StaffMember[]>(STORAGE_KEYS.STAFF, []);
@@ -2703,22 +2767,22 @@ export async function updateStaffMember(
 }
 
 export async function deleteStaffMember(id: string): Promise<{ success: boolean; error?: string }> {
-  // 1. Direct Supabase delete (Primary Source of Truth)
+  // Direct Supabase delete (Primary Source of Truth)
   try {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
-    await supabase.from('staff_profiles').delete().eq('id', id);
-  } catch (sbErr) {
+    const { error } = await supabase.from('staff_profiles').delete().eq('id', id);
+    if (error) {
+      console.warn('[deleteStaffMember] Supabase delete error:', error);
+      return { success: false, error: error.message };
+    }
+    // Also remove from profiles if present
+    try {
+      await supabase.from('profiles').delete().eq('id', id);
+    } catch {}
+  } catch (sbErr: any) {
     console.warn('[deleteStaffMember] Supabase sync notice:', sbErr);
-  }
-
-  // 2. Worker / D1 API sync (cold backup)
-  try {
-    await fetchApi<{ success: boolean; error?: string }>(`/api/staff/${id}`, {
-      method: 'DELETE',
-    });
-  } catch (err: any) {
-    console.warn('[deleteStaffMember] D1 sync notice:', err);
+    return { success: false, error: sbErr?.message };
   }
 
   const all = getLocalData<StaffMember[]>(STORAGE_KEYS.STAFF, []);

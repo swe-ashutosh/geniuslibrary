@@ -125,6 +125,7 @@ interface StudentHistoryModalData {
   student: StudentProfile & { studentCode: string; seatNumber: string };
   totalDaysPresent: number;
   totalSessions: number;
+  totalHoursSeated: string;
   historyDays: StudentHistoryDay[];
   isLoading: boolean;
 }
@@ -633,6 +634,7 @@ export default function AdminAttendancePage() {
       },
       totalDaysPresent: 0,
       totalSessions: 0,
+      totalHoursSeated: "...",
       historyDays: [],
       isLoading: true,
     });
@@ -647,15 +649,61 @@ export default function AdminAttendancePage() {
 
       const allRecords = (records || []) as any[];
       const dateMap = new Map<string, CheckSession[]>();
+      let totalMinutes = 0;
+
+      const parseTime = (t?: string | null): number | null => {
+        if (!t || t === "—" || t === "Session Ongoing" || t === "In Progress") return null;
+        if (t.includes("T")) {
+          const d = new Date(t);
+          if (!isNaN(d.getTime())) return d.getHours() * 60 + d.getMinutes();
+        }
+        const match = t.match(/(\d+):(\d+)(?::\d+)?\s*(am|pm)?/i);
+        if (!match) return null;
+        let h = parseInt(match[1], 10);
+        const m = parseInt(match[2], 10);
+        const mer = match[3]?.toLowerCase();
+        if (mer === 'pm' && h < 12) h += 12;
+        if (mer === 'am' && h === 12) h = 0;
+        return h * 60 + m;
+      };
 
       for (const rec of allRecords) {
         if (!rec.date) continue;
         const hasActive = rec.check_out === "In Progress" || !rec.check_out || rec.check_out === "—";
+        let sessionDurationStr = hasActive ? "Active" : "Completed";
+
+        if (!hasActive && rec.check_in && rec.check_out) {
+          const inM = parseTime(rec.check_in);
+          const outM = parseTime(rec.check_out);
+          if (inM !== null && outM !== null) {
+            const diff = outM >= inM ? outM - inM : (1440 - inM) + outM;
+            if (diff > 0 && diff <= 1440) {
+              totalMinutes += diff;
+              const h = Math.floor(diff / 60);
+              const m = diff % 60;
+              sessionDurationStr = h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+            }
+          }
+        } else if (hasActive && rec.check_in) {
+          const todayIso = new Date().toISOString().split("T")[0];
+          if (rec.date === todayIso) {
+            const inM = parseTime(rec.check_in);
+            const now = new Date();
+            const nowM = now.getHours() * 60 + now.getMinutes();
+            if (inM !== null && nowM >= inM) {
+              const diff = nowM - inM;
+              if (diff > 0 && diff <= 1440) {
+                totalMinutes += diff;
+              }
+            }
+          }
+        }
+
         const sess: CheckSession = {
           sessionNumber: 0,
           checkInTime: rec.check_in || "—",
           checkOutTime: hasActive ? "Session Ongoing" : (rec.check_out || "—"),
-          duration: hasActive ? "Active" : "Completed",
+          duration: sessionDurationStr,
           gate: "Front Terminal",
           method: rec.seat_number ? `Smart Desk QR Scan (#${rec.seat_number})` : "Manual / Staff Entry",
           seatNumber: rec.seat_number || std.seatNumber || "—",
@@ -676,11 +724,40 @@ export default function AdminAttendancePage() {
         if (!rec.date) continue;
         if (!dateMap.has(rec.date)) {
           const hasActive = rec.checkOut === "In Progress" || !rec.checkOut || rec.checkOut === "—";
+          let sessionDurationStr = hasActive ? "Active" : "Completed";
+
+          if (!hasActive && rec.checkIn && rec.checkOut) {
+            const inM = parseTime(rec.checkIn);
+            const outM = parseTime(rec.checkOut);
+            if (inM !== null && outM !== null) {
+              const diff = outM >= inM ? outM - inM : (1440 - inM) + outM;
+              if (diff > 0 && diff <= 1440) {
+                totalMinutes += diff;
+                const h = Math.floor(diff / 60);
+                const m = diff % 60;
+                sessionDurationStr = h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+              }
+            }
+          } else if (hasActive && rec.checkIn) {
+            const todayIso = new Date().toISOString().split("T")[0];
+            if (rec.date === todayIso) {
+              const inM = parseTime(rec.checkIn);
+              const now = new Date();
+              const nowM = now.getHours() * 60 + now.getMinutes();
+              if (inM !== null && nowM >= inM) {
+                const diff = nowM - inM;
+                if (diff > 0 && diff <= 1440) {
+                  totalMinutes += diff;
+                }
+              }
+            }
+          }
+
           dateMap.set(rec.date, [{
             sessionNumber: 1,
             checkInTime: rec.checkIn || "—",
             checkOutTime: hasActive ? "Session Ongoing" : (rec.checkOut || "—"),
-            duration: hasActive ? "Active" : "Completed",
+            duration: sessionDurationStr,
             gate: "Front Terminal",
             method: rec.seatNumber ? `Smart Desk QR Scan (#${rec.seatNumber})` : "Manual / Staff Entry",
             seatNumber: rec.seatNumber || std.seatNumber || "—",
@@ -688,6 +765,15 @@ export default function AdminAttendancePage() {
           }]);
         }
       }
+
+      const formatTotalHours = (totalMins: number): string => {
+        if (totalMins <= 0) return "0 Hours";
+        const hours = Math.floor(totalMins / 60);
+        const mins = totalMins % 60;
+        if (hours === 0) return `${mins} Mins`;
+        if (mins === 0) return `${hours} Hours`;
+        return `${hours}h ${mins}m`;
+      };
 
       const historyDays: StudentHistoryDay[] = [];
       let totalSessions = 0;
@@ -719,6 +805,7 @@ export default function AdminAttendancePage() {
         },
         totalDaysPresent: historyDays.length,
         totalSessions,
+        totalHoursSeated: formatTotalHours(totalMinutes),
         historyDays,
         isLoading: false,
       });
@@ -2239,33 +2326,32 @@ export default function AdminAttendancePage() {
               </div>
             </div>
 
-            {/* Quick Stat Highlights */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-[#FAF9F6] dark:bg-zinc-800/50 p-3">
-                <span className="text-[10px] font-bold text-zinc-400 block">Total Days Present</span>
-                <span className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5 block">
+            {/* Quick Stat Highlights - Exactly 3 KPIs in the Same Row Across All Devices */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-[#FAF9F6] dark:bg-zinc-800/50 p-2.5 sm:p-3 min-w-0">
+                <span className="text-[9px] sm:text-[10px] font-bold text-zinc-400 block truncate" title="Total Days Present">
+                  Total Days Present
+                </span>
+                <span className="text-sm sm:text-base lg:text-lg font-black text-emerald-600 dark:text-emerald-400 mt-0.5 block truncate">
                   {studentHistoryData.isLoading ? "..." : `${studentHistoryData.totalDaysPresent} Days`}
                 </span>
               </div>
 
-              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-[#FAF9F6] dark:bg-zinc-800/50 p-3">
-                <span className="text-[10px] font-bold text-zinc-400 block">Total Check-In Sessions</span>
-                <span className="text-base sm:text-lg font-black text-[#0A2E5C] dark:text-white mt-0.5 block">
+              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-[#FAF9F6] dark:bg-zinc-800/50 p-2.5 sm:p-3 min-w-0">
+                <span className="text-[9px] sm:text-[10px] font-bold text-zinc-400 block truncate" title="Total Sessions (Check-In & Check-Out)">
+                  Total Sessions
+                </span>
+                <span className="text-sm sm:text-base lg:text-lg font-black text-[#0A2E5C] dark:text-white mt-0.5 block truncate">
                   {studentHistoryData.isLoading ? "..." : `${studentHistoryData.totalSessions} Sessions`}
                 </span>
               </div>
 
-              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-[#FAF9F6] dark:bg-zinc-800/50 p-3">
-                <span className="text-[10px] font-bold text-zinc-400 block">Assigned Shift</span>
-                <span className="text-xs font-black text-[#0B5ED7] dark:text-[#FFC107] mt-1 block truncate">
-                  {studentHistoryData.student.shift || "Standard"}
+              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-[#FAF9F6] dark:bg-zinc-800/50 p-2.5 sm:p-3 min-w-0">
+                <span className="text-[9px] sm:text-[10px] font-bold text-zinc-400 block truncate" title="Total Hours Seated in Library">
+                  Total Hours Seated
                 </span>
-              </div>
-
-              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800 bg-[#FAF9F6] dark:bg-zinc-800/50 p-3">
-                <span className="text-[10px] font-bold text-zinc-400 block">Allocated Seat</span>
-                <span className="text-xs font-black text-blue-600 dark:text-blue-400 mt-1 block">
-                  Desk #{studentHistoryData.student.seatNumber || studentHistoryData.student.seat_number || "—"}
+                <span className="text-sm sm:text-base lg:text-lg font-black text-[#0B5ED7] dark:text-[#FFC107] mt-0.5 block truncate">
+                  {studentHistoryData.isLoading ? "..." : (studentHistoryData.totalHoursSeated || "0 Hours")}
                 </span>
               </div>
             </div>

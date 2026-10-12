@@ -102,26 +102,6 @@ const DEFAULT_CONTACTS: ChatContact[] = [
     avatarText: "AD",
     phone: BRAND_CONFIG.phone || "+91 8423448899",
     description: "Admissions, Monthly Fees, Verification & Policy Inquiries"
-  },
-  {
-    id: "staff-prime-01",
-    name: "Rajesh Sharma (Senior Librarian)",
-    role: "prime_staff",
-    roleLabel: "Prime Staff",
-    shiftInfo: "Day Shift (08:00 AM - 04:00 PM)",
-    avatarText: "RS",
-    phone: BRAND_CONFIG.phone || "+91 8423448899",
-    description: "Gate Attendance, Book Circulation & Seat Allocation"
-  },
-  {
-    id: "staff-sub-01",
-    name: "Vikas Patel (Library Assistant)",
-    role: "sub_staff",
-    roleLabel: "Sub Staff",
-    shiftInfo: "Night Shift (04:00 PM - 12:00 AM)",
-    avatarText: "VP",
-    phone: BRAND_CONFIG.phone || "+91 8423448899",
-    description: "Reading Room Help, Book Finding & Desk Assistance"
   }
 ];
 
