@@ -584,14 +584,6 @@ export default function SeatManagementPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {/* Master Entrance Stand Button */}
-          <button
-            onClick={handleOpenMasterStandModal}
-            className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 transition active:scale-95 cursor-pointer shadow-xs"
-          >
-            <Radio className="h-4 w-4 text-emerald-600" />
-            <span>Master QR & NFC Stand</span>
-          </button>
 
           {/* Add Seats Button */}
           <button

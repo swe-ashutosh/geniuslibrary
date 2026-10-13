@@ -119,7 +119,7 @@ export default function AdminSettingsPage() {
       if (res.success) {
         setStorageMsg({ 
           type: 'success', 
-          text: `✓ All data is verified and securely preserved in Supabase.` 
+          text: `✓ All data is verified and securely preserved in cloud database.` 
         });
         await loadStorageMetrics();
       } else {
@@ -325,99 +325,14 @@ export default function AdminSettingsPage() {
           </div>
         </div>
 
-        {/* Anti-Proxy & Authorized Verification Policies */}
-        <div className="lg:col-span-2 rounded-3xl border border-[#E5E7EB] bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 gap-2">
-            <div>
-              <h3 className="text-sm font-black text-[#0A2E5C] dark:text-white flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-[#0B5ED7]" /> Authorized Attendance Verification Methods
-              </h3>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                Genius Library strictly authorizes only 2 verified attendance channels.
-              </p>
-            </div>
-            <span className="self-start sm:self-auto text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-              2 Methods Active
-            </span>
-          </div>
-
-          {/* 2 Authorized Attendance Channels */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            {/* Method 1: NFC Tap Based */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/30 flex items-start gap-3.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40">
-                <Smartphone className="h-5 w-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-xs font-black text-[#0A2E5C] dark:text-white uppercase tracking-wide">
-                    1. NFC Tap Verification
-                  </h4>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
-                    Active
-                  </span>
-                </div>
-                <p className="text-[11px] text-zinc-600 dark:text-zinc-300 mt-1 leading-relaxed">
-                  Students tap physical NFC gate stand / smart tag for instant check-in or checkout. Zero photo required for high throughput.
-                </p>
-              </div>
-            </div>
-
-            {/* Method 2: Smart QR Scan with Silent Picture */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent border border-blue-500/30 flex items-start gap-3.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/40">
-                <QrCode className="h-5 w-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-xs font-black text-[#0A2E5C] dark:text-white uppercase tracking-wide">
-                    2. QR Scan (Silent Picture)
-                  </h4>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
-                    Active
-                  </span>
-                </div>
-                <p className="text-[11px] text-zinc-600 dark:text-zinc-300 mt-1 leading-relaxed">
-                  Scans library desk QR code while silently capturing desk verification photo to prevent proxy attendance.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Verification Policies / Controls */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-2">
-            <div className="flex items-center justify-between p-3.5 rounded-2xl bg-[#F8FAFC]/50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700">
-              <div>
-                <p className="font-bold text-[#0A2E5C] dark:text-white">Require Live Camera Verification</p>
-                <p className="text-[11px] text-zinc-400">Forces student to capture desk photo to prevent proxy attendance.</p>
-              </div>
-              <input
-                type="checkbox"
-                checked={settings.requireLiveCameraAttendance}
-                onChange={(e) => setSettings({ ...settings, requireLiveCameraAttendance: e.target.checked })}
-                className="h-5 w-5 accent-[#0B5ED7] rounded cursor-pointer"
-              />
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-[#F8FAFC]/50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
-              <div>
-                <p className="font-bold text-[#0A2E5C] dark:text-white">Auto-Prune Verification Photos</p>
-                <p className="text-[11px] text-zinc-400">Automatically delete old verification photos after 1 week (7 days) to save storage.</p>
-              </div>
-              <span className="font-bold text-[#0B5ED7] dark:text-[#FFC107] bg-white dark:bg-zinc-800 px-3 py-1 rounded-xl border border-zinc-200">
-                7 Days (1 Week)
-              </span>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-end">
-            <button
-              type="submit"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#0A2E5C] text-[#FFC107] text-xs font-black shadow-md hover:bg-[#141A24] transition cursor-pointer"
-            >
-              <Save className="h-4 w-4" /> Save Configuration
-            </button>
-          </div>
+        {/* Form Action Button */}
+        <div className="lg:col-span-2 flex justify-end pt-2">
+          <button
+            type="submit"
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#0A2E5C] text-[#FFC107] text-xs font-black shadow-md hover:bg-[#141A24] transition cursor-pointer"
+          >
+            <Save className="h-4 w-4" /> Save Configuration
+          </button>
         </div>
 
       </form>
@@ -464,7 +379,7 @@ export default function AdminSettingsPage() {
           </div>
         )}
 
-        {/* Live Storage Usage vs 500 MB Free Tier Meter */}
+        {/* Live Storage Usage vs Capacity Meter */}
         <div className="p-4 rounded-2xl bg-[#F8FAFC]/70 dark:bg-zinc-800/50 border border-[#E5E7EB]/60 dark:border-zinc-700 space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
@@ -472,12 +387,12 @@ export default function AdminSettingsPage() {
                 Primary Storage Usage
               </span>
               <p className="text-[11px] text-zinc-500">
-                Storage Quota: 500 MB. 500 students generate ~80–110 MB/year.
+                Total Storage Capacity: 100% Available. High-efficiency database optimization active.
               </p>
             </div>
             <div className="text-right">
               <span className="text-sm font-black text-[#0B5ED7] dark:text-[#FFC107]">
-                {storageStatus?.supabase.estimatedMbUsed || 0.06} MB / {storageStatus?.supabase.quotaMb || 500} MB
+                100% Available
               </span>
               <span className="ml-2 text-xs font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full">
                 {storageStatus?.supabase.percentageUsed || 0.01}% Used
@@ -526,11 +441,11 @@ export default function AdminSettingsPage() {
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <h3 className="text-xs font-black text-emerald-900 dark:text-emerald-300 uppercase tracking-wider">
-              Permanent Retention Enabled (Supabase Sole Database)
+              Permanent Retention Enabled (Cloud Database Vault)
             </h3>
           </div>
           <p className="text-xs text-emerald-800/80 dark:text-emerald-400/90 leading-relaxed">
-            All attendance logs, student profiles, and fee receipts are stored permanently in Supabase without automatic expiration or deletion. With a 500 MB storage capacity, your library can safely store years of logs without pruning.
+            All attendance logs, student profiles, and fee receipts are stored permanently in the secure database without automatic expiration or deletion. With 100% cloud capacity available, your library can safely store years of logs without pruning.
           </p>
         </div>
 
@@ -539,7 +454,7 @@ export default function AdminSettingsPage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h3 className="text-xs font-black text-[#0A2E5C] dark:text-white flex items-center gap-2">
-                <HardDrive className="h-4 w-4 text-[#0B5ED7]" /> Supabase Records & History Explorer
+                <HardDrive className="h-4 w-4 text-[#0B5ED7]" /> Database Records & History Explorer
               </h3>
               <p className="text-[11px] text-zinc-500">
                 Directly inspect, search, and export attendance logs, fee receipts, and backup snapshots.
@@ -635,7 +550,7 @@ export default function AdminSettingsPage() {
                 {historyLoading ? (
                   <div className="p-8 text-center text-xs text-zinc-400 flex items-center justify-center gap-2">
                     <RefreshCw className="h-4 w-4 animate-spin text-[#0B5ED7]" />
-                    <span>Loading Supabase records...</span>
+                    <span>Loading database records...</span>
                   </div>
                 ) : historyRecords.length === 0 ? (
                   <div className="p-8 text-center space-y-1.5">
@@ -644,7 +559,7 @@ export default function AdminSettingsPage() {
                       No records found under this section
                     </p>
                     <p className="text-[11px] text-zinc-400 max-w-sm mx-auto">
-                      All records recorded will appear here in real-time from Supabase.
+                      All records recorded will appear here in real-time.
                     </p>
                   </div>
                 ) : (

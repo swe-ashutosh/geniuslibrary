@@ -109,44 +109,28 @@ const BROADCAST_GROUPS: BroadcastGroup[] = [
     colorClass: "bg-blue-600 text-white",
   },
   {
-    id: "group-morning",
-    name: "Morning Shift Students",
-    subtitle: "06:00 AM - 12:00 PM slot members",
-    icon: Sun,
-    targetAudience: "Morning Shift Students",
-    colorClass: "bg-amber-600 text-white",
+    id: "group-flexible",
+    name: "Flexible Desk Students",
+    subtitle: "General & Flexible desk members",
+    icon: Sparkles,
+    targetAudience: "Flexible Desk Students",
+    colorClass: "bg-emerald-600 text-white",
   },
   {
-    id: "group-afternoon",
-    name: "Afternoon Shift Students",
-    subtitle: "12:00 PM - 06:00 PM slot members",
-    icon: Sunset,
-    targetAudience: "Afternoon Shift Students",
-    colorClass: "bg-orange-600 text-white",
-  },
-  {
-    id: "group-evening",
-    name: "Evening Shift Students",
-    subtitle: "06:00 PM - 10:00 PM slot members",
-    icon: Moon,
-    targetAudience: "Evening Shift Students",
-    colorClass: "bg-indigo-600 text-white",
+    id: "group-reserved",
+    name: "Reserve Desk Students",
+    subtitle: "Dedicated cubicle & reserved desk members",
+    icon: Armchair,
+    targetAudience: "Reserve Desk Students",
+    colorClass: "bg-purple-600 text-white",
   },
   {
     id: "group-dues",
-    name: "Students with Due Fees",
-    subtitle: "Members with unpaid monthly library fee",
+    name: "Due Fees (Pending, Overdue, Defaulter)",
+    subtitle: "Members with unpaid fees (Pending, Overdue, Defaulter)",
     icon: CreditCard,
-    targetAudience: "Students with Due Fees",
+    targetAudience: "Pending, Overdue & Defaulter Students",
     colorClass: "bg-rose-600 text-white",
-  },
-  {
-    id: "group-unassigned",
-    name: "Unassigned Desk Students",
-    subtitle: "Students pending permanent seat allocation",
-    icon: Armchair,
-    targetAudience: "Unassigned Desk Students",
-    colorClass: "bg-purple-600 text-white",
   },
 ];
 
@@ -600,11 +584,12 @@ export default function CommunicationsPortalPage() {
                   const isSelected = selectedType === "group" && activeGroupId === group.id;
                   const Icon = group.icon;
                   const count = group.id === "group-all" ? students.length :
-                                group.id === "group-morning" ? students.filter(s => (s.shift || "").toLowerCase().includes("morning")).length :
-                                group.id === "group-afternoon" ? students.filter(s => (s.shift || "").toLowerCase().includes("afternoon")).length :
-                                group.id === "group-evening" ? students.filter(s => (s.shift || "").toLowerCase().includes("evening")).length :
-                                group.id === "group-dues" ? students.filter(s => s.feeStatus === "Due" || (s.dueAmount && s.dueAmount > 0)).length :
-                                group.id === "group-unassigned" ? students.filter(s => !s.seatNumber).length : 0;
+                                group.id === "group-flexible" ? students.filter(s => s.membershipPlan !== "Reserved Seat" && (!s.seatNumber || s.seatNumber === "General")).length :
+                                group.id === "group-reserved" ? students.filter(s => s.membershipPlan === "Reserved Seat" || (s.seatNumber && s.seatNumber !== "General")).length :
+                                group.id === "group-dues" ? students.filter(s => {
+                                  const st = (s.feeStatus || "").toLowerCase();
+                                  return st === "due" || st === "pending" || st === "overdue" || st === "defaulter" || (s.dueAmount && s.dueAmount > 0);
+                                }).length : 0;
 
                   return (
                     <button
