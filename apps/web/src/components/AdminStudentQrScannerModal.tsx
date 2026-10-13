@@ -21,16 +21,12 @@ import {
   Clock,
   Phone,
   ArrowLeft,
-  Search,
   Receipt,
-  User,
   CheckCheck,
-  Filter,
   ChevronRight,
   AlertTriangle,
   Send,
   Sparkles,
-  Users,
   LogIn,
   LogOut,
   Download,
@@ -75,22 +71,18 @@ export function AdminStudentQrScannerModal({
   const streamRef = useRef<MediaStream | null>(null);
   const cameraTimeoutRef = useRef<any>(null);
 
-  const [activeTab, setActiveTab] = useState<"scanner" | "lookup" | "generate_qr">("scanner");
+  // Exactly 2 options: QR Scan and Show QR
+  const [activeTab, setActiveTab] = useState<"scanner" | "show_qr">("scanner");
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isLoadingCamera, setIsLoadingCamera] = useState(false);
 
-  // QR Standee / Generator States
-  const [qrTargetType, setQrTargetType] = useState<"master" | "desk" | "student">("master");
-  const [selectedDeskNumber, setSelectedDeskNumber] = useState<string>("01");
-  const [selectedStudentForQr, setSelectedStudentForQr] = useState<string>("");
+  // QR Display State
   const [generatedQrDataUrl, setGeneratedQrDataUrl] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
 
-  // Student directory & filtering
+  // Student directory (for resolving scanned student QR pass)
   const [allStudents, setAllStudents] = useState<StudentRecord[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [shiftFilter, setShiftFilter] = useState<"all" | "due" | "morning" | "afternoon" | "evening" | "fullday">("all");
 
   // Scanned Student Details & State
   const [selectedStudent, setSelectedStudent] = useState<StudentRecord | null>(null);
@@ -240,8 +232,6 @@ export function AdminStudentQrScannerModal({
     if (isOpen) {
       setSelectedStudent(null);
       setActiveTab("scanner");
-      setSearchQuery("");
-      setShiftFilter("all");
       setStudentFees([]);
       setStudentExamResults([]);
       setStudentAttendance([]);
@@ -265,34 +255,15 @@ export function AdminStudentQrScannerModal({
     };
   }, [isOpen, activeTab, facingMode, selectedStudent, startCamera, stopCamera]);
 
-  // Generate QR Data URL whenever activeTab is "generate_qr" or target changes
+  // Generate Library Gate Attendance QR Data URL whenever activeTab is "show_qr"
   useEffect(() => {
-    if (!isOpen || activeTab !== "generate_qr") return;
+    if (!isOpen || activeTab !== "show_qr") return;
     async function generateCode() {
-      let payload = "";
       const baseOrigin = typeof window !== "undefined" && window.location.origin 
         ? window.location.origin 
         : "https://genius.librarywale.in";
 
-      if (qrTargetType === "master") {
-        payload = `${baseOrigin}/attendance/?source=master_turnstile`;
-      } else if (qrTargetType === "desk") {
-        payload = `${baseOrigin}/attendance/?seat=${selectedDeskNumber}`;
-      } else if (qrTargetType === "student") {
-        const student = allStudents.find((s) => s.id === selectedStudentForQr) || allStudents[0];
-        if (student) {
-          payload = JSON.stringify({
-            studentId: student.id,
-            studentCode: student.studentCode || `STUD-${student.id.slice(0, 6)}`,
-            name: student.fullName,
-            seat: student.seatNumber || "01",
-            phone: student.phone || "",
-            type: "STUDENT_PASS"
-          });
-        } else {
-          payload = "GENIUS_STUDENT_PASS";
-        }
-      }
+      const payload = `${baseOrigin}/attendance/?source=master_turnstile`;
 
       try {
         const url = await QRCode.toDataURL(payload, {
@@ -309,17 +280,13 @@ export function AdminStudentQrScannerModal({
       }
     }
     generateCode();
-  }, [isOpen, activeTab, qrTargetType, selectedDeskNumber, selectedStudentForQr, allStudents]);
+  }, [isOpen, activeTab]);
 
   const handleDownloadQr = () => {
     if (!generatedQrDataUrl) return;
     const link = document.createElement("a");
     link.href = generatedQrDataUrl;
-    link.download = qrTargetType === "master"
-      ? "Genius-Master-Gate-QR.png"
-      : qrTargetType === "desk"
-      ? `Genius-Desk-${selectedDeskNumber}-QR.png`
-      : `Genius-Student-Pass-QR.png`;
+    link.download = "Genius-Library-Gate-QR.png";
     link.click();
     showNotification("success", "QR Code image downloaded successfully!");
   };
@@ -328,11 +295,7 @@ export function AdminStudentQrScannerModal({
     if (!generatedQrDataUrl) return;
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
-    const title = qrTargetType === "master"
-      ? "Entrance Gate Turnstile Standee"
-      : qrTargetType === "desk"
-      ? `Desk #${selectedDeskNumber} Attendance Sticker`
-      : "Student Attendance Pass";
+    const title = "Genius Library Entrance Attendance QR";
 
     printWindow.document.write(`
       <html>
@@ -351,7 +314,7 @@ export function AdminStudentQrScannerModal({
           <div class="card">
             <h1>Genius Library</h1>
             <h2>${title}</h2>
-            <img src="${generatedQrDataUrl}" alt="Student QR Pass" />
+            <img src="${generatedQrDataUrl}" alt="Library Attendance QR" />
             <p>Scan with phone camera to mark instant attendance</p>
           </div>
           <script>
@@ -364,23 +327,16 @@ export function AdminStudentQrScannerModal({
   };
 
   const handleCopyQrPayload = () => {
-    let payload = "";
     const baseOrigin = typeof window !== "undefined" && window.location.origin 
       ? window.location.origin 
       : "https://genius.librarywale.in";
 
-    if (qrTargetType === "master") {
-      payload = `${baseOrigin}/attendance/?source=master_turnstile`;
-    } else if (qrTargetType === "desk") {
-      payload = `${baseOrigin}/attendance/?seat=${selectedDeskNumber}`;
-    } else {
-      payload = "Student Pass QR";
-    }
+    const payload = `${baseOrigin}/attendance/?source=master_turnstile`;
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(payload);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
-      showNotification("success", "Link / Payload copied to clipboard!");
+      showNotification("success", "Attendance QR link copied to clipboard!");
     }
   };
 
@@ -389,7 +345,6 @@ export function AdminStudentQrScannerModal({
     stopCamera();
     setSelectedStudent(null);
     setActiveTab("scanner");
-    setSearchQuery("");
     onClose();
   };
 
@@ -797,35 +752,6 @@ export function AdminStudentQrScannerModal({
     startCamera();
   };
 
-  // Filtered Students for the redesigned manual tab
-  const filteredStudents = allStudents.filter((student) => {
-    const q = searchQuery.toLowerCase().trim();
-    const matchesSearch = !q || 
-      student.fullName?.toLowerCase().includes(q) ||
-      student.phone?.includes(q) ||
-      student.studentCode?.toLowerCase().includes(q) ||
-      student.seatNumber?.toLowerCase().includes(q);
-
-    if (!matchesSearch) return false;
-
-    if (shiftFilter === "due") {
-      return (student.dueAmount && student.dueAmount > 0) || student.feeStatus === "Due";
-    }
-    if (shiftFilter === "morning") {
-      return student.shift?.toLowerCase().includes("morning");
-    }
-    if (shiftFilter === "afternoon") {
-      return student.shift?.toLowerCase().includes("afternoon");
-    }
-    if (shiftFilter === "evening") {
-      return student.shift?.toLowerCase().includes("evening");
-    }
-    if (shiftFilter === "fullday") {
-      return student.shift?.toLowerCase().includes("full");
-    }
-    return true;
-  });
-
   const pendingFees = studentFees.filter((f) => !f.paid);
 
   if (!isOpen) return null;
@@ -837,7 +763,7 @@ export function AdminStudentQrScannerModal({
 
       <div className="relative w-full max-w-2xl rounded-3xl border border-[#E5E7EB] bg-white shadow-2xl dark:border-zinc-800 dark:bg-[#0A2E5C] text-zinc-900 dark:text-white overflow-hidden flex flex-col max-h-[92vh]">
         
-        {/* Header Bar - Updated Heading to "Students QR Scan" */}
+        {/* Header Bar */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-800 bg-[#FBFBFA] dark:bg-[#141A24]">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#0B5ED7] to-[#FFC107] text-[#0A2E5C] shadow-md shadow-[#0B5ED7]/20 font-black">
@@ -849,11 +775,11 @@ export function AdminStudentQrScannerModal({
                   Students QR Scan
                 </h3>
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#0B5ED7]/15 text-[#0B5ED7] dark:text-[#FFC107]">
-                  Live Scanner
+                  Live QR
                 </span>
               </div>
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                Scan digital student pass for fee status, book loans & attendance
+                Scan student QR pass or display library gate attendance QR
               </p>
             </div>
           </div>
@@ -879,41 +805,30 @@ export function AdminStudentQrScannerModal({
           </div>
         )}
 
-        {/* Mode Switcher Tabs (Only shown when not inspecting a student) */}
+        {/* Mode Switcher: Exactly 2 options (QR Scan & Show QR) */}
         {!selectedStudent && (
-          <div className="px-5 pt-3 pb-2 border-b border-zinc-100 dark:border-zinc-800 flex flex-wrap items-center gap-2 bg-[#FDFCFB] dark:bg-[#18202D]">
+          <div className="px-5 pt-3 pb-2 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2 bg-[#FDFCFB] dark:bg-[#18202D]">
             <button
               onClick={() => setActiveTab("scanner")}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 activeTab === "scanner"
-                  ? "bg-[#0A2E5C] text-[#FFC107] dark:bg-white/10 dark:text-white shadow-xs"
+                  ? "bg-[#0A2E5C] text-[#FFC107] dark:bg-white/10 dark:text-white shadow-xs font-black"
                   : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               }`}
             >
               <Camera className="h-4 w-4" />
-              <span>Camera Scanner</span>
+              <span>QR Scan</span>
             </button>
             <button
-              onClick={() => setActiveTab("generate_qr")}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === "generate_qr"
-                  ? "bg-[#0A2E5C] text-[#FFC107] dark:bg-white/10 dark:text-white shadow-xs"
+              onClick={() => setActiveTab("show_qr")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "show_qr"
+                  ? "bg-[#0A2E5C] text-[#FFC107] dark:bg-white/10 dark:text-white shadow-xs font-black"
                   : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
               }`}
             >
               <QrCode className="h-4 w-4" />
-              <span>Generate / Show QR</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("lookup")}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === "lookup"
-                  ? "bg-[#0A2E5C] text-[#FFC107] dark:bg-white/10 dark:text-white shadow-xs"
-                  : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              }`}
-            >
-              <Users className="h-4 w-4" />
-              <span>Manual Student Selection</span>
+              <span>Show QR</span>
             </button>
           </div>
         )}
@@ -922,7 +837,7 @@ export function AdminStudentQrScannerModal({
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
           
           {/* ========================================================================= */}
-          {/* STATE A: NO STUDENT SELECTED YET -> TAB 1: CAMERA SCANNER */}
+          {/* OPTION 1: QR SCAN (CAMERA SCANNER) */}
           {/* ========================================================================= */}
           {!selectedStudent && activeTab === "scanner" && (
             <div className="flex flex-col items-center justify-center space-y-4">
@@ -949,7 +864,7 @@ export function AdminStudentQrScannerModal({
                         <RefreshCw className="h-3.5 w-3.5" /> Retry Camera
                       </button>
                       <button
-                        onClick={() => setActiveTab("generate_qr")}
+                        onClick={() => setActiveTab("show_qr")}
                         className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#FFC107] text-xs font-bold text-[#0A2E5C] hover:bg-[#d6be9f] cursor-pointer"
                       >
                         <QrCode className="h-3.5 w-3.5" /> Show Library QR
@@ -980,96 +895,40 @@ export function AdminStudentQrScannerModal({
                 )}
               </div>
 
-              {/* Clean Camera Controls (Flip Camera, Switch to QR, Manual Search) */}
-              <div className="flex flex-wrap items-center justify-between w-full max-w-md px-2 gap-2">
+              {/* Clean Camera Controls */}
+              <div className="flex items-center justify-between w-full max-w-md px-2 gap-2">
                 <button
                   onClick={() => setFacingMode((prev) => (prev === "environment" ? "user" : "environment"))}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition cursor-pointer"
                 >
-                  <RotateCw className="h-3.5 w-3.5" /> Flip
+                  <RotateCw className="h-3.5 w-3.5" /> Flip Camera
                 </button>
 
                 <button
-                  onClick={() => setActiveTab("generate_qr")}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#FFC107]/20 hover:bg-[#FFC107]/30 text-[#0B5ED7] dark:text-[#FFC107] transition cursor-pointer"
+                  onClick={() => setActiveTab("show_qr")}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-[#FFC107]/20 hover:bg-[#FFC107]/30 text-[#0B5ED7] dark:text-[#FFC107] transition cursor-pointer"
                 >
-                  <QrCode className="h-3.5 w-3.5" /> Switch to Display QR
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("lookup")}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 dark:text-zinc-400 hover:text-[#0B5ED7] dark:hover:text-[#FFC107] hover:underline cursor-pointer"
-                >
-                  <Users className="h-3.5 w-3.5" /> Select Student Manually →
+                  <QrCode className="h-3.5 w-3.5" /> Show QR
                 </button>
               </div>
             </div>
           )}
 
           {/* ========================================================================= */}
-          {/* STATE A: NO STUDENT SELECTED YET -> TAB 2: GENERATE & DISPLAY LIBRARY QR  */}
+          {/* OPTION 2: SHOW QR (LIBRARY GATE ATTENDANCE QR) */}
           {/* ========================================================================= */}
-          {!selectedStudent && activeTab === "generate_qr" && (
+          {!selectedStudent && activeTab === "show_qr" && (
             <div className="space-y-4 animate-in fade-in">
-              {/* Type Switcher: Gate Standee | Desk 01-100 | Student Card */}
-              <div className="flex rounded-2xl bg-[#F8FAFC] p-1 dark:bg-zinc-800/80 border border-[#E5E7EB]/60 dark:border-zinc-700">
-                <button
-                  type="button"
-                  onClick={() => setQrTargetType("master")}
-                  className={`flex-1 py-2.5 text-xs font-black rounded-xl transition cursor-pointer ${
-                    qrTargetType === "master"
-                      ? "bg-[#0A2E5C] text-[#FFC107] shadow-xs dark:bg-zinc-700 dark:text-[#FFC107]"
-                      : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400"
-                  }`}
-                >
-                  Universal Gate QR (Single QR)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQrTargetType("student")}
-                  className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition cursor-pointer ${
-                    qrTargetType === "student"
-                      ? "bg-[#0A2E5C] text-[#FFC107] shadow-xs dark:bg-zinc-700 dark:text-[#FFC107]"
-                      : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400"
-                  }`}
-                >
-                  Student Pass QR
-                </button>
-              </div>
-
-              {qrTargetType === "student" && (
-                <div className="flex items-center gap-2 p-3 rounded-2xl bg-[#FDFCFB] dark:bg-zinc-800/50 border border-[#E5E7EB]/70 dark:border-zinc-700">
-                  <span className="text-xs font-bold text-zinc-600 dark:text-zinc-300">Choose Student:</span>
-                  <select
-                    value={selectedStudentForQr}
-                    onChange={(e) => setSelectedStudentForQr(e.target.value)}
-                    className="flex-1 rounded-xl border border-[#E5E7EB] bg-white p-2 text-xs font-bold text-[#0A2E5C] dark:bg-zinc-800 dark:text-white dark:border-zinc-700 focus:outline-none"
-                  >
-                    <option value="">-- Choose Member from Directory --</option>
-                    {allStudents.map((st) => (
-                      <option key={st.id} value={st.id}>
-                        {st.fullName} ({st.studentCode}) • Desk {st.seatNumber || "Unassigned"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* The Live Rendered QR Card */}
               <div className="rounded-3xl border-2 border-[#FFC107] bg-gradient-to-b from-white to-[#FDFCFB] dark:from-[#0A2E5C] dark:to-[#141A24] p-5 sm:p-6 text-center space-y-4 shadow-xl">
                 <div>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFC107]/20 text-[#0B5ED7] dark:text-[#FFC107] text-[10px] font-black uppercase tracking-wider mb-2">
                     <Sparkles className="h-3 w-3" /> Genius Library • Official Entrance Standee
                   </div>
                   <h4 className="text-base font-black text-[#0A2E5C] dark:text-white">
-                    {qrTargetType === "master"
-                      ? "Universal Library Gate Standee QR (Print Once for Gate)"
-                      : "Student Attendance Pass QR"}
+                    Library Gate Attendance QR
                   </h4>
                   <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1 max-w-sm mx-auto leading-relaxed">
-                    {qrTargetType === "master"
-                      ? "External scanner scans -> Opens library site. In-app student scans -> Silent photo capture & records Check-in/out. NFC card (Serial: 53:D4:B6:CD:53:00:01) taps instantly without photo."
-                      : "Student ID card barcode for front-desk scanning."}
+                    Students scan this QR at library entrance to mark instant check-in and check-out.
                   </p>
                 </div>
 
@@ -1079,7 +938,7 @@ export function AdminStudentQrScannerModal({
                     <div className="p-3 bg-white rounded-3xl shadow-lg border-2 border-[#FFC107]/40 inline-block">
                       <img
                         src={generatedQrDataUrl}
-                        alt="Generated Genius QR Code"
+                        alt="Genius Library Gate Attendance QR"
                         className="w-56 h-56 sm:w-64 sm:h-64 object-contain rounded-xl"
                       />
                     </div>
@@ -1119,150 +978,9 @@ export function AdminStudentQrScannerModal({
                     onClick={() => setActiveTab("scanner")}
                     className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#FFC107] text-[#0A2E5C] hover:bg-[#d6be9f] text-xs font-bold shadow-sm transition cursor-pointer"
                   >
-                    <Camera className="h-4 w-4" /> Back to Scanner
+                    <Camera className="h-4 w-4" /> Switch to Scanner
                   </button>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* ========================================================================= */}
-          {/* STATE A: NO STUDENT SELECTED YET -> TAB 2: REDESIGNED MANUAL SELECTION */}
-          {/* ========================================================================= */}
-          {!selectedStudent && activeTab === "lookup" && (
-            <div className="space-y-4">
-              
-              {/* Top Search & Filter Bar */}
-              <div className="space-y-2.5">
-                <div className="relative flex items-center">
-                  <Search className="absolute left-3.5 h-4 w-4 text-zinc-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by student name, student ID, phone or desk #..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-10 py-2.5 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-[#F9FAFB] dark:bg-zinc-800/80 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#FFC107] text-zinc-900 dark:text-white"
-                    autoFocus
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="absolute right-3 text-zinc-400 hover:text-zinc-600 dark:hover:text-white text-xs font-bold"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Filter Chips */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
-                  {[
-                    { id: "all", label: "All Members" },
-                    { id: "due", label: "⚠️ Fees Due" },
-                    { id: "morning", label: "🌅 Morning" },
-                    { id: "afternoon", label: "☀️ Afternoon" },
-                    { id: "evening", label: "🌙 Evening" },
-                    { id: "fullday", label: "⭐ Full Day" },
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setShiftFilter(tab.id as any)}
-                      className={`px-3 py-1 rounded-xl shrink-0 transition-all cursor-pointer ${
-                        shiftFilter === tab.id
-                          ? "bg-[#0A2E5C] text-[#FFC107] dark:bg-[#FFC107] dark:text-[#0A2E5C] font-black shadow-xs"
-                          : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Student Cards Grid (Redesigned Modern Cards) */}
-              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-                {filteredStudents.length === 0 ? (
-                  <div className="py-12 text-center text-zinc-400 space-y-2">
-                    <Users className="h-8 w-8 mx-auto opacity-40" />
-                    <p className="text-xs font-bold">No students match "{searchQuery}"</p>
-                    <button
-                      onClick={() => {
-                        setSearchQuery("");
-                        setShiftFilter("all");
-                      }}
-                      className="text-xs font-bold text-[#0B5ED7] dark:text-[#FFC107] underline"
-                    >
-                      Clear filters
-                    </button>
-                  </div>
-                ) : (
-                  filteredStudents.map((student) => {
-                    const isDue = (student.dueAmount && student.dueAmount > 0) || student.feeStatus === "Due";
-
-                    return (
-                      <div
-                        key={student.id}
-                        onClick={() => loadStudentDetails(student)}
-                        className="group relative rounded-2xl border border-zinc-200 dark:border-zinc-800/90 bg-white dark:bg-zinc-800/50 p-3.5 hover:border-[#FFC107] dark:hover:border-[#FFC107] hover:shadow-md transition-all cursor-pointer flex items-center justify-between gap-3"
-                      >
-                        {/* Student Avatar & Identity */}
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="relative">
-                            <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-[#0A2E5C] to-[#2E3A52] text-[#FFC107] flex items-center justify-center font-black text-sm border border-[#FFC107]/40 shadow-xs group-hover:scale-105 transition-transform">
-                              {student.fullName?.slice(0, 2).toUpperCase()}
-                            </div>
-                            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#0A2E5C]" />
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="text-xs font-black text-zinc-900 dark:text-white group-hover:text-[#0B5ED7] dark:group-hover:text-[#FFC107] transition-colors truncate">
-                                {student.fullName}
-                              </h4>
-                              <span className="font-mono text-[9.5px] font-bold text-zinc-500 bg-zinc-100 dark:bg-zinc-700/60 dark:text-zinc-300 px-1.5 py-0.5 rounded">
-                                {student.studentCode || "STUD-001"}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-2 text-[10px] text-zinc-500 dark:text-zinc-400 mt-1 flex-wrap">
-                              <span className="flex items-center gap-1">
-                                <Phone className="h-2.5 w-2.5 text-zinc-400" />
-                                {student.phone || "No phone"}
-                              </span>
-                              <span>•</span>
-                              <span className="text-[#0B5ED7] dark:text-[#FFC107] font-bold">
-                                {student.shift || "Standard (3 Hours Pass)"}
-                              </span>
-                              <span>•</span>
-                              <span className="text-zinc-700 dark:text-zinc-300 font-semibold">
-                                Desk #{student.seatNumber || "A-07"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Status & Action CTA */}
-                        <div className="text-right shrink-0 flex items-center gap-3">
-                          <div>
-                            {isDue ? (
-                              <span className="inline-flex items-center gap-1 text-[10.5px] font-black px-2.5 py-1 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/50 dark:text-rose-400 dark:border-rose-900 shadow-2xs">
-                                Due: ₹{student.dueAmount || 600}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10.5px] font-black px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-400 dark:border-emerald-900 shadow-2xs">
-                                <CheckCircle2 className="h-3 w-3" /> Paid
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="h-8 w-8 rounded-xl bg-zinc-100 group-hover:bg-[#FFC107] text-zinc-500 group-hover:text-[#0A2E5C] dark:bg-zinc-700 dark:text-zinc-300 flex items-center justify-center transition-all">
-                            <ChevronRight className="h-4 w-4 stroke-[2.5]" />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
               </div>
             </div>
           )}

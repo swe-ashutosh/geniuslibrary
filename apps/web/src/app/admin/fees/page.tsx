@@ -2981,19 +2981,6 @@ export default function FeesAndExpensesManagement() {
               </div>
             </div>
 
-            {/* Anti-Ban & Rate Limit Guarantee Notice */}
-            <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-xs text-emerald-900 dark:text-emerald-300 space-y-1">
-              <div className="flex items-center gap-1.5 font-black text-emerald-800 dark:text-emerald-200">
-                <Sparkles className="h-4 w-4 text-emerald-600" />
-                <span>Anti-Ban Throttling Active</span>
-              </div>
-              <ul className="text-[11px] list-disc list-inside space-y-0.5 text-emerald-700 dark:text-emerald-400">
-                <li>Har message ke beech <strong>5 second se 20 second</strong> ka random gap rahega.</li>
-                <li>WhatsApp spam block se bachne ke liye <strong>30 minute me max 100 messages</strong> safe limit hai.</li>
-                <li>Sabhi due students ko sath me unke app portal par bhi in-app notification chali jayegi.</li>
-              </ul>
-            </div>
-
             {/* Preview of Message */}
             <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/50 text-xs space-y-1">
               <span className="text-[10px] font-bold uppercase text-zinc-400 block">Message Preview:</span>

@@ -1529,8 +1529,17 @@ function StudentsDirectoryContent() {
   const allDesksList: string[] = Array.from({ length: 134 }, (_, i) => String(i + 1).padStart(2, "0"));
 
   // Metrics Calculations (Total students strictly counts approved/active students)
-  const enrolledStudentsCount = students.filter((s) => s.status === "active").length;
+  const activeStudents = students.filter((s) => s.status === "active");
+  const enrolledStudentsCount = activeStudents.length;
   const totalStudentsCount = enrolledStudentsCount;
+  const boysCount = activeStudents.filter((s) => {
+    const g = (s.gender || "Male").toLowerCase().trim();
+    return g === "male" || g === "boy" || g === "m";
+  }).length;
+  const girlsCount = activeStudents.filter((s) => {
+    const g = (s.gender || "").toLowerCase().trim();
+    return g === "female" || g === "girl" || g === "f";
+  }).length;
   const activeInLibraryCount = students.filter(
     (s) => s.status === "active" && getStudentPresence(s.id, s.full_name).isPresent
   ).length;
@@ -1747,8 +1756,16 @@ function StudentsDirectoryContent() {
             </div>
           </div>
           <p className="text-[10px] sm:text-[11px] font-bold text-zinc-500 dark:text-zinc-400">Total Students</p>
-          <div className="mt-1 flex items-baseline gap-1 sm:gap-2">
+          <div className="mt-1 flex items-baseline justify-between gap-1 sm:gap-2 flex-wrap">
             <span className="text-xl sm:text-3xl font-black text-[#0A2E5C] dark:text-white">{totalStudentsCount}</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                👦 {boysCount} Boys
+              </span>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-pink-100 text-pink-700 dark:bg-pink-900/50 dark:text-pink-300 border border-pink-200 dark:border-pink-800">
+                👧 {girlsCount} Girls
+              </span>
+            </div>
           </div>
           <p className="mt-1 sm:mt-2 text-[9px] sm:text-[10px] font-bold text-emerald-600 flex items-center gap-0.5 truncate">
             <span>↑ Enrolled & Approved</span>
