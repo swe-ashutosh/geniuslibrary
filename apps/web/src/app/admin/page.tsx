@@ -224,6 +224,9 @@ export default function AdminDashboardOverview() {
   };
 
   useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setDueFeesViewMode("grid");
+    }
     const now = new Date();
     setCurrentDateStr(now.toLocaleDateString("en-IN", { weekday: "short", month: "short", day: "numeric", year: "numeric" }));
     setCurrentTimeStr(now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }));

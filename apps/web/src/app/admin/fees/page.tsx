@@ -330,6 +330,10 @@ export default function FeesAndExpensesManagement() {
 
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setDuesViewMode("grid");
+      setTxViewMode("grid");
+    }
     loadData();
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);

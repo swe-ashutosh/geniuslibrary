@@ -135,6 +135,9 @@ export default function AdminAttendancePage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setViewMode("grid");
+    }
   }, []);
 
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
