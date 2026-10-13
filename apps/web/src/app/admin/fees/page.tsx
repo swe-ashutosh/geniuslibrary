@@ -2991,7 +2991,7 @@ export default function FeesAndExpensesManagement() {
               <p className="font-bold text-zinc-800 dark:text-zinc-200">🏛️ Genius Library • Monthly Fee Reminder</p>
               <p className="text-zinc-600 dark:text-zinc-400 text-[11px]">
                 Namaste [Student Name] ji, aapki monthly library study seat fee ka baki amount darj hai.
-                Due: ₹[Amount] • UPI: genius.library@upi
+                Due: ₹[Amount] • UPI: paytmqr5u3ni1@ptys
               </p>
             </div>
 

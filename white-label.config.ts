@@ -215,8 +215,8 @@ export const WL = {
   // ═══════════════════════════════════════════════════════════════
 
   payment: {
-    upiId: "geniuslibrary@upi",
-    upiPayeeName: "Genius Library",
+    upiId: "paytmqr5u3ni1@ptys",
+    upiPayeeName: "Abhishek Kumar",
     bankName: "State Bank of India",
     accountNumber: "XXXXXXXX4321",
     ifscCode: "SBIN0001234",

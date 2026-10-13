@@ -453,21 +453,26 @@ export default function StudentFeesPage() {
               <form onSubmit={handleSubmitClaim} className="space-y-4">
                 {/* QR Code Card */}
                 <div className="flex flex-col items-center justify-center p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-dashed border-[#FFC107]">
-                  <div className="p-2 bg-white rounded-xl shadow-xs">
-                    <QrCode className="h-32 w-32 text-[#0A2E5C]" />
+                  <div className="p-2 bg-white rounded-2xl shadow-sm border border-zinc-200/80 dark:border-zinc-700 max-w-[260px] flex items-center justify-center">
+                    <img
+                      src="/payment-qr.jpg"
+                      alt="Paytm UPI QR"
+                      className="w-full h-auto rounded-xl object-contain max-h-72"
+                    />
                   </div>
-                  <div className="mt-2 text-center">
-                    <p className="text-[11px] text-zinc-500">Scan with GPay, PhonePe, Paytm, or BHIM</p>
-                    <div className="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-zinc-200/80 dark:bg-zinc-700 text-xs font-mono font-bold text-[#0A2E5C] dark:text-white">
-                      <span>geniuslibrary@upi</span>
+                  <div className="mt-3 text-center">
+                    <p className="text-[11px] font-medium text-zinc-500">Scan via Paytm, PhonePe, Google Pay, or any UPI App</p>
+                    <div className="mt-1.5 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-zinc-200/90 dark:bg-zinc-700 text-xs font-mono font-bold text-[#0A2E5C] dark:text-white shadow-xs">
+                      <span>{BRAND_CONFIG.payment?.upiId || "paytmqr5u3ni1@ptys"}</span>
                       <button
                         type="button"
                         onClick={() => {
-                          navigator.clipboard.writeText("geniuslibrary@upi");
+                          const upi = BRAND_CONFIG.payment?.upiId || "paytmqr5u3ni1@ptys";
+                          navigator.clipboard.writeText(upi);
                           setCopiedUpi(true);
                           setTimeout(() => setCopiedUpi(false), 2000);
                         }}
-                        className="text-zinc-500 hover:text-zinc-800 dark:hover:text-white"
+                        className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white cursor-pointer transition"
                         title="Copy UPI ID"
                       >
                         {copiedUpi ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
