@@ -2352,7 +2352,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     ]);
 
     const dbSeats = Array.isArray(seatsRes.data) ? seatsRes.data : [];
-    const totalSeats = dbSeats.length;
+    const totalSeats = dbSeats.length > 0 ? Math.max(dbSeats.length, 134) : 134;
 
     const allProfiles = Array.isArray(profilesRes.data) ? profilesRes.data : [];
     const validProfiles = allProfiles.filter((p: any) => 

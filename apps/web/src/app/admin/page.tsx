@@ -320,7 +320,7 @@ export default function AdminDashboardOverview() {
         // Dynamically fetched from Supabase seats table
         // -------------------------------------------------------------
         const allDbSeats: any[] = seatsRes || [];
-        const TOTAL_SEATS = allDbSeats.length > 0 ? allDbSeats.length : (liveStats.totalSeats || 0);
+        const TOTAL_SEATS = allDbSeats.length > 0 ? Math.max(allDbSeats.length, 134) : (liveStats.totalSeats && liveStats.totalSeats >= 134 ? liveStats.totalSeats : 134);
         const assignedSeatsMap = new Map<string, { studentId: string; studentName: string }>();
 
         if (allProfiles && allProfiles.length > 0) {

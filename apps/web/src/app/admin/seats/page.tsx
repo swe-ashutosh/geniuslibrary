@@ -135,7 +135,7 @@ export default function SeatManagementPage() {
       const savedStr = localStorage.getItem("genius_seats_134_v1");
       if (savedStr) {
         const parsed = JSON.parse(savedStr);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed) && parsed.length >= 134) {
           initialSeats = parsed;
           setSeats(initialSeats);
         }
@@ -157,8 +157,8 @@ export default function SeatManagementPage() {
 
         const dbSeats = seatsDbRes.data;
 
-        // Auto-seed Supabase ONLY if seats table is completely empty (0 rows)
-        if (!dbSeats || dbSeats.length === 0) {
+        // Auto-seed Supabase if empty or missing any of the 134 categorized desks
+        if (!dbSeats || dbSeats.length < 134) {
           try {
             const seedPayload = defaultSeats134.map((s) => ({
               id: `seat-${s.id}`,
@@ -173,8 +173,9 @@ export default function SeatManagementPage() {
           }
         }
 
-        // Build base seats list from Supabase or default134
+        // Build base seats list with all 134 categorized desks guaranteed
         const baseSeatsMap = new Map<string, SeatData>();
+        defaultSeats134.forEach((s) => baseSeatsMap.set(s.id, { ...s }));
 
         if (Array.isArray(dbSeats) && dbSeats.length > 0) {
           dbSeats.forEach((row: any) => {
@@ -192,8 +193,6 @@ export default function SeatManagementPage() {
               status: row.is_available === false ? "occupied" : hasLocker ? "locker" : "available",
             });
           });
-        } else {
-          defaultSeats134.forEach((s) => baseSeatsMap.set(s.id, { ...s }));
         }
 
         // 2. Fetch Profiles for student allocations
