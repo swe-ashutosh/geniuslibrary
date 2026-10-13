@@ -28,7 +28,8 @@ import {
   List,
   Users,
   Calendar,
-  Info
+  Info,
+  Trash2
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { 
@@ -37,6 +38,7 @@ import {
   sendMessage, 
   getStaffMembers, 
   getNotifications,
+  deleteNotification,
   getAdminContactInfo,
   MessageRecord, 
   StaffMember,
@@ -785,9 +787,23 @@ export default function StudentMessagesPage() {
                       <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-200/80 text-amber-900 dark:bg-amber-900 dark:text-amber-200">
                         {notif.type || "Alert"}
                       </span>
-                      <span className="text-[10px] text-zinc-400">
-                        {notif.createdAt ? new Date(notif.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "Recent"}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-zinc-400">
+                          {notif.createdAt ? new Date(notif.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "Recent"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await deleteNotification(notif.id);
+                            setPersonalNotifs((prev) => prev.filter((p) => p.id !== notif.id));
+                          }}
+                          className="p-1 text-zinc-400 hover:text-rose-600 transition cursor-pointer"
+                          title="Delete Notification"
+                          aria-label="Delete Notification"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
                     <h5 className="text-xs font-bold text-[#0A2E5C] dark:text-white">{notif.title}</h5>
                     <p className="text-[11px] text-zinc-600 dark:text-zinc-300 leading-relaxed">{notif.message}</p>

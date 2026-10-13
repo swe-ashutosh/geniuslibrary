@@ -29,7 +29,8 @@ import {
   Sparkles,
   ShieldCheck,
   CheckCircle2,
-  QrCode
+  QrCode,
+  Trash2
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -41,6 +42,7 @@ import {
   markNotificationAsRead, 
   markAllNotificationsAsRead,
   clearAllNotifications, 
+  deleteNotification,
   NotificationRecord 
 } from "@/lib/api";
 import { 
@@ -318,6 +320,12 @@ export default function AdminLayout({
   const handleClearAll = async () => {
     await clearAllNotifications({ role: "admin" });
     setAdminNotifications([]);
+  };
+
+  const handleDeleteNotification = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await deleteNotification(id);
+    setAdminNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
   const handleNotificationClick = async (n: NotificationRecord) => {
@@ -660,22 +668,33 @@ export default function AdminLayout({
                         <div
                           key={n.id}
                           onClick={() => handleNotificationClick(n)}
-                          className={`p-2.5 rounded-2xl border transition cursor-pointer ${
+                          className={`p-2.5 rounded-2xl border transition cursor-pointer group relative ${
                             !n.isRead
                               ? "border-[#FFC107]/60 bg-[#FFC107]/10 dark:border-[#FFC107]/40 dark:bg-[#FFC107]/10"
                               : "border-zinc-200/70 bg-[#F8FAFC]/40 dark:border-zinc-800 dark:bg-zinc-800/40 hover:bg-[#F8FAFC] dark:hover:bg-zinc-800/70"
                           } text-xs`}
                         >
                           <div className="flex justify-between items-start gap-1">
-                            <p className="font-bold text-[#0A2E5C] dark:text-white text-[11px] flex items-center gap-1.5">
+                            <p className="font-bold text-[#0A2E5C] dark:text-white text-[11px] flex items-center gap-1.5 flex-1 pr-1">
                               {!n.isRead && (
                                 <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
                               )}
                               {n.title}
                             </p>
-                            <span className="text-[9px] text-zinc-400 shrink-0">
-                              {formatRelativeTime(n.createdAt)}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[9px] text-zinc-400">
+                                {formatRelativeTime(n.createdAt)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteNotification(e, n.id)}
+                                className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 p-0.5 text-zinc-400 hover:text-rose-600 transition cursor-pointer"
+                                title="Delete Notification"
+                                aria-label="Delete Notification"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
                           <p className="text-[10px] text-zinc-600 dark:text-zinc-300 mt-0.5 leading-relaxed">
                             {n.message}

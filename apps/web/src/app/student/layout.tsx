@@ -36,7 +36,8 @@ import {
   Settings,
   Download,
   KeyRound,
-  Newspaper
+  Newspaper,
+  Trash2
 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -47,6 +48,7 @@ import {
   markNotificationAsRead, 
   markAllNotificationsAsRead, 
   clearAllNotifications,
+  deleteNotification,
   NotificationRecord,
   smartQrScanAttendance,
   sanitizeSeatNumber
@@ -679,6 +681,13 @@ export default function StudentLayout({
     setNotifications([]);
   };
 
+  const handleDeleteStudentNotification = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await deleteNotification(id);
+    setStudentNotifications((prev) => prev.filter((n) => n.id !== id));
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
   const handleEnableStudentPush = async () => {
     const res = await requestNotificationPermission();
     setNotificationPermission(res);
@@ -1054,17 +1063,28 @@ export default function StudentLayout({
                         <div
                           key={notif.id}
                           onClick={() => handleStudentNotificationClick(notif)}
-                          className={`p-2.5 rounded-2xl transition cursor-pointer text-xs ${
+                          className={`p-2.5 rounded-2xl transition cursor-pointer text-xs group relative ${
                             notif.unread
                               ? "bg-[#F4F1EA] dark:bg-zinc-800/80 border border-[#E5E7EB]/70 dark:border-zinc-700"
                               : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40"
                           }`}
                         >
                           <div className="flex items-start justify-between gap-1">
-                            <h4 className="font-bold text-[#0A2E5C] dark:text-white leading-tight">
+                            <h4 className="font-bold text-[#0A2E5C] dark:text-white leading-tight flex-1 pr-1">
                               {notif.title}
                             </h4>
-                            <span className="text-[9px] text-zinc-400 whitespace-nowrap">{notif.time}</span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[9px] text-zinc-400 whitespace-nowrap">{notif.time}</span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteStudentNotification(e, notif.id)}
+                                className="opacity-70 sm:opacity-0 sm:group-hover:opacity-100 p-0.5 text-zinc-400 hover:text-rose-600 transition cursor-pointer"
+                                title="Delete Notification"
+                                aria-label="Delete Notification"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
                           <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 line-clamp-2">
                             {notif.desc}

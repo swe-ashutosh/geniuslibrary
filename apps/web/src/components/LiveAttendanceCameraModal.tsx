@@ -16,7 +16,6 @@ import {
   CheckCheck,
   AlertTriangle,
   AlertCircle,
-  Upload,
   CheckCircle2,
   ScanLine,
   Download,
@@ -52,7 +51,6 @@ export function LiveAttendanceCameraModal({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scanIntervalRef = useRef<any>(null);
   const isProcessingRef = useRef<boolean>(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
@@ -107,65 +105,64 @@ function playScanBeep() {
   } catch {}
 }
 
-  // Helper to extract seat number from scanned QR text
+  // Helper to extract seat number from scanned QR text (Strict Validation)
   const extractSeatFromQr = (rawText: string): string | null => {
     if (!rawText) return null;
     const text = rawText.trim();
 
-    // 0. Master Entrance Stand QR or any Library URL
-    if (
+    // 1. Official Library Gate / Entrance QR
+    // Matches "GENIUS_ATTENDANCE_MASTER", "master_turnstile", or official library entrance attendance URL
+    const isLibraryGate =
       text.includes("GENIUS_ATTENDANCE_MASTER") ||
-      text.includes("/attendance") ||
-      text.toUpperCase().includes("MASTER") ||
-      text.toUpperCase().includes("GATE") ||
-      text.toUpperCase().includes("STAND") ||
-      text.includes("geniuslibrary") ||
-      text.includes("librarywale.in")
-    ) {
-      const seatParam = text.match(/[?&](?:seat|desk|seatId|seatNumber)=([A-Za-z0-9_-]+)/i);
-      if (seatParam) {
-        const res = formatSeat(seatParam[1]);
-        if (res) return res;
-      }
+      text.includes("master_turnstile") ||
+      ((text.includes("geniuslibrary") || text.includes("librarywale.in") || (typeof window !== "undefined" && text.includes(window.location.host))) &&
+        text.includes("/attendance") &&
+        !text.match(/[?&/](?:seat|desk|seatNumber|seatId)[=/]/i));
+
+    if (isLibraryGate) {
       return defaultSeat || "MASTER";
     }
 
-    // 1. JSON check: {"seat": "S-15"} or {"seatNumber": "15"} or {"type":"STUDENT_PASS"}
+    // 2. Official Library Desk URL (e.g. ?seat=15, ?desk=15, /qr/15, /desk/15)
+    const urlDeskMatch = text.match(/[?&/](?:seat|desk|seatNumber|seatId)[=/]([A-Za-z0-9_-]+)/i);
+    if (urlDeskMatch && urlDeskMatch[1]) {
+      const sanitized = sanitizeSeatNumber(urlDeskMatch[1]);
+      if (sanitized) return sanitized;
+    }
+
+    // 3. Official Library Desk JSON (e.g. {"seat": "15"} or {"seatNumber": 15})
     if (text.startsWith("{") && text.endsWith("}")) {
       try {
         const parsed = JSON.parse(text);
         const s = parsed.seatNumber || parsed.seat || parsed.seatId || parsed.desk;
         if (s) {
-          const res = formatSeat(String(s));
-          if (res) return res;
+          const sanitized = sanitizeSeatNumber(String(s));
+          if (sanitized) return sanitized;
         }
-        if (parsed.type === "STUDENT_PASS" || parsed.studentId) {
+        if (parsed.type === "GENIUS_LIBRARY_GATE" || parsed.type === "LIBRARY_GATE") {
           return defaultSeat || "MASTER";
         }
       } catch {}
     }
 
-    // 2. URL paths and query parameters: /qr/15, /desk/15, /seat/S-15, ?seat=15
-    const urlMatch = text.match(/(?:\/qr\/|\/desk\/|\/seat\/|[?&]seat=|[?&]desk=|[?&]seatId=)([A-Za-z0-9_-]+)/i);
-    if (urlMatch) {
-      const res = formatSeat(urlMatch[1]);
-      if (res) return res;
+    // 4. Official Library Prefix Format: e.g. "GENIUS_DESK_15", "DESK-15", "SEAT-15", "#S-15"
+    const prefixMatch = text.match(/^(?:GENIUS_DESK_|GENIUS_SEAT_|DESK[-_\s]|SEAT[-_\s]|CUBICLE[-_\s]|S[-_\s]|#S)(\d{1,3})$/i);
+    if (prefixMatch && prefixMatch[1]) {
+      const sanitized = sanitizeSeatNumber(prefixMatch[1]);
+      if (sanitized) return sanitized;
     }
 
-    // 3. Prefix matching: DESK-07, SEAT:15, ZONE A-01, #S-15
-    const prefixMatch = text.match(/(?:\bDESK|\bSEAT|\bZONE|#)[\s:_-]*([A-Za-z0-9_-]+)/i);
-    if (prefixMatch) {
-      const res = formatSeat(prefixMatch[1]);
-      if (res) return res;
+    // 5. Explicit Seat code format: "S-1" to "S-134"
+    const seatCodeMatch = text.match(/^S-(\d{1,3})$/i);
+    if (seatCodeMatch && seatCodeMatch[1]) {
+      const num = parseInt(seatCodeMatch[1], 10);
+      if (num >= 1 && num <= 134) {
+        return sanitizeSeatNumber(String(num));
+      }
     }
 
-    // 4. Direct match
-    const directRes = formatSeat(text);
-    if (directRes) return directRes;
-
-    // 5. Fallback for any scanned library code
-    if (defaultSeat) return defaultSeat;
-    return "MASTER";
+    // STRICT: Return null for any non-library QR code!
+    return null;
   };
 
   const formatSeat = (raw: string): string | null => {
@@ -331,6 +328,8 @@ function playScanBeep() {
               playScanBeep();
               executeDeskAction(seat, snapshot);
               return;
+            } else {
+              setManualScanNotice("Invalid QR code! Please scan the official Genius Library entrance or desk QR.");
             }
           }
         } catch {
@@ -360,6 +359,9 @@ function playScanBeep() {
             const snapshot = captureSilentSnapshot();
             playScanBeep();
             executeDeskAction(seat, snapshot);
+            return;
+          } else {
+            setManualScanNotice("Invalid QR code! Please scan the official Genius Library entrance or desk QR.");
           }
         }
       } catch {
@@ -400,6 +402,9 @@ function playScanBeep() {
             playScanBeep();
             executeDeskAction(seat, snapshot);
             return;
+          } else {
+            setManualScanNotice("Invalid QR code! Please scan the official Genius Library entrance or desk QR.");
+            return;
           }
         }
       } catch {}
@@ -428,10 +433,13 @@ function playScanBeep() {
           playScanBeep();
           executeDeskAction(seat, snapshot);
           return;
+        } else {
+          setManualScanNotice("Invalid QR code! Please scan the official Genius Library entrance or desk QR.");
+          return;
         }
       }
 
-      setManualScanNotice("No library QR code detected. Point camera steadily at the desk QR sticker.");
+      setManualScanNotice("No library QR code detected. Point camera steadily at the official gate QR or desk sticker.");
       setTimeout(() => setManualScanNotice(null), 3000);
     } catch {
       setManualScanNotice("Could not process frame. Please try again.");
@@ -544,67 +552,6 @@ function playScanBeep() {
       });
       setStream(null);
     }
-  };
-
-  // QR Image File Picker Decode Fallback
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setErrorMsg(null);
-    setCameraError(null);
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = async () => {
-        // 1. Try Native BarcodeDetector on image
-        if (typeof window !== "undefined" && "BarcodeDetector" in window) {
-          try {
-            const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
-            const barcodes = await detector.detect(img);
-            if (barcodes && barcodes.length > 0 && barcodes[0]?.rawValue) {
-              const seat = extractSeatFromQr(barcodes[0].rawValue);
-              if (seat) {
-                playScanBeep();
-                executeDeskAction(seat, reader.result as string);
-                return;
-              }
-            }
-          } catch {}
-        }
-
-        // 2. jsQR Fallback
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        ctx.drawImage(img, 0, 0);
-
-        try {
-          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imgData.data, imgData.width, imgData.height, {
-            inversionAttempts: "attemptBoth",
-          });
-          if (code && code.data) {
-            const seat = extractSeatFromQr(code.data);
-            if (seat) {
-              playScanBeep();
-              executeDeskAction(seat, reader.result as string);
-            } else {
-              setErrorMsg("Detected QR code is not a recognized Genius Library QR.");
-            }
-          } else {
-            setErrorMsg("No QR code found in the image. Please take a clear photo of the desk QR code.");
-          }
-        } catch {
-          setErrorMsg("Could not process image. Please try again.");
-        }
-      };
-      img.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
   };
 
   // Generate dynamic Student Attendance Pass QR
@@ -852,14 +799,6 @@ function playScanBeep() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 cursor-pointer shadow-sm"
-                        >
-                          <Upload className="h-3.5 w-3.5" />
-                          <span>Upload QR Photo</span>
-                        </button>
-                        <button
-                          type="button"
                           onClick={() => setActiveMode("my_qr")}
                           className="w-full sm:w-auto inline-flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-[#FFC107] text-[#0A2E5C] text-xs font-bold hover:bg-[#d6be9f] cursor-pointer shadow-sm"
                         >
@@ -945,24 +884,7 @@ function playScanBeep() {
                     </button>
                   )}
 
-                  {/* Upload QR Image Fallback Button */}
-                  <div className="flex items-center justify-between pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-600 dark:text-zinc-300 hover:text-emerald-600 cursor-pointer"
-                    >
-                      <Upload className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>Having camera issues? Upload QR photo</span>
-                    </button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                  </div>
+                  {/* Physical Camera Attendance Only (No Photo Upload Option) */}
                 </>
               ) : (
                 /* MY ATTENDANCE QR PASS VIEW */

@@ -386,6 +386,33 @@ function AttendanceGateContent() {
                   <p className="text-sm font-black text-[#0A2E5C]">{currentUser?.name}</p>
                 </div>
 
+                {/* GATE QR DETECTED: 1-TAP INSTANT VERIFICATION */}
+                {externalScanDetected && (
+                  <button
+                    type="button"
+                    onClick={() => processAttendance(currentUser.id, currentUser.name, "qr")}
+                    disabled={isProcessing}
+                    className="w-full flex items-center justify-between p-3.5 rounded-2xl border-2 border-[#0A2E5C] bg-[#0A2E5C] text-white hover:bg-[#141A24] transition text-left cursor-pointer active:scale-95 shadow-md"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFC107] text-[#0A2E5C] shadow-xs">
+                        <CheckCircle2 className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-[#FFC107]">
+                          Gate QR Scanned: Confirm Attendance
+                        </p>
+                        <p className="text-[10px] text-white/80 font-semibold">
+                          Entrance Stand Verified • Tap to Mark Instantly
+                        </p>
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-[#FFC107] px-2.5 py-1 text-[10px] font-black text-[#0A2E5C]">
+                      CONFIRM
+                    </span>
+                  </button>
+                )}
+
                 {/* WAY 1: NFC TAP (NO PICTURE) */}
                 <button
                   type="button"

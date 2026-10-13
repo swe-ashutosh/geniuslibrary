@@ -3598,6 +3598,25 @@ export async function markAllNotificationsAsRead(params?: {
   return true;
 }
 
+export async function deleteNotification(id: string): Promise<boolean> {
+  try {
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    await supabase.from('messages').delete().eq('id', id);
+  } catch (err) {
+    console.warn('Supabase deleteNotification notice:', err);
+  }
+
+  const cached = getLocalData<NotificationRecord[]>(STORAGE_KEYS.NOTIFICATIONS, []);
+  const filtered = cached.filter((n) => n.id !== id);
+  setLocalData(STORAGE_KEYS.NOTIFICATIONS, filtered);
+
+  const clearedIds = getLocalData<string[]>(STORAGE_KEYS.CLEARED_NOTIFICATIONS, []);
+  setLocalData(STORAGE_KEYS.CLEARED_NOTIFICATIONS, [...new Set([...clearedIds, id])].slice(-200));
+
+  return true;
+}
+
 export async function clearAllNotifications(params?: {
   role?: string;
   recipientId?: string;
@@ -3605,10 +3624,29 @@ export async function clearAllNotifications(params?: {
   try {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
-    let query = supabase.from('messages').delete().eq('student_id', 'SYSTEM_NOTIF');
-    if (params?.role) query = query.eq('recipient_role', params.role);
-    if (params?.recipientId) query = query.eq('recipient_id', params.recipientId);
-    await query;
+    if (!params?.role && !params?.recipientId) {
+      await supabase.from('messages').delete().eq('student_id', 'SYSTEM_NOTIF');
+    } else if (params?.role === 'admin') {
+      await supabase
+        .from('messages')
+        .delete()
+        .eq('student_id', 'SYSTEM_NOTIF')
+        .in('recipient_role', ['admin', 'all']);
+    } else if (params?.role === 'student') {
+      if (params.recipientId) {
+        await supabase
+          .from('messages')
+          .delete()
+          .eq('student_id', 'SYSTEM_NOTIF')
+          .eq('recipient_id', params.recipientId);
+      } else {
+        await supabase
+          .from('messages')
+          .delete()
+          .eq('student_id', 'SYSTEM_NOTIF')
+          .in('recipient_role', ['student', 'all']);
+      }
+    }
   } catch (err) {
     console.warn('Supabase clearAllNotifications notice:', err);
   }
@@ -3621,6 +3659,7 @@ export async function clearAllNotifications(params?: {
       if (params?.recipientId && n.recipientId === params.recipientId) return true;
       if (params?.role && n.recipientRole === params.role) return true;
       if (params?.role === 'student' && n.recipientRole === 'all') return true;
+      if (params?.role === 'admin' && n.recipientRole === 'all') return true;
       if (!params?.role && !params?.recipientId) return true;
       return false;
     })
