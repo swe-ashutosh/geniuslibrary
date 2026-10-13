@@ -813,6 +813,7 @@ function StudentsDirectoryContent() {
           await supabase.from("seats").update({ is_available: true }).in("seat_number", seatsToFree);
           window.dispatchEvent(new CustomEvent("seats_updated"));
         }
+        window.dispatchEvent(new CustomEvent("students_updated"));
       } catch (err) {
         console.warn("Supabase bulk delete notice:", err);
       }
@@ -1432,6 +1433,7 @@ function StudentsDirectoryContent() {
           await supabase.from("seats").update({ is_available: true }).eq("seat_number", studentObj.seat_number);
           window.dispatchEvent(new CustomEvent("seats_updated"));
         }
+        window.dispatchEvent(new CustomEvent("students_updated"));
       } catch (sbErr) {
         console.warn("Supabase profile delete notice:", sbErr);
       }

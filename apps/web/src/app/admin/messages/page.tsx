@@ -191,104 +191,63 @@ export default function CommunicationsPortalPage() {
 
   const loadData = async () => {
     try {
-      const [annData, stdData, shiftData, msgData] = await Promise.all([
+      const [annData, shiftData, msgData] = await Promise.all([
         getAnnouncements().catch(() => []),
-        getStudents().catch(() => []),
         getShifts().catch(() => []),
         getMessages().catch(() => []),
       ]);
 
-      // Authoritative Supabase student profiles list
-      let combinedStudents: Student[] = [...(stdData || [])];
+      // Authoritative Supabase student profiles list (100% sync with Students section)
+      let combinedStudents: Student[] = [];
       try {
         const supabase = createClient();
-        const { data: profiles, error: pErr } = await supabase
+        const { data: profiles } = await supabase
           .from("profiles")
           .select("*")
           .order("created_at", { ascending: false });
 
-        if (profiles && profiles.length > 0) {
-          const map = new Map<string, Student>();
-          // Index existing students by id and email
-          combinedStudents.forEach(s => {
-            if (s.id) map.set(s.id, s);
-            if (s.email) map.set(s.email.trim().toLowerCase(), s);
-          });
-
+        if (profiles && Array.isArray(profiles)) {
           profiles.forEach((p: any) => {
-            if (isMasterAdminEmail(p.email) || p.role === "admin") return;
-            const emailKey = p.email ? p.email.trim().toLowerCase() : "";
-            const idKey = p.id || "";
-            const existing = (idKey && map.get(idKey)) || (emailKey && map.get(emailKey));
+            // Only authentic students who completed admission registration with a phone number and not admin
+            const hasPhone = Boolean(p.phone && String(p.phone).trim().length > 0);
+            if (isMasterAdminEmail(p.email) || p.role === "admin" || !hasPhone) return;
 
-            if (!existing) {
-              const rawCode = (p.student_code || p.studentCode || p.member_id || "").trim();
-              const newStd: Student = {
-                id: p.id,
-                studentCode: rawCode && !/^\d+$/.test(rawCode) ? rawCode : `SDL-${new Date().getFullYear()}-${String(map.size + 1).padStart(3, "0")}`,
-                fullName: p.full_name || p.fullName || "Student Member",
-                email: p.email || "",
-                phone: p.phone || "",
-                course: p.course || "General",
-                shift: p.shift || "Morning Shift",
-                status: p.status || "active",
-                membershipPlan: p.membership_plan || "General",
-                seatNumber: p.seat_number || undefined,
-                createdAt: p.created_at || new Date().toISOString(),
-              };
-              if (idKey) map.set(idKey, newStd);
-              if (emailKey) map.set(emailKey, newStd);
-            } else {
-              const updated: Student = {
-                ...existing,
-                fullName: p.full_name || existing.fullName || "Student Member",
-                phone: p.phone || existing.phone,
-                shift: p.shift || existing.shift,
-                seatNumber: p.seat_number || existing.seatNumber,
-              };
-              if (idKey) map.set(idKey, updated);
-              if (emailKey) map.set(emailKey, updated);
-            }
+            const rawCode = (p.student_code || p.studentCode || p.member_id || "").trim();
+            const resolvedPlan = (p.membership_plan as any) || "General";
+            const newStd: Student = {
+              id: p.id,
+              studentCode: rawCode || `SDL-${p.id.slice(0, 4).toUpperCase()}`,
+              fullName: p.full_name || p.fullName || "Student Member",
+              email: p.email || "",
+              phone: p.phone || "",
+              course: p.course || "General",
+              shift: p.shift || "Morning Shift",
+              status: p.status || "active",
+              membershipPlan: resolvedPlan,
+              seatNumber: resolvedPlan === "Reserved Seat" ? (p.seat_number || undefined) : undefined,
+              feeStatus: p.fee_status || "Due",
+              dueAmount: Number(p.due_amount || 0),
+              avatarUrl: p.avatar_url || p.photo_url || null,
+              createdAt: p.created_at || new Date().toISOString(),
+            };
+            combinedStudents.push(newStd);
           });
-          // Unique by id
-          const uniqueById = new Map<string, Student>();
-          Array.from(map.values()).forEach(s => {
-            if (s?.id) uniqueById.set(s.id, s);
-          });
-          combinedStudents = Array.from(uniqueById.values());
         }
       } catch (err) {
         console.warn("Supabase profiles in messages portal note:", err);
       }
-
-      // Also ensure any student who sent a chat message appears in the conversation list
-      const studentMap = new Map<string, Student>();
-      combinedStudents.forEach(s => studentMap.set(s.id, s));
-      (msgData || []).forEach(m => {
-        if (m.studentId && !studentMap.has(m.studentId)) {
-          studentMap.set(m.studentId, {
-            id: m.studentId,
-            studentCode: `SDL-${m.studentId.slice(-4).toUpperCase()}`,
-            fullName: m.studentName || "Student Member",
-            email: m.studentEmail || "",
-            phone: "",
-            course: "General",
-            shift: "General",
-            status: "active",
-            membershipPlan: "General",
-            createdAt: m.createdAt,
-          });
-        }
-      });
-      combinedStudents = Array.from(studentMap.values());
 
       setStudents(combinedStudents);
       setShifts(shiftData || []);
       setAllChatMessages(msgData || []);
       setAnnouncements(annData || []);
 
-      if (combinedStudents.length > 0 && !activeStudentId) {
-        setActiveStudentId(combinedStudents[0].id);
+      if (combinedStudents.length > 0) {
+        if (!activeStudentId || !combinedStudents.some(s => s.id === activeStudentId)) {
+          setActiveStudentId(combinedStudents[0].id);
+        }
+      } else {
+        setActiveStudentId("");
       }
     } catch (e) {
       console.error("Error loading communications:", e);
@@ -335,9 +294,20 @@ export default function CommunicationsPortalPage() {
       } catch (err) {}
     }, 60000);
 
+    // 3. Instant sync when students are added or deleted in Students section
+    const handleStudentsUpdated = () => {
+      loadData();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("students_updated", handleStudentsUpdated);
+    }
+
     return () => {
       clearInterval(interval);
       if (channel) channel.close();
+      if (typeof window !== "undefined") {
+        window.removeEventListener("students_updated", handleStudentsUpdated);
+      }
     };
   }, []);
 
@@ -630,9 +600,11 @@ export default function CommunicationsPortalPage() {
                   const isSelected = selectedType === "group" && activeGroupId === group.id;
                   const Icon = group.icon;
                   const count = group.id === "group-all" ? students.length :
-                                group.id === "group-morning" ? students.filter(s => s.shift?.includes("Morning")).length :
+                                group.id === "group-morning" ? students.filter(s => (s.shift || "").toLowerCase().includes("morning")).length :
+                                group.id === "group-afternoon" ? students.filter(s => (s.shift || "").toLowerCase().includes("afternoon")).length :
+                                group.id === "group-evening" ? students.filter(s => (s.shift || "").toLowerCase().includes("evening")).length :
                                 group.id === "group-dues" ? students.filter(s => s.feeStatus === "Due" || (s.dueAmount && s.dueAmount > 0)).length :
-                                group.id === "group-unassigned" ? students.filter(s => !s.seatNumber).length : 24;
+                                group.id === "group-unassigned" ? students.filter(s => !s.seatNumber).length : 0;
 
                   return (
                     <button
@@ -748,8 +720,14 @@ export default function CommunicationsPortalPage() {
             )}
 
             {leftTab !== "groups" && filteredStudents.length === 0 && (
-              <div className="p-8 text-center text-zinc-400 text-xs">
-                No students found matching your criteria.
+              <div className="p-8 text-center text-zinc-400 text-xs flex flex-col items-center justify-center space-y-2">
+                <Users className="h-8 w-8 text-zinc-300 dark:text-zinc-600 mb-1" />
+                <p className="font-bold text-zinc-600 dark:text-zinc-300">No students registered yet</p>
+                <p className="text-[11px] text-zinc-400 max-w-xs">
+                  {students.length === 0
+                    ? "There are currently no active registered students in the library."
+                    : "No students match your search query."}
+                </p>
               </div>
             )}
           </div>
@@ -765,7 +743,21 @@ export default function CommunicationsPortalPage() {
           {/* ======================================================= */}
           {/* SCENARIO 1: INDIVIDUAL STUDENT 1-ON-1 CHAT              */}
           {/* ======================================================= */}
-          {selectedType === "student" && currentStudent ? (
+          {selectedType === "student" && !currentStudent ? (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8 space-y-3 bg-[#FBFBFA]/60 dark:bg-[#121822]/60">
+              <div className="h-16 w-16 rounded-3xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
+                <Users className="h-8 w-8" />
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-[#0A2E5C] dark:text-white">
+                  No Active Students in Library
+                </h4>
+                <p className="text-xs text-zinc-500 max-w-sm mt-1">
+                  There are currently no active registered students. When students register in the Students section, you can chat with them directly here.
+                </p>
+              </div>
+            </div>
+          ) : selectedType === "student" && currentStudent ? (
             <>
               {/* Upper Side Header with WhatsApp Direct Action */}
               <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3 bg-[#FBFBFA]/80 dark:bg-[#161D2A]/80 backdrop-blur-sm">
