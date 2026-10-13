@@ -327,7 +327,12 @@ export default function AdminDashboardOverview() {
         const assignedSeatsMap = new Map<string, { studentId: string; studentName: string }>();
 
         if (allProfiles && allProfiles.length > 0) {
-          const nonAdmin = allProfiles.filter((p: any) => !isMasterAdminEmail(p.email) && p.role !== "admin");
+          const nonAdmin = allProfiles.filter((p: any) => 
+            !isMasterAdminEmail(p.email) && 
+            p.role !== "admin" &&
+            p.status === "active" &&
+            Boolean(p.phone && String(p.phone).trim().length > 0)
+          );
           nonAdmin.forEach((p: any) => {
             if (p.seat_number) {
               const cleanSeat = String(p.seat_number).replace(/^S-/, "").toUpperCase().trim();
