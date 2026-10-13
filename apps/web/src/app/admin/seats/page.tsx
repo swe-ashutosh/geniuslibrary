@@ -181,8 +181,8 @@ export default function SeatManagementPage() {
           dbSeats.forEach((row: any) => {
             const num = parseDeskNum(row.seat_number);
             const id = num !== null ? String(num).padStart(2, "0") : String(row.seat_number);
-            const cat = num !== null ? getDeskCategory(num) : { zone: (row.zone || "Additional") as SeatCategory, hasLocker: Boolean(row.has_locker) };
-            const hasLocker = row.has_locker !== null && row.has_locker !== undefined ? Boolean(row.has_locker) : cat.hasLocker;
+            const cat = num !== null ? getDeskCategory(num) : { zone: (row.zone || "Additional") as SeatCategory, hasLocker: Boolean(row.zone?.includes("Locker")) };
+            const hasLocker = Boolean(row.zone?.includes("Locker")) || cat.hasLocker;
 
             baseSeatsMap.set(id, {
               id,
@@ -1496,11 +1496,14 @@ export default function SeatManagementPage() {
                       status: hasLocker ? "locker" : "available",
                     });
 
+                    const assignedZone = hasLocker
+                      ? (zone.includes("Locker") ? zone : `${zone} with Locker`)
+                      : zone;
+
                     dbPayload.push({
                       id: `seat-${id}`,
                       seat_number: id,
-                      zone,
-                      has_locker: hasLocker,
+                      zone: assignedZone,
                       is_available: true,
                       created_at: new Date().toISOString(),
                     });
@@ -1927,9 +1930,14 @@ export default function SeatManagementPage() {
                       onClick={async () => {
                         const nextState = !isCurrentlyAttached;
                         const supabase = createClient();
+                        const currentZone = target?.zone || "Medium";
+                        const updatedZone = nextState
+                          ? (currentZone.includes("Locker") ? currentZone : (currentZone === "Large with Locker" ? "Large with Locker" : `${currentZone} with Locker`))
+                          : currentZone.replace(/(\s*with\s*Locker|\s*\+?\s*Locker)/gi, "").trim();
+
                         await supabase
                           .from("seats")
-                          .update({ has_locker: nextState })
+                          .update({ zone: updatedZone })
                           .or(`seat_number.eq.${targetLockerSeat},id.eq.seat-${targetLockerSeat}`);
 
                         setSeats((prev) => {
@@ -1937,6 +1945,7 @@ export default function SeatManagementPage() {
                             if (s.id === targetLockerSeat) {
                               return {
                                 ...s,
+                                zone: updatedZone,
                                 hasLocker: nextState,
                                 status: s.status === "locker" && !nextState ? "available" : s.status,
                               };
