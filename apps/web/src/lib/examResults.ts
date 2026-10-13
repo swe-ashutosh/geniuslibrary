@@ -116,32 +116,19 @@ export async function syncExamsAndMarksFromSupabase(): Promise<{
         }
       });
 
-      // Merge with any existing local data (preferring server data)
-      const currentExams = getLibraryExams();
-      const examMap = new Map<string, LibraryExam>();
-      currentExams.forEach((e) => examMap.set(e.id, e));
-      fetchedExams.forEach((e) => examMap.set(e.id, e));
-      const mergedExams = Array.from(examMap.values());
-
-      const currentMarks = getAllExamMarks();
-      const markMap = new Map<string, StudentExamMark>();
-      currentMarks.forEach((m) => markMap.set(m.id, m));
-      fetchedMarks.forEach((m) => markMap.set(m.id, m));
-      const mergedMarks = Array.from(markMap.values());
-
-      const currentEnrollments = getAllExamEnrollments();
-      const enrollMap = new Map<string, ExamEnrollment>();
-      currentEnrollments.forEach((en) => enrollMap.set(en.id, en));
-      fetchedEnrollments.forEach((en) => enrollMap.set(en.id, en));
-      const mergedEnrollments = Array.from(enrollMap.values()).filter((en) => en.status !== "Cancelled");
+      // Supabase is the SINGLE SOURCE OF TRUTH.
+      // Overwrite local cache with authoritative server state so deleted exams never resurrect.
+      const validExams = fetchedExams.filter((e) => !e.id?.startsWith("exam-0"));
+      const validMarks = fetchedMarks.filter((m) => !m.id?.startsWith("mark-0"));
+      const validEnrollments = fetchedEnrollments.filter((en) => en.status !== "Cancelled");
 
       if (typeof window !== "undefined") {
-        localStorage.setItem(EXAMS_STORAGE_KEY, JSON.stringify(mergedExams));
-        localStorage.setItem(MARKS_STORAGE_KEY, JSON.stringify(mergedMarks));
-        localStorage.setItem(ENROLLMENTS_STORAGE_KEY, JSON.stringify(mergedEnrollments));
+        localStorage.setItem(EXAMS_STORAGE_KEY, JSON.stringify(validExams));
+        localStorage.setItem(MARKS_STORAGE_KEY, JSON.stringify(validMarks));
+        localStorage.setItem(ENROLLMENTS_STORAGE_KEY, JSON.stringify(validEnrollments));
       }
 
-      return { exams: mergedExams, marks: mergedMarks, enrollments: mergedEnrollments };
+      return { exams: validExams, marks: validMarks, enrollments: validEnrollments };
     }
   } catch (err) {
     console.warn("Error syncing exams from Supabase:", err);
@@ -239,25 +226,29 @@ export function saveLibraryExam(exam: LibraryExam): LibraryExam[] {
 /**
  * Delete an exam and its associated marks (locally and from Supabase)
  */
-export function deleteLibraryExam(examId: string): LibraryExam[] {
+export async function deleteLibraryExam(examId: string): Promise<LibraryExam[]> {
   const current = getLibraryExams();
   const updated = current.filter((e) => e.id !== examId);
   try {
     localStorage.setItem(EXAMS_STORAGE_KEY, JSON.stringify(updated));
     const allMarks = getAllExamMarks().filter((m) => m.examId !== examId);
     localStorage.setItem(MARKS_STORAGE_KEY, JSON.stringify(allMarks));
+    const allEnrollments = getAllExamEnrollments().filter((en) => en.examId !== examId);
+    localStorage.setItem(ENROLLMENTS_STORAGE_KEY, JSON.stringify(allEnrollments));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("genius_exams_updated", { detail: { examId, remaining: updated } }));
+    }
   } catch {}
 
-  // Delete from Supabase
+  // Delete from Supabase permanently
   try {
     const supabase = createClient();
-    supabase
-      .from("messages")
-      .delete()
-      .then(
-        () => {},
-        (err) => console.error("Failed to delete exam from Supabase:", err)
-      );
+    await Promise.allSettled([
+      supabase.from("messages").delete().or(`id.eq.exam_${examId},id.eq.${examId}`),
+      supabase.from("messages").delete().eq("student_id", "SYSTEM_EXAM").ilike("message", `%"id":"${examId}"%`),
+      supabase.from("messages").delete().eq("student_id", "SYSTEM_EXAM_MARK").ilike("message", `%"examId":"${examId}"%`),
+      supabase.from("messages").delete().eq("student_id", "SYSTEM_EXAM_ENROLLMENT").ilike("message", `%"examId":"${examId}"%`),
+    ]);
   } catch (e) {
     console.warn("Failed to delete exam from Supabase:", e);
   }
@@ -379,22 +370,22 @@ export function saveStudentMark(mark: StudentExamMark): StudentExamMark[] {
 /**
  * Delete a student mark record (locally and from Supabase)
  */
-export function deleteStudentMark(markId: string): StudentExamMark[] {
+export async function deleteStudentMark(markId: string): Promise<StudentExamMark[]> {
   const allMarks = getAllExamMarks();
   const updated = allMarks.filter((m) => m.id !== markId);
   try {
     localStorage.setItem(MARKS_STORAGE_KEY, JSON.stringify(updated));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("genius_exams_updated", { detail: { markId, remaining: updated } }));
+    }
   } catch {}
 
   try {
     const supabase = createClient();
-    supabase
-      .from("messages")
-      .delete()
-      .then(
-        () => {},
-        (err) => console.error("Failed to delete mark from Supabase:", err)
-      );
+    await Promise.allSettled([
+      supabase.from("messages").delete().or(`id.eq.mark_${markId},id.eq.${markId}`),
+      supabase.from("messages").delete().eq("student_id", "SYSTEM_EXAM_MARK").ilike("message", `%"id":"${markId}"%`),
+    ]);
   } catch (e) {
     console.warn("Failed to delete mark from Supabase:", e);
   }

@@ -240,9 +240,9 @@ export default function AdminResultsPage() {
   };
 
   // Handle Delete Exam
-  const handleDeleteExam = (id: string) => {
+  const handleDeleteExam = async (id: string) => {
     if (confirm("Are you sure you want to delete this exam? All student marks for this exam will also be removed.")) {
-      const updated = deleteLibraryExam(id);
+      const updated = await deleteLibraryExam(id);
       setExams(updated);
       showToast("Exam deleted successfully.");
     }
@@ -319,9 +319,9 @@ export default function AdminResultsPage() {
   };
 
   // Handle Delete Student Mark
-  const handleDeleteMark = (markId: string) => {
+  const handleDeleteMark = async (markId: string) => {
     if (!selectedExamForMarks) return;
-    deleteStudentMark(markId);
+    await deleteStudentMark(markId);
     const reloaded = getMarksForExam(selectedExamForMarks.id);
     setExamMarksList(reloaded);
     showToast("Student mark record removed.");
