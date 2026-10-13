@@ -106,9 +106,7 @@ function LoginForm() {
             .eq("id", user.id)
             .maybeSingle();
 
-          const hasPhone = Boolean(dbProfile?.phone && String(dbProfile.phone).trim().length > 0);
-
-          if (!dbProfile || !hasPhone || dbProfile.status !== "active") {
+          if (!dbProfile || dbProfile.status !== "active") {
             // Not active or unregistered: sign out and stay on login
             await supabase.auth.signOut();
             return;
@@ -397,9 +395,7 @@ function LoginForm() {
       return;
     }
 
-    const hasPhone = Boolean(studentProfile?.phone && String(studentProfile.phone).trim().length > 0);
-
-    if (!studentProfile || !hasPhone) {
+    if (!studentProfile) {
       await supabase.auth.signOut();
       setUnregisteredEmail(targetVal);
       setShowNotRegisteredModal(true);

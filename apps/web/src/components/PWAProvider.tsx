@@ -27,6 +27,7 @@ import {
   onForegroundMessage
 } from "@/lib/firebase";
 import { triggerNativeNotification } from "@/lib/pushNotify";
+import { initOfflineSync } from "@/lib/offlineSync";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -46,6 +47,9 @@ export function PWAProvider() {
     // 0. Initialize Firebase Analytics & Clear App Icon Badge on Open
     initAnalytics().catch(() => {});
     setAppBadgeCount(0);
+
+    // 0.05 Initialize offline-to-online auto-sync
+    const unbindOfflineSync = initOfflineSync();
 
     // 0.1 Record active application touch
     recordUserActivity();
@@ -172,6 +176,7 @@ export function PWAProvider() {
     }
 
     return () => {
+      unbindOfflineSync();
       if (iosTimer) clearTimeout(iosTimer);
       if (unsubscribeFCM) unsubscribeFCM();
       window.removeEventListener("beforeinstallprompt", handleBeforeInstall);

@@ -799,10 +799,17 @@ function StudentsDirectoryContent() {
     try {
       // 1. Delete student records
       await Promise.all(selectedStudents.map((id) => deleteStudent(id)));
-      // 2. Delete from Supabase profiles
+      // 2. Delete from Supabase profiles and vacate assigned seats
       try {
         const supabase = createClient();
+        const seatsToFree = students
+          .filter((s) => selectedStudents.includes(s.id) && s.seat_number)
+          .map((s) => s.seat_number!);
         await supabase.from("profiles").delete().in("id", selectedStudents);
+        if (seatsToFree.length > 0) {
+          await supabase.from("seats").update({ is_available: true }).in("seat_number", seatsToFree);
+          window.dispatchEvent(new CustomEvent("seats_updated"));
+        }
       } catch (err) {
         console.warn("Supabase bulk delete notice:", err);
       }
@@ -1038,8 +1045,8 @@ function StudentsDirectoryContent() {
 
       if (Array.isArray(supabaseProfiles)) {
         supabaseProfiles.forEach((p: any) => {
-          // Strictly exclude admin and ghost profiles without valid registered phone
-          const hasPhone = p.phone && String(p.phone).trim().length > 0;
+          // Only students who completed admission registration (has compulsory mobile number)
+          const hasPhone = Boolean(p.phone && String(p.phone).trim().length > 0);
           if (!isMasterAdminEmail(p.email) && p.role !== "admin" && hasPhone) {
             const resolvedPlan = (p.membership_plan as any) || "General";
             const existingCodesSoFar = realStudentsList.map((s) => s.student_code);
@@ -1415,8 +1422,13 @@ function StudentsDirectoryContent() {
 
       // 2. Delete from Supabase profiles table
       try {
+        const studentObj = students.find((s) => s.id === studentId);
         const supabase = createClient();
         await supabase.from("profiles").delete().eq("id", studentId);
+        if (studentObj?.seat_number) {
+          await supabase.from("seats").update({ is_available: true }).eq("seat_number", studentObj.seat_number);
+          window.dispatchEvent(new CustomEvent("seats_updated"));
+        }
       } catch (sbErr) {
         console.warn("Supabase profile delete notice:", sbErr);
       }
@@ -3782,14 +3794,6 @@ function StudentsDirectoryContent() {
                         </span>
                       );
                     })()}
-                  </div>
-
-                  <div className="rounded-2xl border border-[#E5E7EB]/70 bg-[#F8FAFC]/40 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
-                    <span className="text-[10px] font-bold text-zinc-400 block mb-0.5">Admission Date</span>
-                    <p className="text-xs font-bold text-zinc-600 dark:text-zinc-300 flex items-center gap-1">
-                      <Calendar className="h-3.5 w-3.5 text-zinc-400" />
-                      {selectedStudentForView.created_at ? new Date(selectedStudentForView.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Recent"}
-                    </p>
                   </div>
                 </div>
               </div>

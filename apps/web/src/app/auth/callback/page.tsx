@@ -121,34 +121,24 @@ function AuthCallbackContent() {
         }
       }
 
-      const hasRegisteredPhone = Boolean(profile?.phone && String(profile.phone).trim().length > 0);
+      // A student must have a completed admission registration (profile with mobile number)
+      const isRegisteredStudent = Boolean(profile && profile.phone && String(profile.phone).trim().length > 0);
 
-      // CRITICAL: When student logs in without signup:
-      // Do NOT create/leave ghost pending student on admin panel, and do NOT redirect to student page!
-      if (!profile || !hasRegisteredPhone) {
+      // If user has not completed registration:
+      if (!isRegisteredStudent) {
         // If coming from Google signup flow with pending details in sessionStorage, redirect to /signup/ to finish
         if (typeof window !== 'undefined' && sessionStorage.getItem('pending_student_signup')) {
           router.replace('/signup/');
           return;
         }
 
-        // Delete ghost profile row created by trigger so it never shows in admin pending
-        try {
-          await supabase.from('profiles').delete().eq('id', user.id);
-        } catch {}
-
-        // Notify backend cleanup to remove ghost auth user
-        try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://genius-library-api.geniuslibrary.workers.dev';
-          fetch(`${apiUrl}/api/auth/cleanup-unregistered`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user.id, email: userEmail }),
-          }).catch(() => {});
-        } catch {}
-
+        // DO NOT create any profile or student account for unregistered users!
         await supabase.auth.signOut();
-        router.replace(`/login/?error=not_registered&email=${encodeURIComponent(userEmail)}`);
+
+        const studentName = user.user_metadata?.full_name || user.user_metadata?.name || userEmail.split('@')[0] || '';
+        router.replace(
+          `/login/?error=not_registered&email=${encodeURIComponent(userEmail)}&name=${encodeURIComponent(studentName)}`
+        );
         return;
       }
 

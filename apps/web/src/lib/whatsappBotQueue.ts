@@ -1,12 +1,15 @@
 /**
  * [WEB • LIB • WHATSAPP] WhatsApp Bot Automated Queue Service
  *
- * Dispatches automated check-in / check-out messages to the Render WhatsApp Bot:
- * Endpoint: https://whatsapp-bot-9h4k.onrender.com/send-message
+ * STRICT PROJECT RULES:
+ * 1. ONLY 2 TYPES OF WHATSAPP MESSAGES ARE ALLOWED IN THE ENTIRE PROJECT:
+ *    - Type 1: Library Closed / Holiday Notification (action: "library_closed")
+ *    - Type 2: Pending Fee Due Reminder (action: "due_fee_reminder")
+ *    (All attendance WhatsApp messages have been permanently removed).
  *
- * STRICT RATE LIMITING RULE:
- * Maximum 15 messages per minute (minimum 4000ms delay between dispatches +
- * rolling 60-second throttle window).
+ * 2. ANTI-BAN THROTTLE & RATE LIMITING RULES:
+ *    - Random delay between 5 seconds (5000ms) and 20 seconds (20000ms) between consecutive messages.
+ *    - Maximum 100 messages in rolling 30 minutes window.
  */
 
 import { BRAND_CONFIG } from "@/lib/config";
@@ -15,19 +18,23 @@ import { createClient } from "@/lib/supabase/client";
 export const BOT_CONFIG = {
   DEFAULT_URL: "https://whatsapp-bot-9h4k.onrender.com",
   DEFAULT_API_KEY: "genius123",
-  MAX_MESSAGES_PER_MINUTE: 15,
-  MIN_DELAY_MS: 4000, // 60,000ms / 15 = 4,000ms
+  MAX_MESSAGES_PER_30_MINS: 100, // Maximum 100 messages in 30 minutes
+  WINDOW_30_MINS_MS: 30 * 60 * 1000, // 30 minutes in milliseconds (1,800,000 ms)
+  MIN_DELAY_MS: 5000, // Minimum 5 seconds gap
+  MAX_DELAY_MS: 20000, // Maximum 20 seconds gap
   QUEUE_STORAGE_KEY: "genius_whatsapp_queue",
   HISTORY_STORAGE_KEY: "genius_whatsapp_history",
   SETTINGS_STORAGE_KEY: "genius_whatsapp_bot_settings",
 };
+
+export type PermittedWhatsAppAction = "due_fee_reminder" | "library_closed" | "custom";
 
 export interface WhatsAppQueueItem {
   id: string;
   studentId: string;
   studentName: string;
   phone: string;
-  action: "checked_in" | "checked_out" | "custom";
+  action: PermittedWhatsAppAction;
   message: string;
   createdAt: string;
   status: "pending" | "processing" | "sent" | "failed";
@@ -41,13 +48,18 @@ export interface WhatsAppQueueStats {
   sentTodayCount: number;
   failedCount: number;
   isProcessing: boolean;
-  messagesSentLastMinute: number;
+  messagesSentLast30Mins: number;
   recentLogs: WhatsAppQueueItem[];
 }
 
 let inMemoryQueue: WhatsAppQueueItem[] = [];
 let sentTimestamps: number[] = [];
 let isQueueWorkerRunning = false;
+
+// Random delay helper: 5 seconds to 20 seconds
+export function getRandomDelayMs(): number {
+  return Math.floor(Math.random() * (BOT_CONFIG.MAX_DELAY_MS - BOT_CONFIG.MIN_DELAY_MS + 1)) + BOT_CONFIG.MIN_DELAY_MS;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers: Storage & Config
@@ -114,7 +126,7 @@ export function sanitizeWhatsAppPhone(phone: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Rate Limiter & Dispatcher Worker
+// Rate Limiter & Dispatcher Worker (Strict 5s-20s Random Delay, Max 100 in 30 mins)
 // ---------------------------------------------------------------------------
 async function processQueue() {
   if (isQueueWorkerRunning) return;
@@ -131,19 +143,29 @@ async function processQueue() {
 
   try {
     while (inMemoryQueue.length > 0) {
-      // 1. Sliding 60-second window rate limit check (max 15 msgs/min)
-      const now = Date.now();
-      sentTimestamps = sentTimestamps.filter((t) => now - t < 60000);
+      const item = inMemoryQueue[0];
 
-      if (sentTimestamps.length >= BOT_CONFIG.MAX_MESSAGES_PER_MINUTE) {
-        // Wait until oldest message expires from the 60s window
+      // STRICT VALIDATION: Only 2 message types allowed in whole project
+      if (item.action !== "due_fee_reminder" && item.action !== "library_closed") {
+        console.warn(`[WhatsApp Queue] Blocked item with action "${item.action}". Only "due_fee_reminder" and "library_closed" are permitted.`);
+        inMemoryQueue.shift();
+        saveQueue(inMemoryQueue);
+        continue;
+      }
+
+      // 1. Sliding 30-minute window rate limit check (max 100 msgs in 30 mins)
+      const now = Date.now();
+      sentTimestamps = sentTimestamps.filter((t) => now - t < BOT_CONFIG.WINDOW_30_MINS_MS);
+
+      if (sentTimestamps.length >= BOT_CONFIG.MAX_MESSAGES_PER_30_MINS) {
+        // Wait until oldest message expires from the 30-minute window
         const oldest = sentTimestamps[0];
-        const waitTime = Math.max(1000, 60000 - (now - oldest) + 200);
+        const waitTime = Math.max(1000, BOT_CONFIG.WINDOW_30_MINS_MS - (now - oldest) + 1000);
+        console.log(`[WhatsApp Queue] Safe limit (100 msgs/30 mins) reached. Throttling for ${Math.ceil(waitTime / 1000)}s.`);
         await new Promise((resolve) => setTimeout(resolve, waitTime));
         continue;
       }
 
-      const item = inMemoryQueue[0];
       item.status = "processing";
       item.attempts += 1;
       item.lastAttemptAt = new Date().toISOString();
@@ -158,7 +180,7 @@ async function processQueue() {
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 14000);
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
         const response = await fetch(proxyEndpoint, {
           method: "POST",
@@ -191,7 +213,7 @@ async function processQueue() {
       if (!isSuccess && botUrl && botUrl !== BOT_CONFIG.DEFAULT_URL) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
 
           const directRes = await fetch(`${botUrl}/send-message`, {
             method: "POST",
@@ -258,10 +280,11 @@ async function processQueue() {
         }
       }
 
-      // Mandatory throttle delay with randomized organic jitter (4000ms - 4800ms)
+      // Mandatory Anti-Ban Delay: Random gap between 5 seconds (5000ms) and 20 seconds (20000ms)
       if (inMemoryQueue.length > 0) {
-        const organicJitter = Math.floor(Math.random() * 800);
-        await new Promise((resolve) => setTimeout(resolve, BOT_CONFIG.MIN_DELAY_MS + organicJitter));
+        const randomDelay = getRandomDelayMs();
+        console.log(`[WhatsApp Queue] Safe anti-ban delay before next message: ${(randomDelay / 1000).toFixed(1)}s (Range: 5s - 20s)`);
+        await new Promise((resolve) => setTimeout(resolve, randomDelay));
       }
     }
   } finally {
@@ -270,193 +293,37 @@ async function processQueue() {
 }
 
 // ---------------------------------------------------------------------------
-// Enqueue Attendance Notification
+// Attendance WhatsApp (Permanently disabled as requested)
 // ---------------------------------------------------------------------------
-export async function enqueueAttendanceWhatsApp(params: {
-  studentId: string;
-  studentName: string;
-  phone?: string;
-  action: "checked_in" | "checked_out";
-  seatNumber?: string;
-  shiftName?: string;
-  checkInTime?: string;
-  checkOutTime?: string;
-}): Promise<boolean> {
-  if (typeof window === "undefined") return false;
-
-  let targetPhone = params.phone?.trim() || "";
-  let targetName = params.studentName?.trim() || "";
-  let targetSeat = params.seatNumber?.trim() || "";
-  let targetShift = params.shiftName?.trim() || "";
-
-  // 1. Lookup missing phone, name, seat or shift from Supabase profiles
-  if ((!targetPhone || !targetName || !targetSeat || !targetShift) && params.studentId) {
-    try {
-      const supabase = createClient();
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("phone, full_name, seat_number, shift, parent_phone")
-        .or(`id.eq.${params.studentId},student_code.eq.${params.studentId}`)
-        .maybeSingle();
-
-      if (profile) {
-        if (!targetPhone && profile.phone) targetPhone = profile.phone;
-        if (!targetName && profile.full_name) targetName = profile.full_name;
-        if (!targetSeat && profile.seat_number) targetSeat = profile.seat_number;
-        if (!targetShift && profile.shift) targetShift = profile.shift;
-      }
-    } catch (lookupErr) {
-      console.warn("[WhatsApp Queue] Profile lookup notice:", lookupErr);
-    }
-  }
-
-  const cleanPhone = sanitizeWhatsAppPhone(targetPhone);
-  const displayName = targetName || "Student Member";
-  if (!cleanPhone || cleanPhone.length < 10) {
-    console.warn("[WhatsApp Queue] Cannot dispatch: No valid phone for student:", displayName);
-    return false;
-  }
-
-  // 2. Prevent duplicate check-in/out messages within 2 minutes for the same student
-  const savedQueue = loadSavedQueue();
-  const recentDuplicate = savedQueue.find(
-    (q) =>
-      q.studentId === params.studentId &&
-      q.action === params.action &&
-      Date.now() - new Date(q.createdAt).getTime() < 120000
-  );
-  if (recentDuplicate) {
-    console.warn("[WhatsApp Queue] Skipped duplicate attendance alert for:", displayName);
-    return false;
-  }
-
-  // 3. Format dynamic anti-ban notification text (Maximum text entropy)
-  const now = new Date();
-  const dateFormatted = now.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-  
-  // High-precision time with seconds to guarantee per-message timestamp uniqueness
-  const timeFormatted =
-    params.checkInTime ||
-    params.checkOutTime ||
-    now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
-
-  const libraryName = BRAND_CONFIG.fullName || "Genius Library";
-  const seatText = targetSeat ? `#${targetSeat}` : "General Study Desk";
-  const shiftText = targetShift || "Regular Shift";
-  const isMorning = now.getHours() < 12;
-
-  // Rotating greetings for anti-spam variability
-  const checkInGreetings = [
-    `Namaste *${displayName}* ji,`,
-    `Hello *${displayName}*,`,
-    `${isMorning ? "Shubh Prabhat" : "Shubh Din"} *${displayName}*,`,
-    `Welcome *${displayName}*,`,
-    `Priya *${displayName}*,`,
-  ];
-  const checkOutGreetings = [
-    `Namaste *${displayName}* ji,`,
-    `Hello *${displayName}*,`,
-    `Shubh Sandhya *${displayName}*,`,
-    `Dhanyawad *${displayName}*,`,
-  ];
-
-  // Rotating positive study quotes
-  const checkInWishes = [
-    `🎯 Focus on your goals & study well today!`,
-    `✨ May today be your most productive study session!`,
-    `📖 Consistency is your superpower. Keep pushing forward!`,
-    `💡 Maintain silence and make every minute count!`,
-    `🚀 Hard work always pays off. Stay dedicated!`,
-    `🌟 Wishing you deep focus and high retention today!`,
-  ];
-
-  const checkOutWishes = [
-    `👏 Great dedication today! Rest well and see you tomorrow.`,
-    `🌙 Another productive study day completed toward your goal!`,
-    `🎯 Daily consistency brings top ranks. Keep it up!`,
-    `📚 Relax tonight. Kal naye josh ke sath fir milte hain!`,
-    `✨ Make sure to review your day's notes before sleeping.`,
-  ];
-
-  // Pick pseudo-random variations based on timestamp & student ID
-  const seed = now.getTime() + displayName.length;
-  const pickedGreetingIn = checkInGreetings[seed % checkInGreetings.length];
-  const pickedGreetingOut = checkOutGreetings[seed % checkOutGreetings.length];
-  const pickedWishIn = checkInWishes[seed % checkInWishes.length];
-  const pickedWishOut = checkOutWishes[seed % checkOutWishes.length];
-
-  // Unique Anti-Ban Verification Code (ensures every hash is 100% distinct)
-  const uniqueToken = `#SDL-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
-
-  let messageText = "";
-  if (params.action === "checked_in") {
-    messageText = 
-      `*🏛️ ${libraryName}*\n\n` +
-      `${pickedGreetingIn}\n` +
-      `Aapka *Check-In* safaltapoorvak darj ho gaya hai.\n\n` +
-      `📅 *Date:* ${dateFormatted}\n` +
-      `⏰ *Entry Time:* ${timeFormatted}\n` +
-      `🪑 *Desk Allotted:* ${seatText}\n` +
-      `📖 *Shift:* ${shiftText}\n` +
-      `🔖 *Ref ID:* ${uniqueToken}\n\n` +
-      `${pickedWishIn}`;
-  } else {
-    messageText = 
-      `*🏛️ ${libraryName}*\n\n` +
-      `${pickedGreetingOut}\n` +
-      `Aapka *Check-Out* safaltapoorvak darj ho gaya hai.\n\n` +
-      `📅 *Date:* ${dateFormatted}\n` +
-      `⏰ *Exit Time:* ${timeFormatted}\n` +
-      `🪑 *Desk Released:* ${seatText}\n` +
-      `🔖 *Ref ID:* ${uniqueToken}\n\n` +
-      `${pickedWishOut}`;
-  }
-
-  const newItem: WhatsAppQueueItem = {
-    id: `wa-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    studentId: params.studentId,
-    studentName: displayName,
-    phone: cleanPhone,
-    action: params.action,
-    message: messageText,
-    createdAt: new Date().toISOString(),
-    status: "pending",
-    attempts: 0,
-  };
-
-  inMemoryQueue = [...savedQueue, newItem];
-  saveQueue(inMemoryQueue);
-
-  // Trigger queue processor (asynchronous, non-blocking)
-  processQueue().catch((err) => console.error("[WhatsApp Queue Worker Error]:", err));
-
-  return true;
+export async function enqueueAttendanceWhatsApp(_params: any): Promise<boolean> {
+  // Permanently disabled: Attendance marking does NOT send WhatsApp messages
+  return false;
 }
 
 // ---------------------------------------------------------------------------
-// Enqueue Direct Custom Message
+// Enqueue Direct Custom Message (Only allowed if action is permitted)
 // ---------------------------------------------------------------------------
 export function enqueueCustomWhatsApp(params: {
   phone: string;
   studentName?: string;
   message: string;
+  action?: PermittedWhatsAppAction;
 }): boolean {
   if (typeof window === "undefined") return false;
 
   const cleanPhone = sanitizeWhatsAppPhone(params.phone);
   if (!cleanPhone || cleanPhone.length < 10) return false;
 
+  const permittedAction: PermittedWhatsAppAction =
+    params.action === "library_closed" ? "library_closed" : "due_fee_reminder";
+
   const savedQueue = loadSavedQueue();
   const newItem: WhatsAppQueueItem = {
-    id: `wa-custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    id: `wa-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     studentId: "DIRECT",
     studentName: params.studentName || "Student",
     phone: cleanPhone,
-    action: "custom",
+    action: permittedAction,
     message: params.message,
     createdAt: new Date().toISOString(),
     status: "pending",
@@ -471,7 +338,7 @@ export function enqueueCustomWhatsApp(params: {
 }
 
 // ---------------------------------------------------------------------------
-// Enqueue Close Library Broadcast (Anti-Ban Randomized per student)
+// Message Type 1: Close Library Broadcast (Anti-Ban Randomized per student)
 // ---------------------------------------------------------------------------
 export function enqueueCloseLibraryBroadcast(params: {
   reason: string;
@@ -535,7 +402,7 @@ export function enqueueCloseLibraryBroadcast(params: {
       studentId: std.id,
       studentName,
       phone: cleanPhone,
-      action: "custom",
+      action: "library_closed",
       message: messageText,
       createdAt: new Date().toISOString(),
       status: "pending",
@@ -553,7 +420,7 @@ export function enqueueCloseLibraryBroadcast(params: {
 }
 
 // ---------------------------------------------------------------------------
-// Enqueue Due Fee Reminder Alert (Anti-Ban Unique Token & Variables)
+// Message Type 2: Single Student Due Fee Reminder Alert
 // ---------------------------------------------------------------------------
 export function enqueueDueFeeReminder(params: {
   studentId: string;
@@ -561,6 +428,7 @@ export function enqueueDueFeeReminder(params: {
   phone: string;
   dueAmount: number;
   dueDate?: string;
+  feeType?: string;
 }): boolean {
   if (typeof window === "undefined") return false;
 
@@ -577,17 +445,90 @@ export function enqueueDueFeeReminder(params: {
     `Namaste *${studentName}* ji,\n` +
     `Aapki monthly library study seat fee ka baki amount darj hai.\n\n` +
     `💰 *Due Amount:* ₹${params.dueAmount}\n` +
+    (params.feeType ? `📋 *Fee Type:* ${params.feeType}\n` : "") +
     (params.dueDate ? `📅 *Due Date:* ${params.dueDate}\n` : "") +
     `💳 *Library UPI ID:* \`${upiId}\`\n` +
     `🔖 *Ref Token:* ${uniqueRef}\n\n` +
     `Kripya samay par fee jama karke front desk par receipt confirm karein taaki aapki reserved study seat nirantar surakshit rahe.\n\n` +
     `_Dhanyawad & Best Wishes for your exams!_`;
 
-  return enqueueCustomWhatsApp({
-    phone: cleanPhone,
+  const savedQueue = loadSavedQueue();
+  const newItem: WhatsAppQueueItem = {
+    id: `wa-fee-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    studentId: params.studentId,
     studentName,
+    phone: cleanPhone,
+    action: "due_fee_reminder",
     message: messageText,
+    createdAt: new Date().toISOString(),
+    status: "pending",
+    attempts: 0,
+  };
+
+  inMemoryQueue = [...savedQueue, newItem];
+  saveQueue(inMemoryQueue);
+
+  processQueue().catch((err) => console.error("[WhatsApp Queue Worker Error]:", err));
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Message Type 2 (Bulk): Send Reminder to ALL Due Students with 5s-20s Random Delay
+// ---------------------------------------------------------------------------
+export function enqueueBulkDueFeeReminders(dueList: Array<{
+  studentId: string;
+  studentName: string;
+  phone: string;
+  dueAmount: number;
+  dueDate?: string;
+  feeType?: string;
+}>): number {
+  if (typeof window === "undefined" || !dueList || dueList.length === 0) return 0;
+
+  const libraryName = BRAND_CONFIG.fullName || "Genius Library";
+  const upiId = BRAND_CONFIG.payment?.upiId || "genius.library@upi";
+  const savedQueue = loadSavedQueue();
+  const newItems: WhatsAppQueueItem[] = [];
+
+  dueList.forEach((due, idx) => {
+    const cleanPhone = sanitizeWhatsAppPhone(due.phone);
+    if (!cleanPhone || cleanPhone.length < 10) return;
+
+    const studentName = due.studentName || "Student";
+    const uniqueRef = `#FEE-DUE-${Date.now().toString(36).toUpperCase()}-${idx + 1}-${Math.floor(100 + Math.random() * 900)}`;
+
+    const messageText =
+      `*🏛️ ${libraryName} • Monthly Fee Reminder*\n\n` +
+      `Namaste *${studentName}* ji,\n` +
+      `Aapki monthly library study seat fee ka baki amount darj hai.\n\n` +
+      `💰 *Due Amount:* ₹${due.dueAmount}\n` +
+      (due.feeType ? `📋 *Fee Type:* ${due.feeType}\n` : "") +
+      (due.dueDate ? `📅 *Due Date:* ${due.dueDate}\n` : "") +
+      `💳 *Library UPI ID:* \`${upiId}\`\n` +
+      `🔖 *Ref Token:* ${uniqueRef}\n\n` +
+      `Kripya samay par fee jama karke front desk par receipt confirm karein taaki aapki reserved study seat nirantar surakshit rahe.\n\n` +
+      `_Dhanyawad & Best Wishes for your exams!_`;
+
+    newItems.push({
+      id: `wa-bulk-fee-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+      studentId: due.studentId,
+      studentName,
+      phone: cleanPhone,
+      action: "due_fee_reminder",
+      message: messageText,
+      createdAt: new Date().toISOString(),
+      status: "pending",
+      attempts: 0,
+    });
   });
+
+  if (newItems.length > 0) {
+    inMemoryQueue = [...savedQueue, ...newItems];
+    saveQueue(inMemoryQueue);
+    processQueue().catch((err) => console.error("[WhatsApp Queue Worker Error]:", err));
+  }
+
+  return newItems.length;
 }
 
 // ---------------------------------------------------------------------------
@@ -600,7 +541,7 @@ export function getWhatsAppQueueStats(): WhatsAppQueueStats {
       sentTodayCount: 0,
       failedCount: 0,
       isProcessing: false,
-      messagesSentLastMinute: 0,
+      messagesSentLast30Mins: 0,
       recentLogs: [],
     };
   }
@@ -613,7 +554,7 @@ export function getWhatsAppQueueStats(): WhatsAppQueueStats {
   } catch {}
 
   const now = Date.now();
-  const sentLastMin = sentTimestamps.filter((t) => now - t < 60000).length;
+  const sentLast30Mins = sentTimestamps.filter((t) => now - t < BOT_CONFIG.WINDOW_30_MINS_MS).length;
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const sentToday = history.filter(
@@ -627,7 +568,7 @@ export function getWhatsAppQueueStats(): WhatsAppQueueStats {
     sentTodayCount: sentToday,
     failedCount,
     isProcessing: isQueueWorkerRunning,
-    messagesSentLastMinute: sentLastMin,
+    messagesSentLast30Mins: sentLast30Mins,
     recentLogs: [...queue, ...history].slice(0, 20),
   };
 }

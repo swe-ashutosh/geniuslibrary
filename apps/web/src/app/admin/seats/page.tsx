@@ -28,6 +28,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isMasterAdminEmail } from "@/lib/config";
 import { getStudents, getFees, getAttendance } from "@/lib/api";
 import { matchSeatNumber, parseDeskNum } from "@/lib/seatUtils";
+import { enqueueOfflineMutation } from "@/lib/offlineSync";
 
 export type SeatCategory = "Small" | "Medium" | "Large with Locker" | "Additional";
 
@@ -134,7 +135,7 @@ export default function SeatManagementPage() {
       const savedStr = localStorage.getItem("genius_seats_134_v1");
       if (savedStr) {
         const parsed = JSON.parse(savedStr);
-        if (Array.isArray(parsed) && parsed.length >= 100) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           initialSeats = parsed;
           setSeats(initialSeats);
         }
@@ -156,8 +157,8 @@ export default function SeatManagementPage() {
 
         const dbSeats = seatsDbRes.data;
 
-        // Auto-seed Supabase if empty or missing the 134 categorized desks
-        if (!dbSeats || dbSeats.length < 134) {
+        // Auto-seed Supabase ONLY if seats table is completely empty (0 rows)
+        if (!dbSeats || dbSeats.length === 0) {
           try {
             const seedPayload = defaultSeats134.map((s) => ({
               id: `seat-${s.id}`,
@@ -174,7 +175,6 @@ export default function SeatManagementPage() {
 
         // Build base seats list from Supabase or default134
         const baseSeatsMap = new Map<string, SeatData>();
-        defaultSeats134.forEach((s) => baseSeatsMap.set(s.id, { ...s }));
 
         if (Array.isArray(dbSeats) && dbSeats.length > 0) {
           dbSeats.forEach((row: any) => {
@@ -192,6 +192,8 @@ export default function SeatManagementPage() {
               status: row.is_available === false ? "occupied" : hasLocker ? "locker" : "available",
             });
           });
+        } else {
+          defaultSeats134.forEach((s) => baseSeatsMap.set(s.id, { ...s }));
         }
 
         // 2. Fetch Profiles for student allocations
@@ -1510,7 +1512,13 @@ export default function SeatManagementPage() {
                   const { error } = await supabase.from("seats").upsert(dbPayload, { onConflict: "seat_number" });
                   if (error) {
                     console.error("Supabase add seats error:", error);
-                    throw error;
+                    // Buffer for auto-upload when back online
+                    enqueueOfflineMutation({
+                      type: "seat_upsert",
+                      table: "seats",
+                      action: "upsert",
+                      payload: dbPayload,
+                    });
                   }
 
                   // 2. Update Local State
@@ -1518,6 +1526,7 @@ export default function SeatManagementPage() {
                     const updated = [...prev, ...newDesks].sort((a, b) => (parseInt(a.id) || 0) - (parseInt(b.id) || 0));
                     if (typeof window !== "undefined") {
                       localStorage.setItem("genius_seats_134_v1", JSON.stringify(updated));
+                      window.dispatchEvent(new CustomEvent("seats_updated", { detail: { count: updated.length } }));
                     }
                     return updated;
                   });
@@ -1529,7 +1538,7 @@ export default function SeatManagementPage() {
                     }). Total: ${seats.length + count}`
                   );
                 } catch (err: any) {
-                  setToastMsg(`Database error: ${err.message || "Failed to save seats to Supabase"}`);
+                  setToastMsg(`Notice: Saved locally and queued for Supabase upload.`);
                 } finally {
                   setIsSubmittingAdd(false);
                 }
@@ -1788,8 +1797,20 @@ export default function SeatManagementPage() {
                         `seat-${parseInt(num, 10)}`,
                       ]);
 
-                      await supabase.from("seats").delete().in("seat_number", seatNumbersToDelete);
+                      const { error: delErr } = await supabase.from("seats").delete().in("seat_number", seatNumbersToDelete);
                       await supabase.from("seats").delete().in("id", seatIdsToDelete);
+
+                      if (delErr) {
+                        seatNumbersToDelete.forEach((sNum) => {
+                          enqueueOfflineMutation({
+                            type: "seat_delete",
+                            table: "seats",
+                            action: "delete",
+                            payload: {},
+                            filter: { column: "seat_number", value: sNum },
+                          });
+                        });
+                      }
 
                       const toDelete = new Set(selectedSeatsToDelete);
                       const remaining = seats.filter((s) => !toDelete.has(s.id));
@@ -1797,6 +1818,7 @@ export default function SeatManagementPage() {
 
                       if (typeof window !== "undefined") {
                         localStorage.setItem("genius_seats_134_v1", JSON.stringify(remaining));
+                        window.dispatchEvent(new CustomEvent("seats_updated", { detail: { count: remaining.length } }));
                       }
 
                       setIsDeleteSeatsModalOpen(false);

@@ -93,7 +93,7 @@ export default function AdminWhatsAppBotPage() {
     sentTodayCount: 0,
     failedCount: 0,
     isProcessing: false,
-    messagesSentLastMinute: 0,
+    messagesSentLast30Mins: 0,
     recentLogs: [],
   });
 
@@ -543,7 +543,7 @@ export default function AdminWhatsAppBotPage() {
                   <span className="font-bold">Anti-Ban Guarantee (Har Message Alag Hoga):</span>
                   <p className="text-[11px] text-emerald-700 dark:text-emerald-400 leading-normal">
                     WhatsApp spam detection se bachne ke liye har student ko unke apne naam, randomized greetings,
-                    alag IST time aur unique reference token ke sath message bheja jayega. Rate limit 15 msgs/min par surakshit chalegi.
+                    alag IST time aur unique reference token ke sath message bheja jayega. Safe anti-ban random gap (5s - 20s) ke sath max 100 messages in 30 minutes chalega.
                   </p>
                 </div>
               </div>
@@ -781,7 +781,7 @@ export default function AdminWhatsAppBotPage() {
               <span>Live Delivery Queue & Anti-Ban Rate Limiter</span>
             </h3>
             <p className="text-[11px] text-zinc-500">
-              Messages are throttled at a strict maximum of 15 per minute to prevent WhatsApp account restrictions.
+              Messages are throttled with a random 5s to 20s gap, capped at 100 messages per 30 minutes.
             </p>
           </div>
 
@@ -813,8 +813,8 @@ export default function AdminWhatsAppBotPage() {
           </div>
 
           <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60 text-center">
-            <span className="text-[10px] uppercase font-bold text-zinc-500 block">Safe Rate Limit</span>
-            <strong className="text-lg font-black text-indigo-600">15 / Min</strong>
+            <span className="text-[10px] uppercase font-bold text-zinc-500 block">Anti-Ban Throttle</span>
+            <strong className="text-xs font-black text-indigo-600">Max 100/30m (5-20s gap)</strong>
           </div>
         </div>
 

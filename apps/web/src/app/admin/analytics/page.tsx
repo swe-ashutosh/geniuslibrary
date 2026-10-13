@@ -54,7 +54,7 @@ export default function AnalyticsPage() {
         fees,
         attendanceList
       ] = await Promise.all([
-        getDashboardStats().catch(() => ({ totalSeats: 48, availableSeats: 48, occupiedSeats: 0, activeShiftsCount: 4, totalBooks: 0, booksIssuedCount: 0, attendanceTodayCount: 0 })),
+        getDashboardStats().catch(() => ({ totalSeats: 0, availableSeats: 0, occupiedSeats: 0, activeShiftsCount: 4, totalBooks: 0, booksIssuedCount: 0, attendanceTodayCount: 0 })),
         getStudents().catch(() => []),
         getFees().catch(() => []),
         getAttendance().catch(() => [])

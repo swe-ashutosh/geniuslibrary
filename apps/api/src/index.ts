@@ -414,7 +414,7 @@ app.get('/api/students', async (c) => {
     }
 
     if (Array.isArray(profiles)) {
-      // Filter out admin accounts and ghost profiles that lack a phone number
+      // Filter out admin accounts and ensure students have registered with phone
       const studentProfiles = profiles.filter((p: any) => 
         p.email !== MASTER_ADMIN_EMAIL && 
         p.role !== 'admin' &&
@@ -951,11 +951,19 @@ app.delete('/api/students/:id', async (c) => {
     const database = db(c);
     const supabase = getSupabase(c.env);
 
-    // 1. Primary: Delete from Supabase profiles
+    // 1. Primary: Delete from Supabase profiles and auth.users
     try {
       await supabase.from('profiles').delete().eq('id', id);
     } catch (sErr) {
       console.warn('[Supabase Profile Delete]', sErr);
+    }
+
+    try {
+      if ((supabase.auth as any).admin) {
+        await (supabase.auth as any).admin.deleteUser(id);
+      }
+    } catch (authErr) {
+      console.warn('[Supabase Auth Delete]', authErr);
     }
 
     // 2. D1: Keep permanent backup copy or mark archived
@@ -1297,45 +1305,7 @@ app.post('/api/attendance/check-in', async (c) => {
       }
     }
 
-    // Automated WhatsApp Check-in Alert (anti-ban unique timestamp & ref ID)
-    if (!body.skipBackendWhatsApp) {
-      try {
-        const supabase = getSupabase(c.env);
-        let phoneToSend = body.phone || body.studentPhone;
-        if (!phoneToSend && body.studentId) {
-          const { data: prof } = await supabase
-            .from('profiles')
-            .select('phone, full_name, seat_number, shift')
-            .or(`id.eq.${body.studentId},student_code.eq.${body.studentId}`)
-            .maybeSingle();
-          if (prof?.phone) phoneToSend = prof.phone;
-        }
-        if (phoneToSend) {
-          const studentName = body.studentName || 'Student';
-          const desk = body.seatNumber ? `#${body.seatNumber}` : 'General Study Desk';
-          const shift = body.shiftName || 'Morning Shift';
-          const refId = `#SDL-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
-          const msg =
-            `*🏛️ ${WL.fullName}*\n\n` +
-            `Namaste *${studentName}* ji,\n` +
-            `Aapka *Check-In* safaltapoorvak darj ho gaya hai.\n\n` +
-            `📅 *Date:* ${dateStr}\n` +
-            `⏰ *Entry Time:* ${timeStr}\n` +
-            `🪑 *Desk Allotted:* ${desk}\n` +
-            `📖 *Shift:* ${shift}\n` +
-            `🔖 *Ref ID:* ${refId}\n\n` +
-            `🎯 Focus on your goals & study well today!`;
 
-          if (c.executionCtx && typeof c.executionCtx.waitUntil === 'function') {
-            c.executionCtx.waitUntil(sendWhatsAppViaRenderBot(phoneToSend, msg));
-          } else {
-            sendWhatsAppViaRenderBot(phoneToSend, msg).catch(() => {});
-          }
-        }
-      } catch (waErr) {
-        console.warn('[Check-in WhatsApp alert notice]:', waErr);
-      }
-    }
 
     return c.json({ success: true, message: 'Check-in recorded with desk verification', record: newRecord });
   } catch (err: any) {
@@ -1392,43 +1362,7 @@ app.post('/api/attendance/check-out', async (c) => {
       }
     }
 
-    // Automated WhatsApp Check-out Alert
-    if (!body.skipBackendWhatsApp && studentId) {
-      try {
-        const supabase = getSupabase(c.env);
-        let phoneToSend = body.phone || body.studentPhone;
-        let sName = body.studentName;
-        if (!phoneToSend || !sName) {
-          const { data: prof } = await supabase
-            .from('profiles')
-            .select('phone, full_name')
-            .or(`id.eq.${studentId},student_code.eq.${studentId}`)
-            .maybeSingle();
-          if (prof?.phone) phoneToSend = prof.phone;
-          if (prof?.full_name && !sName) sName = prof.full_name;
-        }
-        if (phoneToSend) {
-          const studentName = sName || 'Student';
-          const refId = `#SDL-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
-          const msg =
-            `*🏛️ ${WL.fullName}*\n\n` +
-            `Namaste *${studentName}* ji,\n` +
-            `Aapka *Check-Out* safaltapoorvak darj ho gaya hai.\n\n` +
-            `📅 *Date:* ${dateStr}\n` +
-            `⏰ *Exit Time:* ${timeStr}\n` +
-            `🔖 *Ref ID:* ${refId}\n\n` +
-            `👏 Great dedication today! Rest well and see you tomorrow.`;
 
-          if (c.executionCtx && typeof c.executionCtx.waitUntil === 'function') {
-            c.executionCtx.waitUntil(sendWhatsAppViaRenderBot(phoneToSend, msg));
-          } else {
-            sendWhatsAppViaRenderBot(phoneToSend, msg).catch(() => {});
-          }
-        }
-      } catch (waErr) {
-        console.warn('[Check-out WhatsApp alert notice]:', waErr);
-      }
-    }
 
     return c.json({ success: true, message: 'Check-out recorded successfully & seat released' });
   } catch (err: any) {
@@ -1547,36 +1481,7 @@ app.post('/api/attendance/qr-scan', async (c) => {
         }
       }
 
-      // Automated WhatsApp Check-out Alert
-      try {
-        const { data: prof } = await supabase
-          .from('profiles')
-          .select('phone, full_name')
-          .or(`id.eq.${studentId},student_code.eq.${studentId}`)
-          .maybeSingle();
-        const phoneToSend = prof?.phone;
-        if (phoneToSend) {
-          const sName = prof?.full_name || studentName || 'Student';
-          const refId = `#SDL-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
-          const msg =
-            `*🏛️ ${WL.fullName}*\n\n` +
-            `Namaste *${sName}* ji,\n` +
-            `Aapka *Check-Out* safaltapoorvak darj ho gaya hai.\n\n` +
-            `📅 *Date:* ${dateStr}\n` +
-            `⏰ *Exit Time:* ${timeStr}\n` +
-            `🪑 *Desk Released:* #${releasedSeat || 'Library'}\n` +
-            `🔖 *Ref ID:* ${refId}\n\n` +
-            `👏 Great dedication today! Rest well and see you tomorrow.`;
 
-          if (c.executionCtx && typeof c.executionCtx.waitUntil === 'function') {
-            c.executionCtx.waitUntil(sendWhatsAppViaRenderBot(phoneToSend, msg));
-          } else {
-            sendWhatsAppViaRenderBot(phoneToSend, msg).catch(() => {});
-          }
-        }
-      } catch (waErr) {
-        console.warn('[QR Check-out WhatsApp alert notice]:', waErr);
-      }
 
       return c.json({
         success: true,
@@ -1729,39 +1634,7 @@ app.post('/api/attendance/qr-scan', async (c) => {
       console.warn('D1 attendance insert error:', e);
     }
 
-    // Automated WhatsApp Check-in Alert
-    try {
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('phone, full_name, shift')
-        .or(`id.eq.${studentId},student_code.eq.${studentId}`)
-        .maybeSingle();
-      const phoneToSend = prof?.phone;
-      if (phoneToSend) {
-        const sName = prof?.full_name || studentName || 'Student';
-        const desk = targetSeat ? `#${targetSeat}` : 'General Study Desk';
-        const shift = shiftName || prof?.shift || 'Morning Shift';
-        const refId = `#SDL-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
-        const msg =
-          `*🏛️ ${WL.fullName}*\n\n` +
-          `Namaste *${sName}* ji,\n` +
-          `Aapka *Check-In* safaltapoorvak darj ho gaya hai.\n\n` +
-          `📅 *Date:* ${dateStr}\n` +
-          `⏰ *Entry Time:* ${timeStr}\n` +
-          `🪑 *Desk Allotted:* ${desk}\n` +
-          `📖 *Shift:* ${shift}\n` +
-          `🔖 *Ref ID:* ${refId}\n\n` +
-          `🎯 Focus on your goals & study well today!`;
 
-        if (c.executionCtx && typeof c.executionCtx.waitUntil === 'function') {
-          c.executionCtx.waitUntil(sendWhatsAppViaRenderBot(phoneToSend, msg));
-        } else {
-          sendWhatsAppViaRenderBot(phoneToSend, msg).catch(() => {});
-        }
-      }
-    } catch (waErr) {
-      console.warn('[QR Check-in WhatsApp alert notice]:', waErr);
-    }
 
     return c.json({
       success: true,
@@ -2539,7 +2412,7 @@ app.get('/api/stats/summary', async (c) => {
 
     const pendingCount = allStudentsList.filter((s) => s.status === 'pending').length;
 
-    const TOTAL_SEATS = 100;
+    const TOTAL_SEATS = allSeats.length > 0 ? allSeats.length : 134;
     const checkedInStudentIds = new Set(
       todayAtt
         .filter((a) => a.status === 'present' || a.status === 'in_progress' || !a.checkOut || a.checkOut === 'In Progress' || a.checkOut === '—')

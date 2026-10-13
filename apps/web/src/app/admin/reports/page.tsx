@@ -322,7 +322,7 @@ export default function AdminReportsPage() {
     const absentCount = Math.max(0, activeStudents - presentCount);
 
     // 4. Seat Occupancy Rate
-    const totalSeatsCount = Math.max(seats.length, 50);
+    const totalSeatsCount = seats.length > 0 ? seats.length : 1;
     const occupiedSeatsCount = seats.filter((s) => !s.isAvailable).length || students.filter((s) => s.status === "active" && s.seatNumber).length;
     const seatOccupancyRate = Math.min(100, Math.round((occupiedSeatsCount / totalSeatsCount) * 100));
 

@@ -28,8 +28,8 @@ import { BRAND_CONFIG, isMasterAdminEmail } from "@/lib/config";
 
 export default function AdminDashboardOverview() {
   const [stats, setStats] = useState<DashboardStats>({
-    totalSeats: 100,
-    availableSeats: 100,
+    totalSeats: 0,
+    availableSeats: 0,
     occupiedSeats: 0,
     reservedSeats: 0,
     activeShiftsCount: 4,
@@ -85,7 +85,7 @@ export default function AdminDashboardOverview() {
 
   const hourlyOccupancy = useMemo(() => {
     // If no seats occupied or no attendance records today, return 0% baseline
-    const totalSeats = stats.totalSeats || 100;
+    const totalSeats = stats.totalSeats > 0 ? stats.totalSeats : 1;
     const hours = [6, 8, 10, 12, 14, 16, 18, 20, 22];
 
     return hours.map((hour, index) => {
@@ -140,17 +140,6 @@ export default function AdminDashboardOverview() {
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3500);
-  };
-
-  const sendWhatsAppBookReminder = (student: string, phone: string, bookTitle: string, delay: string) => {
-    const cleanPhone = (phone || "").replace(/[^0-9]/g, "");
-    if (!cleanPhone) {
-      showToast(`No phone number available for ${student}`);
-      return;
-    }
-    const msg = encodeURIComponent(`Dear ${student},\n\nThis is a friendly reminder from *${BRAND_CONFIG.fullName}, ${BRAND_CONFIG.location}*.\n\nYour borrowed book *"${bookTitle}"* is currently overdue by *${delay}*.\nKindly return or renew the book at the library reception desk.\n\nThank you! 🙏`);
-    window.open(`https://wa.me/${cleanPhone}?text=${msg}`, '_blank');
-    showToast(`WhatsApp reminder opened for ${student}`);
   };
 
   const sendWhatsAppFeeReminder = (student: string, phone: string, feeType: string, amount: string, delay: string) => {
@@ -242,12 +231,13 @@ export default function AdminDashboardOverview() {
     async function loadData() {
       try {
         const supabase = createClient();
-        const [liveStats, feesList, attList, profilesRes, holidaysRes] = await Promise.all([
-          getDashboardStats().catch(() => ({ totalSeats: 100, availableSeats: 100, occupiedSeats: 0, activeShiftsCount: 4, totalBooks: 0, booksIssuedCount: 0, attendanceTodayCount: 0 })),
+        const [liveStats, feesList, attList, profilesRes, holidaysRes, seatsRes] = await Promise.all([
+          getDashboardStats().catch(() => ({ totalSeats: 0, availableSeats: 0, occupiedSeats: 0, activeShiftsCount: 4, totalBooks: 0, booksIssuedCount: 0, attendanceTodayCount: 0 })),
           getFees().catch(() => []),
           getAttendance().catch(() => []),
           Promise.resolve(supabase.from("profiles").select("*")).then(res => res.data || []).catch(() => []),
           getLibraryHolidays().catch(() => []),
+          Promise.resolve(supabase.from("seats").select("id, seat_number, zone, is_available, has_locker")).then(res => res.data || []).catch(() => []),
         ]);
         setStats(liveStats);
         // Sync exams from Supabase first (single source of truth across all devices)
@@ -267,11 +257,10 @@ export default function AdminDashboardOverview() {
           (p.phone && String(p.phone).trim().length > 0)
         );
 
-        // Strict rule: Total Students only includes approved/active members!
         const activeProfiles = validProfiles.filter((p: any) => p.status === "active");
         const pendingProfiles = validProfiles.filter((p: any) => p.status === "pending");
 
-        setTotalStudentsCount(activeProfiles.length);
+        setTotalStudentsCount(validProfiles.length);
         setPendingApprovalsCount(pendingProfiles.length);
 
         // Build active student records for shifts overview
@@ -328,9 +317,10 @@ export default function AdminDashboardOverview() {
 
         // -------------------------------------------------------------
         // Calculate Synchronized Seat Occupancy (Exact Sync with /admin/seats)
-        // 100 Desks: Available = 100 - (Occupied + Reserved)
+        // Dynamically fetched from Supabase seats table
         // -------------------------------------------------------------
-        const TOTAL_SEATS = 100;
+        const allDbSeats: any[] = seatsRes || [];
+        const TOTAL_SEATS = allDbSeats.length > 0 ? allDbSeats.length : (liveStats.totalSeats || 0);
         const assignedSeatsMap = new Map<string, { studentId: string; studentName: string }>();
 
         if (allProfiles && allProfiles.length > 0) {
@@ -555,13 +545,19 @@ export default function AdminDashboardOverview() {
         "postgres_changes",
         { event: "*", schema: "public", table: "profiles" },
         () => {
-          // Debounce: Wait 10s of quiet before reloading to batch rapid changes
           if (realtimeDebounceTimer) clearTimeout(realtimeDebounceTimer);
           realtimeDebounceTimer = setTimeout(() => {
             if (document.visibilityState === "visible") {
               loadData();
             }
-          }, 10000);
+          }, 3000);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "seats" },
+        () => {
+          loadData();
         }
       )
       .subscribe();
@@ -569,12 +565,17 @@ export default function AdminDashboardOverview() {
     const handleHolidayUpdate = () => {
       getLibraryHolidays().then((list) => setHolidays(list || []));
     };
+    const handleSeatsUpdate = () => {
+      loadData();
+    };
     window.addEventListener("library_holiday_updated", handleHolidayUpdate);
+    window.addEventListener("seats_updated", handleSeatsUpdate);
 
     return () => {
       if (realtimeDebounceTimer) clearTimeout(realtimeDebounceTimer);
       supabase.removeChannel(channel);
       window.removeEventListener("library_holiday_updated", handleHolidayUpdate);
+      window.removeEventListener("seats_updated", handleSeatsUpdate);
     };
   }, []);
 

@@ -32,6 +32,7 @@ import {
   FeeRecord,
   generateInvoiceNumber 
 } from "@/lib/api";
+import { enqueueDueFeeReminder, enqueueBulkDueFeeReminders } from "@/lib/whatsappBotQueue";
 import { createClient } from "@/lib/supabase/client";
 import { isMasterAdminEmail } from "@/lib/config";
 import FeeInvoiceModal, { InvoiceData } from "@/components/FeeInvoiceModal";
@@ -189,6 +190,8 @@ export default function FeesAndExpensesManagement() {
   // Modals
   const [isCollectModalOpen, setIsCollectModalOpen] = useState(false);
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
+  const [isBulkReminderModalOpen, setIsBulkReminderModalOpen] = useState(false);
+  const [isSendingBulkReminders, setIsSendingBulkReminders] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceData | null>(null);
   const [sendingReceiptId, setSendingReceiptId] = useState<string | null>(null);
 
@@ -243,7 +246,7 @@ export default function FeesAndExpensesManagement() {
 
       if (sbProfilesRes.data && Array.isArray(sbProfilesRes.data)) {
         sbProfilesRes.data.forEach((p: any) => {
-          const hasPhone = p.phone && String(p.phone).trim().length > 0;
+          const hasPhone = Boolean(p.phone && String(p.phone).trim().length > 0);
           if (!isMasterAdminEmail(p.email) && p.role !== "admin" && hasPhone) {
             const stdObj: StudentProfile = {
               id: p.id,
@@ -553,12 +556,76 @@ export default function FeesAndExpensesManagement() {
   // Actions: WhatsApp & Payment Pre-fill
   // -------------------------------------------------------------
   const handleOpenWhatsAppReminder = (due: DueRecord) => {
+    // 1. Enqueue to bot queue safely with due_fee_reminder action (5s-20s random gap, max 100/30m)
+    enqueueDueFeeReminder({
+      studentId: due.studentId,
+      studentName: due.studentName,
+      phone: due.phone,
+      dueAmount: due.amount,
+      dueDate: due.dueDate,
+      feeType: due.type,
+    });
+
+    // 2. Also send in-app notification to student
+    createNotification({
+      recipientRole: "student",
+      recipientId: due.studentId,
+      title: "💳 Library Fee Due Reminder",
+      message: `Dear ${due.studentName}, your fee payment of ₹${due.amount} (${due.type}) is currently pending. Kindly clear your dues via UPI or at the library desk.`,
+      type: "fee_reminder",
+      actionUrl: "/student/fees",
+    }).catch(() => {});
+
+    // 3. Open WhatsApp link as immediate front-desk fallback
     const cleanPhone = due.phone.replace(/[^0-9]/g, "");
     const formattedPhone = cleanPhone.startsWith("91") ? cleanPhone : `91${cleanPhone}`;
     const text = encodeURIComponent(
       `Hello ${due.studentName},\n\nThis is a friendly reminder from Genius Library, Madhupur.\nYour library seat fee of ₹${due.amount} (${due.type}) is currently due.\n\nDue Date: ${due.dueDate}\nStatus: ${due.status}\n\nPlease settle your dues via UPI or at the library front desk to keep your seat reserved.\nThank you!`
     );
     window.open(`https://wa.me/${formattedPhone}?text=${text}`, "_blank");
+    showToast(`✓ Reminder queued for ${due.studentName} (5s-20s safe anti-ban delay) & WhatsApp opened!`);
+  };
+
+  const handleSendBulkDueReminders = async () => {
+    if (studentDuesLedger.length === 0) {
+      showToast("No pending dues found!");
+      return;
+    }
+    setIsSendingBulkReminders(true);
+    try {
+      // 1. Send in-app notification to all due students
+      for (const due of studentDuesLedger) {
+        createNotification({
+          recipientRole: "student",
+          recipientId: due.studentId,
+          title: "💳 Library Fee Due Reminder",
+          message: `Dear ${due.studentName}, your fee payment of ₹${due.amount} (${due.type}) is currently pending. Kindly clear your dues via UPI or at the library desk.`,
+          type: "fee_reminder",
+          actionUrl: "/student/fees",
+        }).catch(() => {});
+      }
+
+      // 2. Filter valid students and enqueue WhatsApp reminders with random 5s-20s delay (max 100 in 30 mins)
+      const validDueList = studentDuesLedger
+        .filter((d) => d.phone && d.amount > 0)
+        .map((d) => ({
+          studentId: d.studentId,
+          studentName: d.studentName,
+          phone: d.phone,
+          dueAmount: d.amount,
+          dueDate: d.dueDate,
+          feeType: d.type,
+        }));
+
+      const queuedCount = enqueueBulkDueFeeReminders(validDueList);
+
+      showToast(`✓ Sent App notifications & queued ${queuedCount} WhatsApp reminders (Safe 5s-20s random gap, max 100/30m)!`);
+      setIsBulkReminderModalOpen(false);
+    } catch (err: any) {
+      showToast(`Error sending reminders: ${err?.message || "Failed"}`);
+    } finally {
+      setIsSendingBulkReminders(false);
+    }
   };
 
   const handlePreFillCollectModal = (due: DueRecord) => {
@@ -1254,6 +1321,17 @@ export default function FeesAndExpensesManagement() {
               />
             </div>
 
+            {/* 📢 Bulk WhatsApp + In-App Reminders Button */}
+            <button
+              type="button"
+              onClick={() => setIsBulkReminderModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black shadow-xs transition cursor-pointer"
+              title="Send WhatsApp & App reminders to all due students"
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+              <span>Remind All ({studentDuesLedger.length})</span>
+            </button>
+
             {/* View Switcher (Table vs Grid) */}
             <div className="flex items-center rounded-xl border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-700 dark:bg-zinc-800">
               <button
@@ -1283,7 +1361,7 @@ export default function FeesAndExpensesManagement() {
             </div>
           </div>
 
-          {/* Mobile Toolbar: Search + Filter Icon Button + View Switcher */}
+          {/* Mobile Toolbar: Search + Filter Icon Button + Remind All + View Switcher */}
           <div className="flex sm:hidden items-center gap-2 w-full">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-400" />
@@ -1311,6 +1389,17 @@ export default function FeesAndExpensesManagement() {
               {ledgerStatusFilter !== "All" && (
                 <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
               )}
+            </button>
+
+            {/* Mobile Remind All Button */}
+            <button
+              type="button"
+              onClick={() => setIsBulkReminderModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-black shadow-xs transition active:scale-95 cursor-pointer shrink-0"
+              title="Remind All Due Students"
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+              <span>Remind</span>
             </button>
 
             {/* Mobile View Switcher */}
@@ -2182,27 +2271,11 @@ export default function FeesAndExpensesManagement() {
             </button>
 
             <button 
-              onClick={async () => {
-                if (studentDuesLedger.length === 0) {
-                  showToast("No pending dues found today!");
-                  return;
-                }
-                for (const due of studentDuesLedger) {
-                  createNotification({
-                    recipientRole: "student",
-                    recipientId: due.studentId,
-                    title: "💳 Library Fee Due Reminder",
-                    message: `Dear ${due.studentName}, your fee payment of ₹${due.amount} (${due.type}) is currently pending. Kindly clear your dues via UPI or at the library desk.`,
-                    type: "fee_reminder",
-                    actionUrl: "/student/fees",
-                  }).catch(() => {});
-                }
-                showToast(`✓ Sent broadcast reminder to ${studentDuesLedger.length} due students!`);
-              }}
-              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-purple-50 hover:bg-purple-100 border border-purple-200 dark:bg-purple-950/40 dark:border-purple-800 transition active:scale-95 cursor-pointer text-center"
+              onClick={() => setIsBulkReminderModalOpen(true)}
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 transition active:scale-95 cursor-pointer text-center"
             >
-              <Send className="h-4 w-4 text-purple-600 dark:text-purple-400 mb-1" />
-              <span className="text-[11px] font-black text-purple-900 dark:text-purple-200">Send Reminders</span>
+              <MessageCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 mb-1" />
+              <span className="text-[11px] font-black text-emerald-900 dark:text-emerald-200">Remind All Dues</span>
             </button>
           </div>
 
@@ -2861,6 +2934,97 @@ export default function FeesAndExpensesManagement() {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 📢 Bulk WhatsApp & In-App Due Reminder Confirmation Modal */}
+      {isBulkReminderModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400">
+                  <MessageCircle className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-zinc-900 dark:text-white">
+                    Send Reminder to All Due Students
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    Dispatches In-App Notice + Automated WhatsApp Messages
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBulkReminderModalOpen(false)}
+                className="h-8 w-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:hover:text-white cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Summary KPI Pills */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200/80 dark:border-zinc-700/60">
+                <span className="text-[10px] uppercase font-bold text-zinc-500 block">Due Students</span>
+                <strong className="text-xl font-black text-[#0A2E5C] dark:text-white">
+                  {studentDuesLedger.length} Students
+                </strong>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/50">
+                <span className="text-[10px] uppercase font-bold text-rose-600 block">Total Outstanding</span>
+                <strong className="text-xl font-black text-rose-600">
+                  ₹{totalPendingDuesAmount.toLocaleString("en-IN")}
+                </strong>
+              </div>
+            </div>
+
+            {/* Anti-Ban & Rate Limit Guarantee Notice */}
+            <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-xs text-emerald-900 dark:text-emerald-300 space-y-1">
+              <div className="flex items-center gap-1.5 font-black text-emerald-800 dark:text-emerald-200">
+                <Sparkles className="h-4 w-4 text-emerald-600" />
+                <span>Anti-Ban Throttling Active</span>
+              </div>
+              <ul className="text-[11px] list-disc list-inside space-y-0.5 text-emerald-700 dark:text-emerald-400">
+                <li>Har message ke beech <strong>5 second se 20 second</strong> ka random gap rahega.</li>
+                <li>WhatsApp spam block se bachne ke liye <strong>30 minute me max 100 messages</strong> safe limit hai.</li>
+                <li>Sabhi due students ko sath me unke app portal par bhi in-app notification chali jayegi.</li>
+              </ul>
+            </div>
+
+            {/* Preview of Message */}
+            <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700/50 text-xs space-y-1">
+              <span className="text-[10px] font-bold uppercase text-zinc-400 block">Message Preview:</span>
+              <p className="font-bold text-zinc-800 dark:text-zinc-200">🏛️ Genius Library • Monthly Fee Reminder</p>
+              <p className="text-zinc-600 dark:text-zinc-400 text-[11px]">
+                Namaste [Student Name] ji, aapki monthly library study seat fee ka baki amount darj hai.
+                Due: ₹[Amount] • UPI: genius.library@upi
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setIsBulkReminderModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl border border-zinc-200 bg-white text-xs font-bold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSendBulkDueReminders}
+                disabled={isSendingBulkReminders || studentDuesLedger.length === 0}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black shadow-md transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                <Send className="h-3.5 w-3.5" />
+                <span>
+                  {isSendingBulkReminders ? "Dispatching..." : `Send to All ${studentDuesLedger.length} Due Students`}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       )}

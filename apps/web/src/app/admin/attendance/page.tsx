@@ -248,7 +248,7 @@ export default function AdminAttendancePage() {
       // Supabase profiles (Sole Primary Database)
       if (profilesRes.data && Array.isArray(profilesRes.data)) {
         for (const p of profilesRes.data) {
-          const hasPhone = p.phone && String(p.phone).trim().length > 0;
+          const hasPhone = Boolean(p.phone && String(p.phone).trim().length > 0);
           if (p.role !== "admin" && !isMasterAdminEmail(p.email) && hasPhone) {
             const key = p.email ? p.email.toLowerCase() : p.id;
             const rawCode = (p.student_code || p.studentCode || "").trim();

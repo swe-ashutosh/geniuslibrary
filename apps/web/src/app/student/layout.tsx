@@ -731,13 +731,8 @@ export default function StudentLayout({
           .eq("id", activeUser.id)
           .maybeSingle();
 
-        const hasPhone = Boolean(profile?.phone && String(profile.phone).trim().length > 0);
-
-        // Verification check 1: Student logged in without completing signup
-        if (!profile || !hasPhone) {
-          try {
-            await supabase.from("profiles").delete().eq("id", activeUser.id);
-          } catch {}
+        // Verification check 1: Student profile exists
+        if (!profile) {
           await supabase.auth.signOut();
           router.replace(`/login?error=not_registered&email=${encodeURIComponent(activeUser.email || "")}`);
           return;

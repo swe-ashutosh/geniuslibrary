@@ -5,8 +5,8 @@
  */
 
 import { BRAND_CONFIG, isMasterAdminEmail } from './config';
-import { enqueueAttendanceWhatsApp } from './whatsappBotQueue';
 import { parseDeskNum, matchSeatNumber, formatDeskId } from './seatUtils';
+import { enqueueOfflineMutation } from './offlineSync';
 
 const API_BASE_URL = BRAND_CONFIG.apiUrl;
 
@@ -287,6 +287,7 @@ const STORAGE_KEYS = {
   STAFF: 'genius_staff_records',
   NOTIFICATIONS: 'genius_notifications_records',
   CLEARED_NOTIFICATIONS: 'genius_cleared_notification_ids',
+  STUDENTS: 'genius_students_records',
   HOLIDAYS: 'genius_library_holidays',
   REOPENED_MAP: 'genius_library_reopened_map',
 };
@@ -327,54 +328,83 @@ function setLocalData<T>(key: string, value: T): void {
 // Shifts
 // ── 4a. SHIFTS & SEATS ───────────────────────────────────────
 export async function getShifts(): Promise<Shift[]> {
+  let liveTotalSeats = 134;
+  let liveAvailableSeats = 134;
+  try {
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    const { data: dbSeats } = await supabase.from('seats').select('id, is_available');
+    if (Array.isArray(dbSeats) && dbSeats.length > 0) {
+      liveTotalSeats = dbSeats.length;
+      liveAvailableSeats = dbSeats.filter(s => s.is_available !== false).length;
+    }
+  } catch {}
+
+  const baseShifts: Shift[] = [
+    { id: 'standard-3hr', name: 'Standard (3 Hours Pass)', startTime: '24/7 Flexible', endTime: '3 Hours Daily', fee: 300, totalSeats: liveTotalSeats, availableSeats: liveAvailableSeats, isActive: true },
+    { id: 'prime-6hr', name: 'Pro / Prime (6 Hours Pass)', startTime: '24/7 Flexible', endTime: '6 Hours Daily', fee: 500, totalSeats: liveTotalSeats, availableSeats: liveAvailableSeats, isActive: true },
+    { id: 'reserve-mini', name: 'Elite / Reserve Mini', startTime: '24/7 Dedicated', endTime: '24/7 Access', fee: 500, totalSeats: liveTotalSeats, availableSeats: liveAvailableSeats, isActive: true },
+    { id: 'reserve-big', name: 'Prime / Reserve Big', startTime: '24/7 Dedicated', endTime: '24/7 Access', fee: 600, totalSeats: liveTotalSeats, availableSeats: liveAvailableSeats, isActive: true },
+    { id: 'reserve-locker', name: 'Max / Reserve Locker', startTime: '24/7 Dedicated', endTime: '24/7 Access + Locker', fee: 700, totalSeats: liveTotalSeats, availableSeats: liveAvailableSeats, isActive: true },
+    { id: 'night-ultra', name: 'Night Shift Ultra', startTime: '10:00 PM', endTime: '06:00 AM', fee: 500, totalSeats: liveTotalSeats, availableSeats: liveAvailableSeats, isActive: true },
+  ];
+
   try {
     const data = await fetchApi<{ success: boolean; shifts: Shift[] }>('/api/shifts');
-    return data.shifts || [];
-  } catch {
-    return [
-      { id: 'standard-3hr', name: 'Standard (3 Hours Pass)', startTime: '24/7 Flexible', endTime: '3 Hours Daily', fee: 300, totalSeats: 100, availableSeats: 100, isActive: true },
-      { id: 'prime-6hr', name: 'Pro / Prime (6 Hours Pass)', startTime: '24/7 Flexible', endTime: '6 Hours Daily', fee: 500, totalSeats: 100, availableSeats: 100, isActive: true },
-      { id: 'reserve-mini', name: 'Elite / Reserve Mini', startTime: '24/7 Dedicated', endTime: '24/7 Access', fee: 500, totalSeats: 100, availableSeats: 100, isActive: true },
-      { id: 'reserve-big', name: 'Prime / Reserve Big', startTime: '24/7 Dedicated', endTime: '24/7 Access', fee: 600, totalSeats: 100, availableSeats: 100, isActive: true },
-      { id: 'reserve-locker', name: 'Max / Reserve Locker', startTime: '24/7 Dedicated', endTime: '24/7 Access + Locker', fee: 700, totalSeats: 100, availableSeats: 100, isActive: true },
-      { id: 'night-ultra', name: 'Night Shift Ultra', startTime: '10:00 PM', endTime: '06:00 AM', fee: 500, totalSeats: 100, availableSeats: 100, isActive: true },
-    ];
-  }
+    if (data?.shifts && data.shifts.length > 0) {
+      return data.shifts.map(s => ({
+        ...s,
+        totalSeats: liveTotalSeats,
+        availableSeats: liveAvailableSeats,
+      }));
+    }
+  } catch {}
+
+  return baseShifts;
 }
 
-// Seats
+// Seats (Single Source of Truth: Supabase Primary Database)
 export async function getSeats(): Promise<{ total: number; available: number; occupied: number; seats: Seat[] }> {
   try {
-    const data = await fetchApi<{ total: number; available: number; occupied: number; seats: Seat[] }>('/api/seats');
-    return data;
-  } catch {
-    const cachedSeats = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
-    if (cachedSeats.length > 0) {
-      const occupied = cachedSeats.filter(s => !s.isAvailable).length;
-      return { total: cachedSeats.length, available: cachedSeats.length - occupied, occupied, seats: cachedSeats };
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    const { data: dbSeats, error } = await supabase.from('seats').select('*').order('seat_number', { ascending: true });
+    if (!error && Array.isArray(dbSeats) && dbSeats.length > 0) {
+      const mappedSeats: Seat[] = dbSeats.map((s: any) => ({
+        id: s.id,
+        seatNumber: s.seat_number,
+        zone: s.zone || 'General',
+        isAvailable: s.is_available ?? true,
+        currentStudentName: s.current_student_name || null,
+        currentStudentId: s.current_student_id || null,
+        shiftId: s.shift_id || null,
+      }));
+      const occupied = mappedSeats.filter(s => !s.isAvailable).length;
+      const result = {
+        total: mappedSeats.length,
+        available: Math.max(0, mappedSeats.length - occupied),
+        occupied,
+        seats: mappedSeats,
+      };
+      setLocalData(STORAGE_KEYS.SEATS, mappedSeats);
+      return result;
     }
-    const rows = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
-    const fallbackSeats: Seat[] = [];
-    let idx = 1;
-    for (const r of rows) {
-      for (let col = 1; col <= 10; col++) {
-        fallbackSeats.push({
-          id: `seat-${String(idx).padStart(3, '0')}`,
-          seatNumber: `${r}-${String(col).padStart(2, '0')}`,
-          zone: r <= 'B' ? 'Zone A' : r <= 'D' ? 'Zone B' : r <= 'F' ? 'Zone C' : r <= 'H' ? 'Zone D' : 'Zone E',
-          isAvailable: true,
-          currentStudentName: null,
-        });
-        idx++;
-      }
-    }
-    return {
-      total: 100,
-      available: 100,
-      occupied: 0,
-      seats: fallbackSeats,
-    };
+  } catch (err) {
+    console.warn('Supabase getSeats error:', err);
   }
+
+  const cachedSeats = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
+  if (cachedSeats.length > 0) {
+    const occupied = cachedSeats.filter(s => !s.isAvailable).length;
+    return { total: cachedSeats.length, available: Math.max(0, cachedSeats.length - occupied), occupied, seats: cachedSeats };
+  }
+
+  return {
+    total: 0,
+    available: 0,
+    occupied: 0,
+    seats: [],
+  };
 }
 
 export async function allocateSeat(seatNumber: string, studentId: string, studentName: string, shiftId?: string) {
@@ -382,7 +412,21 @@ export async function allocateSeat(seatNumber: string, studentId: string, studen
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
     await markSeatOccupiedInSupabase(supabase, seatNumber, studentId, studentName);
-  } catch {}
+  } catch {
+    enqueueOfflineMutation({
+      type: 'seat_upsert',
+      table: 'seats',
+      action: 'update',
+      payload: {
+        is_available: false,
+        current_student_id: studentId,
+        current_student_name: studentName,
+        shift_id: shiftId || null,
+        occupied_at: new Date().toISOString(),
+      },
+      filter: { column: 'seat_number', value: seatNumber },
+    });
+  }
   // Local cache update
   const seatsList = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
   const updated = seatsList.map(s => matchSeatNumber(s.seatNumber, seatNumber) ? {
@@ -394,6 +438,9 @@ export async function allocateSeat(seatNumber: string, studentId: string, studen
     occupiedAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
   } : s);
   setLocalData(STORAGE_KEYS.SEATS, updated);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('seats_updated'));
+  }
   return { success: true, message: `Seat ${seatNumber} allocated to ${studentName}` };
 }
 
@@ -402,7 +449,21 @@ export async function vacateSeat(seatNumber: string) {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
     await markSeatVacantInSupabase(supabase, null, seatNumber);
-  } catch {}
+  } catch {
+    enqueueOfflineMutation({
+      type: 'seat_upsert',
+      table: 'seats',
+      action: 'update',
+      payload: {
+        is_available: true,
+        current_student_id: null,
+        current_student_name: null,
+        shift_id: null,
+        occupied_at: null,
+      },
+      filter: { column: 'seat_number', value: seatNumber },
+    });
+  }
   const seatsList = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
   const updated = seatsList.map(s => matchSeatNumber(s.seatNumber, seatNumber) ? {
     ...s,
@@ -413,6 +474,9 @@ export async function vacateSeat(seatNumber: string) {
     occupiedAt: null,
   } : s);
   setLocalData(STORAGE_KEYS.SEATS, updated);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('seats_updated'));
+  }
   return { success: true, message: `Seat ${seatNumber} is now vacant` };
 }
 
@@ -816,18 +880,7 @@ export async function markAttendance(params: {
       body: JSON.stringify(params),
     });
 
-    // Automated WhatsApp Attendance Alert
-    if (params.studentId) {
-      enqueueAttendanceWhatsApp({
-        studentId: params.studentId,
-        studentName: params.studentName,
-        action: params.checkOut ? 'checked_out' : 'checked_in',
-        seatNumber: params.seatNumber,
-        shiftName: params.shiftName,
-        checkInTime: checkInTime,
-        checkOutTime: params.checkOut || undefined,
-      }).catch(() => {});
-    }
+
 
     return apiRes;
   } catch {
@@ -844,17 +897,7 @@ export async function markAttendance(params: {
       source: 'supabase',
     };
 
-    if (params.studentId) {
-      enqueueAttendanceWhatsApp({
-        studentId: params.studentId,
-        studentName: params.studentName,
-        action: params.checkOut ? 'checked_out' : 'checked_in',
-        seatNumber: params.seatNumber,
-        shiftName: params.shiftName,
-        checkInTime: checkInTime,
-        checkOutTime: params.checkOut || undefined,
-      }).catch(() => {});
-    }
+
 
     return { success: true, message: 'Attendance recorded', record };
   }
@@ -943,16 +986,7 @@ export async function recordCheckIn(params: { studentId: string; studentName: st
     actionUrl: '/student/attendance',
   }).catch(() => {});
 
-  if (params.studentId) {
-    enqueueAttendanceWhatsApp({
-      studentId: params.studentId,
-      studentName: params.studentName,
-      action: 'checked_in',
-      seatNumber: cleanSeat || undefined,
-      shiftName: params.shiftName,
-      checkInTime: timeStr,
-    }).catch(() => {});
-  }
+
 
   return { success: true, message: 'Check-in recorded with desk verification', record: newRecord };
 }
@@ -1119,14 +1153,7 @@ export async function smartQrScanAttendance(params: {
       }).catch(() => {});
     } catch {}
 
-    enqueueAttendanceWhatsApp({
-      studentId: params.studentId,
-      studentName: params.studentName,
-      action: 'checked_out',
-      seatNumber: seatToRelease || undefined,
-      checkInTime: activeRecord.check_in,
-      checkOutTime: timeStr,
-    }).catch(() => {});
+
 
     return {
       success: true,
@@ -1277,13 +1304,7 @@ export async function smartQrScanAttendance(params: {
     }).catch(() => {});
   } catch {}
 
-  enqueueAttendanceWhatsApp({
-    studentId: params.studentId,
-    studentName: params.studentName,
-    action: 'checked_in',
-    seatNumber: allocatedSeat || undefined,
-    checkInTime: timeStr,
-  }).catch(() => {});
+
 
   return {
     success: true,
@@ -1452,15 +1473,7 @@ export async function recordCheckOut(studentId: string, studentName?: string) {
     actionUrl: '/student/attendance',
   }).catch(() => {});
 
-  if (studentId) {
-    enqueueAttendanceWhatsApp({
-      studentId,
-      studentName: studentName || '',
-      action: 'checked_out',
-      seatNumber: seatToRelease || undefined,
-      checkOutTime: timeStr,
-    }).catch(() => {});
-  }
+
 
   return { success: true, message: `Check-out recorded successfully${seatToRelease ? ` (Desk #${seatToRelease} is now free)` : ''}` };
 }
@@ -2325,21 +2338,80 @@ export function isDateLibraryHoliday(dateStr: string, holidays?: LibraryHoliday[
   return { isHoliday: !!found, holiday: found };
 }
 
-// Stats
+// Stats - Single Source of Truth: Supabase Primary Database
 export async function getDashboardStats(): Promise<DashboardStats> {
   try {
-    const data = await fetchApi<{ success: boolean; stats: DashboardStats }>('/api/stats/summary');
-    return data.stats;
-  } catch {
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const [seatsRes, profilesRes, attRes] = await Promise.all([
+      supabase.from('seats').select('id, seat_number, is_available'),
+      supabase.from('profiles').select('id, role, status, email, phone, seat_number'),
+      supabase.from('attendance').select('id, student_id, seat_number, status, check_in, check_out, date').eq('date', todayStr),
+    ]);
+
+    const dbSeats = Array.isArray(seatsRes.data) ? seatsRes.data : [];
+    const totalSeats = dbSeats.length;
+
+    const allProfiles = Array.isArray(profilesRes.data) ? profilesRes.data : [];
+    const validProfiles = allProfiles.filter((p: any) => 
+      !isMasterAdminEmail(p.email) && 
+      p.role !== 'admin' &&
+      (p.phone && String(p.phone).trim().length > 0)
+    );
+    const activeProfiles = validProfiles.filter((p: any) => p.status === 'active');
+    const pendingProfiles = validProfiles.filter((p: any) => p.status === 'pending');
+
+    const todayAtt = Array.isArray(attRes.data) ? attRes.data : [];
+    const activeAttendanceCount = todayAtt.filter((a: any) =>
+      a.status === 'present' || a.status === 'in_progress' || !a.checkOut || a.checkOut === 'In Progress' || a.checkOut === '—'
+    ).length;
+
+    let occupiedSeats = 0;
+    let reservedSeats = 0;
+    const assignedSeats = validProfiles.filter((p: any) => Boolean(p.seat_number));
+    
+    assignedSeats.forEach((p: any) => {
+      const isPresentToday = todayAtt.some((a: any) =>
+        a.student_id === p.id ||
+        (p.seat_number && matchSeatNumber(a.seat_number, p.seat_number))
+      );
+      if (isPresentToday) {
+        occupiedSeats++;
+      } else {
+        reservedSeats++;
+      }
+    });
+
+    const availableSeats = Math.max(0, totalSeats - (occupiedSeats + reservedSeats));
+
     return {
-      totalSeats: 100,
-      availableSeats: 100,
-      occupiedSeats: 0,
+      totalSeats,
+      availableSeats,
+      occupiedSeats,
+      reservedSeats,
+      activeShiftsCount: 4,
+      totalBooks: 0,
+      booksIssuedCount: 0,
+      attendanceTodayCount: activeAttendanceCount,
+      totalStudentsCount: activeProfiles.length,
+      pendingStudentsCount: pendingProfiles.length,
+    };
+  } catch (err) {
+    console.warn('Error fetching dashboard stats from Supabase:', err);
+    const cachedSeats = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
+    const cachedStudents = getLocalData<StudentRecord[]>(STORAGE_KEYS.STUDENTS, []);
+    return {
+      totalSeats: cachedSeats.length,
+      availableSeats: cachedSeats.filter(s => s.isAvailable).length,
+      occupiedSeats: cachedSeats.filter(s => !s.isAvailable).length,
+      reservedSeats: 0,
       activeShiftsCount: 4,
       totalBooks: 0,
       booksIssuedCount: 0,
       attendanceTodayCount: 0,
-      totalStudentsCount: 0,
+      totalStudentsCount: cachedStudents.length,
       pendingStudentsCount: 0,
     };
   }
@@ -2364,7 +2436,7 @@ export async function getStudents(status?: string): Promise<StudentRecord[]> {
       const studentProfiles = profiles.filter((p: any) => 
         !isMasterAdminEmail(p.email) && 
         p.role !== 'admin' &&
-        (p.phone && p.phone.trim().length > 0)
+        (p.phone && String(p.phone).trim().length > 0)
       );
       return studentProfiles.map((p: any) => ({
         id: p.id,
