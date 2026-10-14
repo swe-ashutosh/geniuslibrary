@@ -75,7 +75,7 @@ export const metadata: Metadata = {
         url: `${BRAND_CONFIG.siteUrl}/library-hall.jpg`,
         width: 1200,
         height: 630,
-        alt: `${BRAND_CONFIG.fullName} - Best 24/7 Library in Madhupur, Sonbhadra`,
+        alt: `${BRAND_CONFIG.fullName}, Best 24/7 Library in ${BRAND_CONFIG.location}`,
       },
     ],
   },
@@ -93,9 +93,13 @@ export const metadata: Metadata = {
   other: {
     "mobile-web-app-capable": "yes",
     "geo.region": "IN-UP",
-    "geo.placename": "Madhupur, Sonbhadra",
+    "geo.placename": BRAND_CONFIG.location,
     "geo.position": `${BRAND_CONFIG.gps.latitude};${BRAND_CONFIG.gps.longitude}`,
     "ICBM": `${BRAND_CONFIG.gps.latitude}, ${BRAND_CONFIG.gps.longitude}`,
+    "classification": "Digital Study Library, Reading Hall, Educational Space",
+    "coverage": `${BRAND_CONFIG.location}, Uttar Pradesh, India`,
+    "distribution": "Global",
+    "rating": "General",
   },
   icons: {
     icon: [

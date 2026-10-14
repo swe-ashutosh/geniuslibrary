@@ -41,6 +41,7 @@ import { createNotification, lookupStudent, generateStudentCode } from "@/lib/ap
 import { triggerNativeNotification } from "@/lib/pushNotify";
 import { uploadAvatar, fileToDataUrl, compressAndResizeImage } from "@/lib/supabase/storage";
 import { checkSignupRateLimit, recordSignupAttempt } from "@/lib/security";
+import { TurnstileCaptcha } from "@/components/TurnstileCaptcha";
 
 type MembershipPlan = "General" | "Reserved Seat" | "Trial Pass";
 
@@ -216,6 +217,7 @@ function SignupForm() {
   const [errorMsg, setErrorMsg] = useState("");
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isUpdatedApplication, setIsUpdatedApplication] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   // Custom Dropdown Open States and Refs
   const [isPlanDropdownOpen, setIsPlanDropdownOpen] = useState(false);
@@ -523,6 +525,19 @@ function SignupForm() {
 
     let studentId = matchedExisting?.id;
 
+    // For admin direct enrollments, assign code immediately; for regular student signups, code is generated upon Admin Approval
+    let generatedStudentCode: string | null = null;
+    if (isAdmin) {
+      try {
+        const { data: existingProfiles } = await supabase.from("profiles").select("student_code");
+        const existingCodes = (existingProfiles || []).map((p: any) => p.student_code);
+        generatedStudentCode = generateStudentCode(existingCodes);
+      } catch (codeErr) {
+        console.warn("Failed to query existing student codes for sequence:", codeErr);
+        generatedStudentCode = generateStudentCode([]);
+      }
+    }
+
     if (!studentId) {
       // 2. Perform Supabase Auth Sign Up for brand new applicant
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -531,6 +546,7 @@ function SignupForm() {
         options: {
           data: {
             full_name: name,
+            ...(generatedStudentCode ? { student_code: generatedStudentCode } : {}),
             phone: fullPhone,
             parent_name: parentName,
             parent_phone: fullParentPhone,
@@ -542,6 +558,7 @@ function SignupForm() {
             role: "student",
             status: initialStatus,
           },
+          ...(captchaToken ? { captchaToken } : {}),
         },
       });
 
@@ -582,25 +599,12 @@ function SignupForm() {
 
     // 2. Direct Persistence: Save exclusively to Supabase profiles (Primary live database)
     try {
-      let generatedStudentCode = "";
-      try {
-        const { data: existingProfiles } = await supabase.from("profiles").select("student_code");
-        const existingCodes = (existingProfiles || []).map((p: any) => p.student_code);
-        generatedStudentCode = generateStudentCode(existingCodes);
-      } catch (codeErr) {
-        console.warn("Failed to query existing student codes for sequence:", codeErr);
-        generatedStudentCode = generateStudentCode([]);
-      }
-
-      const upsertPayload: Record<string, any> = {
+      const basePayload: Record<string, any> = {
         id: studentId,
         student_code: generatedStudentCode,
         full_name: name,
         email: cleanEmail,
         phone: fullPhone,
-        dob: dob || null,
-        gender: gender || "Male",
-        join_date: joinDate || new Date().toISOString().split("T")[0],
         parent_name: parentName,
         parent_phone: fullParentPhone,
         address: address,
@@ -615,28 +619,23 @@ function SignupForm() {
         updated_at: new Date().toISOString(),
       };
 
-      let { error: upsertErr } = await supabase.from("profiles").upsert(upsertPayload);
+      // Resilient upsert: Try with demographic columns first, fallback to basePayload if columns missing in Supabase schema
+      let { error: upsertErr } = await supabase.from("profiles").upsert({
+        ...basePayload,
+        dob: dob || null,
+        gender: gender || "Male",
+        join_date: joinDate || new Date().toISOString().split("T")[0],
+      });
 
-      // Resilient fallback: If dob/gender/join_date do not exist yet in live Supabase database
       if (upsertErr) {
-        console.warn("Initial profile upsert failed, retrying without optional demographic columns:", upsertErr.message);
-        delete upsertPayload.dob;
-        delete upsertPayload.gender;
-        delete upsertPayload.join_date;
-        const retry1 = await supabase.from("profiles").upsert(upsertPayload);
+        console.warn("Demographic upsert failed, retrying standard payload:", upsertErr.message);
+        const retry1 = await supabase.from("profiles").upsert(basePayload);
         upsertErr = retry1.error;
-
-        // If still failing (e.g. duplicate student_code), retry without student_code
-        if (upsertErr) {
-          delete upsertPayload.student_code;
-          const retry2 = await supabase.from("profiles").upsert(upsertPayload);
-          upsertErr = retry2.error;
-        }
 
         // Try direct update by id if profile was already inserted by auth trigger
         if (upsertErr && studentId) {
-          const retry3 = await supabase.from("profiles").update(upsertPayload).eq("id", studentId);
-          upsertErr = retry3.error;
+          const retry2 = await supabase.from("profiles").update(basePayload).eq("id", studentId);
+          upsertErr = retry2.error;
         }
       }
 
@@ -1445,7 +1444,14 @@ function SignupForm() {
               </div>
             )}
 
-            <div className="pt-4">
+            {/* Cloudflare Turnstile Bot Verification */}
+            <TurnstileCaptcha
+              onVerify={(token) => setCaptchaToken(token)}
+              onExpire={() => setCaptchaToken(null)}
+              action="signup"
+            />
+
+            <div className="pt-2">
               {signupMethod === "google" ? (
                 <button
                   type="submit"

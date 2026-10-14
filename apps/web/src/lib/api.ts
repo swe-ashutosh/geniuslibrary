@@ -2695,12 +2695,38 @@ export async function updateStudentComplete(student: {
   try {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
-    await supabase.from('profiles').update(supaPayload).eq('id', student.id);
-    if (student.student_code) {
-      await supabase.from('profiles').update(supaPayload).eq('student_code', student.student_code);
-    }
-    if (student.email) {
-      await supabase.from('profiles').update(supaPayload).eq('email', student.email);
+    
+    // First attempt update with full payload
+    const resId = await supabase.from('profiles').update(supaPayload).eq('id', student.id);
+    if (resId.error) {
+      // If demographic / custom date columns don't exist in Supabase schema cache,
+      // fallback to standard base payload and sync created_at
+      console.warn('[updateStudentComplete] Full payload update failed, retrying standard payload:', resId.error.message);
+      const fallbackPayload = { ...supaPayload };
+      delete fallbackPayload.dob;
+      delete fallbackPayload.gender;
+      delete fallbackPayload.join_date;
+      delete fallbackPayload.continue_date;
+      delete fallbackPayload.is_service_stopped;
+      delete fallbackPayload.service_stopped_at;
+      delete fallbackPayload.service_stop_reason;
+      if (student.continue_date || student.join_date) {
+        fallbackPayload.created_at = `${student.continue_date || student.join_date}T00:00:00Z`;
+      }
+      await supabase.from('profiles').update(fallbackPayload).eq('id', student.id);
+      if (student.student_code) {
+        await supabase.from('profiles').update(fallbackPayload).eq('student_code', student.student_code);
+      }
+      if (student.email) {
+        await supabase.from('profiles').update(fallbackPayload).eq('email', student.email);
+      }
+    } else {
+      if (student.student_code) {
+        await supabase.from('profiles').update(supaPayload).eq('student_code', student.student_code);
+      }
+      if (student.email) {
+        await supabase.from('profiles').update(supaPayload).eq('email', student.email);
+      }
     }
   } catch (sErr) {
     console.warn('[updateStudentComplete] Supabase sync notice:', sErr);

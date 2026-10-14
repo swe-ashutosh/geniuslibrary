@@ -40,7 +40,7 @@ export function HeroBanner() {
       {/* Hero Background Image with Gradient Overlay */}
       <div className="absolute inset-0 z-0">
         <Image
-          src="/hero-banner.jpg"
+          src="/hero-banner.webp"
           alt={`${BRAND_CONFIG.fullName} Modern Study Hall in ${BRAND_CONFIG.location}`}
           fill
           priority

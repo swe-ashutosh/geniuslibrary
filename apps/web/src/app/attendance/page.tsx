@@ -66,10 +66,11 @@ function AttendanceGateContent() {
   const [nfcListening, setNfcListening] = useState(false);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [externalScanDetected, setExternalScanDetected] = useState(false);
+  const hasAutoMarkedRef = useRef(false);
 
   // Detect if opened from external scanner via query param
   useEffect(() => {
-    const qrParam = searchParams.get("qr") || searchParams.get("action") || searchParams.get("source");
+    const qrParam = searchParams.get("qr") || searchParams.get("action") || searchParams.get("source") || searchParams.get("seat") || searchParams.get("desk");
     if (qrParam) {
       setExternalScanDetected(true);
     }
@@ -138,7 +139,7 @@ function AttendanceGateContent() {
         seatNumber: effectiveDesk,
         shiftName: currentUser?.shift || "General Shift",
         verificationMethod,
-        photoUrl, // Only provided for QR, undefined for NFC!
+        photoUrl,
       });
 
       if (res.action === "all_occupied") {
@@ -153,7 +154,7 @@ function AttendanceGateContent() {
         time: res.checkInTime || res.checkOutTime || new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
         message: verificationMethod === "nfc"
           ? `✓ NFC Tap Verified (Tag: 53:D4:B6:CD:53:00:01). No picture required.`
-          : `✓ Camera QR Verified with Silent Photo Proof.`,
+          : `✓ Gate QR Verified. Attendance logged successfully.`,
         method: verificationMethod,
       });
 
@@ -161,7 +162,7 @@ function AttendanceGateContent() {
         const { triggerNativeNotification } = await import("@/lib/pushNotify");
         const actionLabel = res.action === "checked_out" ? "Check-Out Confirmed" : "Check-In Confirmed";
         triggerNativeNotification({
-          title: `✓ ${actionLabel} — ${BRAND_CONFIG.shortName}`,
+          title: `✓ ${actionLabel}, ${BRAND_CONFIG.shortName}`,
           body: res.message || `${studentName} attendance recorded at ${res.checkInTime || res.checkOutTime}.`,
           url: "/student/attendance",
           tag: `gate-att-${Date.now()}`,
@@ -173,6 +174,14 @@ function AttendanceGateContent() {
       setIsProcessing(false);
     }
   };
+
+  // Direct auto-mark when scanned from external scanner and student is already logged in
+  useEffect(() => {
+    if (externalScanDetected && currentUser && !loading && !hasAutoMarkedRef.current && !result && !isProcessing) {
+      hasAutoMarkedRef.current = true;
+      processAttendance(currentUser.id, currentUser.name, "qr");
+    }
+  }, [externalScanDetected, currentUser, loading, result, isProcessing]);
 
   // Method 1: Web NFC Tap (Serial: 53:D4:B6:CD:53:00:01) -> NO PICTURE NEEDED!
   const startNfcTap = async () => {
@@ -250,15 +259,17 @@ function AttendanceGateContent() {
         <div className="w-full max-w-md rounded-3xl border border-[#E5E7EB] bg-white p-6 sm:p-8 shadow-xl text-center space-y-6">
           
           {/* Status Icon */}
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-[#0A2E5C] text-[#FFC107] shadow-lg relative">
+          <div className={`mx-auto flex h-20 w-20 items-center justify-center rounded-3xl ${externalScanDetected && !currentUser && !loading ? "bg-rose-50 border-2 border-rose-200 text-rose-600" : "bg-[#0A2E5C] text-[#FFC107]"} shadow-lg relative`}>
             {loading || isProcessing ? (
               <RefreshCw className="h-10 w-10 animate-spin text-[#FFC107]" />
             ) : result ? (
               <CheckCircle2 className="h-10 w-10 text-emerald-400 animate-in zoom-in-75 duration-200" />
+            ) : externalScanDetected && !currentUser ? (
+              <AlertCircle className="h-10 w-10 text-rose-600 animate-in zoom-in-75 duration-200" />
             ) : (
               <Radio className="h-10 w-10 animate-pulse text-[#FFC107]" />
             )}
-            <div className="absolute inset-0 rounded-3xl border-2 border-[#FFC107]/30 animate-pulse pointer-events-none" />
+            <div className={`absolute inset-0 rounded-3xl border-2 ${externalScanDetected && !currentUser && !loading ? "border-rose-400/40" : "border-[#FFC107]/30"} animate-pulse pointer-events-none`} />
           </div>
 
           {/* Heading */}
@@ -267,14 +278,15 @@ function AttendanceGateContent() {
               {loading ? "Checking Student Session..." :
                isProcessing ? "Recording Attendance..." :
                result ? (result.action === "checked_in" ? "Check-In Confirmed!" : "Check-Out Confirmed!") :
+               externalScanDetected && !currentUser ? "Direct Stop: Login Required" :
                `Welcome to ${BRAND_CONFIG.name}`}
             </h2>
             <p className="mt-1 text-xs text-zinc-500 max-w-xs mx-auto leading-relaxed">
               {loading ? "Checking your credentials..." :
-               isProcessing ? "Updating attendance logs..." :
+               isProcessing ? (currentUser?.name ? `Marking attendance for ${currentUser.name}...` : "Updating attendance logs...") :
                result ? result.message :
                externalScanDetected && !currentUser ?
-               "Library Gate QR scanned successfully. Sign in with your student account to record check-in/out, or visit the homepage." :
+               "External QR scan detected. Attendance is directly stopped because you are not logged in. Please sign in with your student account to record attendance." :
                "Choose your verification method below: NFC Tap (Instant, No Photo) or Camera QR Scan (Silent Photo Proof)."}
             </p>
           </div>
@@ -350,24 +362,24 @@ function AttendanceGateContent() {
                 </button>
               </div>
             ) : !currentUser && !loading ? (
-              // NOT LOGGED IN STATE (e.g. Scanned via Google Lens / Camera from outside)
+              // NOT LOGGED IN STATE: DIRECT STOP ON EXTERNAL QR SCAN
               <div className="space-y-3">
-                <div className="p-4 rounded-2xl bg-[#0A2E5C]/5 border border-[#0A2E5C]/10 text-left space-y-1">
-                  <div className="flex items-center gap-1.5 text-xs font-black text-[#0A2E5C]">
-                    <Sparkles className="h-3.5 w-3.5 text-[#FFC107]" />
-                    <span>Library Gate QR Scanned</span>
+                <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-left space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs font-black text-rose-800">
+                    <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                    <span>Direct Stop: Authentication Required</span>
                   </div>
-                  <p className="text-[11px] text-zinc-600">
-                    If you are a student, sign in to confirm your attendance. If you are a visitor, explore our library website.
+                  <p className="text-[11px] text-rose-700 leading-relaxed font-medium">
+                    Attendance cannot be marked without an active student login. Please log in to your account to verify your attendance.
                   </p>
                 </div>
 
                 <Link
-                  href="/login?redirect=/attendance?action=gate"
+                  href={`/login?redirect=${encodeURIComponent("/attendance" + (searchParams.toString() ? `?${searchParams.toString()}` : ""))}`}
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#0A2E5C] py-3.5 text-xs font-black text-[#FFC107] shadow-md hover:bg-[#141A24] transition active:scale-95"
                 >
                   <LogIn className="h-4 w-4" />
-                  <span>Student Sign In to Mark Attendance</span>
+                  <span>Sign In to Mark Attendance</span>
                 </Link>
 
                 <Link
@@ -501,7 +513,7 @@ function AttendanceGateContent() {
       {/* Footer */}
       <footer className="border-t border-[#E5E7EB]/60 bg-white/60 px-6 py-4 text-center text-xs text-zinc-500">
         <p className="font-semibold text-[#0A2E5C]">{BRAND_CONFIG.fullName}, {BRAND_CONFIG.location}</p>
-        <p className="text-[11px] text-zinc-400">Station Road, Near Town Hall, Madhupur, Deoghar, Jharkhand 815353</p>
+        <p className="text-[11px] text-zinc-400">{BRAND_CONFIG.address}</p>
       </footer>
 
     </div>

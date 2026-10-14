@@ -100,7 +100,18 @@ export function getShiftOptionsForPlan(plan?: string) {
   return GENERAL_SHIFT_OPTIONS;
 }
 
-export function getStudentFeeSchedule(std: { fee_status?: string; due_amount?: number; created_at?: string; join_date?: string; continue_date?: string; is_service_stopped?: boolean }) {
+export function getStudentFeeSchedule(std: { fee_status?: string; due_amount?: number; created_at?: string; join_date?: string; continue_date?: string; is_service_stopped?: boolean; status?: string }) {
+  if (std.status === "pending") {
+    return {
+      isDue: false,
+      status: "Pending Admission",
+      daysOverdue: 0,
+      dateString: "Upon Approval",
+      label: "Starts on Approval",
+      colorClass: "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300",
+    };
+  }
+
   if (std.is_service_stopped) {
     return {
       isDue: false,
@@ -285,7 +296,19 @@ function StudentsDirectoryContent() {
             return v.toString(16);
           });
       let authUserId = fallbackUuid;
-      const studentCode = generateStudentCode(students.map((s) => s.student_code));
+      let studentCode = generateStudentCode(students.map((s) => s.student_code));
+      try {
+        const { data: dbExisting } = await supabase.from("profiles").select("student_code");
+        if (dbExisting && dbExisting.length > 0) {
+          const combinedCodes = Array.from(new Set([
+            ...students.map((s) => s.student_code),
+            ...dbExisting.map((p: any) => p.student_code),
+          ])).filter(Boolean);
+          studentCode = generateStudentCode(combinedCodes);
+        }
+      } catch (seqErr) {
+        console.warn("Could not query DB codes for sequence:", seqErr);
+      }
       const seatNum = newStudentForm.membership_plan === "Reserved Seat" ? (newStudentForm.seat_number?.trim() || "S-01") : null;
 
       const rawPhone = newStudentForm.phone.trim();
@@ -334,6 +357,7 @@ function StudentsDirectoryContent() {
           options: {
             data: {
               full_name: newStudentForm.full_name.trim(),
+              student_code: studentCode,
               phone: rawPhone.startsWith("+91") ? rawPhone : `+91 ${rawPhone}`,
               parent_name: newStudentForm.parent_name?.trim() || "",
               parent_phone: newStudentForm.parent_phone?.trim() || "",
@@ -387,15 +411,12 @@ function StudentsDirectoryContent() {
       };
 
       // Direct save to Supabase profiles (Primary live database)
-      const { error: supaErr } = await supabase.from("profiles").upsert([{
+      const baseProfilePayload: Record<string, any> = {
         id: authUserId,
         student_code: studentCode,
         full_name: newRecord.full_name,
         phone: newRecord.phone,
         email: newRecord.email,
-        dob: newRecord.dob || null,
-        gender: newRecord.gender || "Male",
-        join_date: newRecord.join_date || new Date().toISOString().split("T")[0],
         parent_name: newRecord.parent_name,
         parent_phone: newRecord.parent_phone,
         course: newRecord.course,
@@ -409,7 +430,21 @@ function StudentsDirectoryContent() {
         role: "student",
         created_at: newRecord.created_at,
         updated_at: newRecord.created_at,
+      };
+
+      // Resilient upsert: Try with demographic columns first, fallback to base payload if columns missing in Supabase schema
+      let { error: supaErr } = await supabase.from("profiles").upsert([{
+        ...baseProfilePayload,
+        dob: newRecord.dob || null,
+        gender: newRecord.gender || "Male",
+        join_date: newRecord.join_date || new Date().toISOString().split("T")[0],
       }]);
+
+      if (supaErr) {
+        console.warn("Profiles upsert with demographic columns failed, retrying standard payload:", supaErr.message);
+        const retryRes = await supabase.from("profiles").upsert([baseProfilePayload]);
+        supaErr = retryRes.error;
+      }
 
       if (supaErr) {
         throw new Error(supaErr.message);
@@ -781,13 +816,47 @@ function StudentsDirectoryContent() {
     if (selectedStudents.length === 0) return;
     try {
       const supabase = createClient();
-      await supabase.from("profiles").update({
-        status: "active",
-        updated_at: new Date().toISOString(),
-      }).in("id", selectedStudents);
+      const existingCodes = students
+        .filter((s) => s.status !== "pending" && s.student_code && !selectedStudents.includes(s.id))
+        .map((s) => s.student_code);
+
+      const codesPool = [...existingCodes];
+      const approvalDate = new Date().toISOString().split("T")[0];
+      const updates: Array<{ id: string; student_code: string; join_date: string; continue_date: string }> = [];
+
+      for (const id of selectedStudents) {
+        const std = students.find((s) => s.id === id);
+        let code = (std?.student_code || "").trim();
+        if (!code || !code.toUpperCase().startsWith("SDL-")) {
+          code = generateStudentCode(codesPool);
+          codesPool.push(code);
+        }
+        const isPriorJoinDate = Boolean(std?.join_date && std.join_date < approvalDate && std.join_date !== (std.created_at ? std.created_at.split('T')[0] : ''));
+        const finalJoinDate: string = (isPriorJoinDate && std?.join_date ? std.join_date : approvalDate);
+        const finalContinueDate: string = std?.continue_date || finalJoinDate;
+        updates.push({ id, student_code: code, join_date: finalJoinDate, continue_date: finalContinueDate });
+        const { error: updErr } = await supabase.from("profiles").update({
+          status: "active",
+          student_code: code,
+          join_date: finalJoinDate,
+          continue_date: finalContinueDate,
+          updated_at: new Date().toISOString(),
+        }).eq("id", id);
+        if (updErr) {
+          await supabase.from("profiles").update({
+            status: "active",
+            student_code: code,
+            created_at: `${finalContinueDate}T00:00:00Z`,
+            updated_at: new Date().toISOString(),
+          }).eq("id", id);
+        }
+      }
 
       setStudents((prev) =>
-        prev.map((s) => (selectedStudents.includes(s.id) ? { ...s, status: "active" } : s))
+        prev.map((s) => {
+          const u = updates.find((up) => up.id === s.id);
+          return u ? { ...s, status: "active", student_code: u.student_code, join_date: u.join_date, continue_date: u.continue_date } : s;
+        })
       );
       setAlertMsg({ type: "success", text: `✓ Approved ${selectedStudents.length} selected student(s) successfully!` });
       setSelectedStudents([]);
@@ -833,29 +902,55 @@ function StudentsDirectoryContent() {
       const studentObj = students.find((s) => s.id === studentId);
       const studentPlan = studentObj?.membership_plan || "General";
 
-      // 1. Update status and seat
+      // 1. Determine student code upon approval if not yet assigned
+      let finalStudentCode = (studentObj?.student_code || "").trim();
+      if (!finalStudentCode || !finalStudentCode.toUpperCase().startsWith("SDL-")) {
+        const existingCodes = students
+          .filter((s) => s.id !== studentId && s.status !== "pending" && s.student_code)
+          .map((s) => s.student_code);
+        finalStudentCode = generateStudentCode(existingCodes);
+      }
+
+      // 2. Update status and seat
       await updateStudentStatus(studentId, "active", seatNumber || null, studentPlan);
 
-      // 2. If seat assigned, record seat allocation
+      // 3. If seat assigned, record seat allocation
       if (seatNumber) {
         await allocateSeat(seatNumber, studentId, studentName, studentObj?.shift);
       }
 
-      // 3. Update status, plan and seat in Supabase profiles
+      // 4. Update status, student_code, join_date & continue_date (approval date), plan and seat in Supabase profiles
+      const approvalDate = new Date().toISOString().split("T")[0];
+      const isPriorJoinDate = Boolean(studentObj?.join_date && studentObj.join_date < approvalDate && studentObj.join_date !== (studentObj.created_at ? studentObj.created_at.split('T')[0] : ''));
+      const finalJoinDate: string = (isPriorJoinDate && studentObj?.join_date ? studentObj.join_date : approvalDate);
+      const finalContinueDate: string = studentObj?.continue_date || finalJoinDate;
       try {
         const supabase = createClient();
         const updatePayload: any = {
           status: "active",
+          student_code: finalStudentCode,
           membership_plan: studentPlan,
           seat_number: seatNumber || null,
+          join_date: finalJoinDate,
+          continue_date: finalContinueDate,
           updated_at: new Date().toISOString(),
         };
-        await supabase.from("profiles").update(updatePayload).eq("id", studentId);
+        const { error: updErr } = await supabase.from("profiles").update(updatePayload).eq("id", studentId);
+        if (updErr) {
+          await supabase.from("profiles").update({
+            status: "active",
+            student_code: finalStudentCode,
+            membership_plan: studentPlan,
+            seat_number: seatNumber || null,
+            created_at: `${finalContinueDate}T00:00:00Z`,
+            updated_at: new Date().toISOString(),
+          }).eq("id", studentId);
+        }
       } catch (err) {
         console.warn("Supabase profile update notice:", err);
       }
 
-      // 4. Dispatch Official Welcome Email (non-blocking)
+      // 5. Dispatch Official Welcome Email (non-blocking)
       const targetStudent = students.find((s) => s.id === studentId);
       if (targetStudent?.email) {
         fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://genius-library-api.geniuslibrary.workers.dev'}/api/students/send-welcome-email`, {
@@ -864,6 +959,7 @@ function StudentsDirectoryContent() {
           body: JSON.stringify({
             studentEmail: targetStudent.email,
             studentName: studentName,
+            studentCode: finalStudentCode,
             membershipPlan: studentPlan || targetStudent.membership_plan || 'General',
             shift: targetStudent.shift || 'Regular Shift',
             seatNumber: seatNumber || targetStudent.seat_number || null,
@@ -877,7 +973,7 @@ function StudentsDirectoryContent() {
         recipientRole: "student",
         recipientId: studentId,
         title: "🎉 Account Approved & Activated!",
-        message: `Welcome ${studentName}! Your library account is approved for ${studentPlan}${seatNumber ? ` with Reserved Seat #${seatNumber}` : ""}.`,
+        message: `Welcome ${studentName}! Your library account is approved (${finalStudentCode}) for ${studentPlan}${seatNumber ? ` with Reserved Seat #${seatNumber}` : ""}.`,
         type: "general",
         actionUrl: "/student",
       }).catch(() => {});
@@ -885,15 +981,15 @@ function StudentsDirectoryContent() {
       setStudents((prev) =>
         prev.map((s) =>
           s.id === studentId
-            ? { ...s, status: "active", seat_number: seatNumber ? seatNumber : undefined }
+            ? { ...s, status: "active", student_code: finalStudentCode, join_date: finalJoinDate, continue_date: finalContinueDate, seat_number: seatNumber ? seatNumber : undefined }
             : s
         )
       );
       setAlertMsg({
         type: "success",
         text: seatNumber
-          ? `✓ Student "${studentName}" approved & allocated to Reserved Seat #${seatNumber}! Welcome email sent.`
-          : `✓ Student "${studentName}" approved & enrolled successfully! Welcome email sent.`
+          ? `✓ Student "${studentName}" approved (${finalStudentCode}) & allocated to Reserved Seat #${seatNumber}! Welcome email sent.`
+          : `✓ Student "${studentName}" approved (${finalStudentCode}) & enrolled successfully! Welcome email sent.`
       });
     } catch (e: any) {
       setAlertMsg({ type: "error", text: `Failed to approve student: ${e.message}` });
@@ -932,28 +1028,62 @@ function StudentsDirectoryContent() {
       return;
     }
 
-    const pendingIds = pendingList.map(s => s.id);
     setActionLoadingId("bulk_pending");
     try {
       // 1. Update student records
       await approveAllStudents();
 
-      // 2. Update Supabase
-      try {
-        const supabase = createClient();
-        await supabase
-          .from("profiles")
-          .update({
-            status: "active",
-            updated_at: new Date().toISOString(),
-          })
-          .in("id", pendingIds);
-      } catch (err) {
-        console.warn("Supabase approve all notice:", err);
+      // 2. Sequentially assign student IDs in approval order
+      const existingCodes = students
+        .filter((s) => s.status !== "pending" && s.student_code)
+        .map((s) => s.student_code);
+
+      const codesPool = [...existingCodes];
+      const approvalDate = new Date().toISOString().split("T")[0];
+      const codeUpdates = new Map<string, { code: string; join_date: string; continue_date: string }>();
+
+      for (const std of pendingList) {
+        let code = (std.student_code || "").trim();
+        if (!code || !code.toUpperCase().startsWith("SDL-")) {
+          code = generateStudentCode(codesPool);
+          codesPool.push(code);
+        }
+        const isPriorJoinDate = Boolean(std.join_date && std.join_date < approvalDate && std.join_date !== (std.created_at ? std.created_at.split('T')[0] : ''));
+        const finalJoinDate: string = (isPriorJoinDate && std.join_date ? std.join_date : approvalDate);
+        const finalContinueDate: string = std.continue_date || finalJoinDate;
+        codeUpdates.set(std.id, { code, join_date: finalJoinDate, continue_date: finalContinueDate });
+
+        try {
+          const supabase = createClient();
+          const { error: updErr } = await supabase
+            .from("profiles")
+            .update({
+              status: "active",
+              student_code: code,
+              join_date: finalJoinDate,
+              continue_date: finalContinueDate,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", std.id);
+          if (updErr) {
+            await supabase
+              .from("profiles")
+              .update({
+                status: "active",
+                student_code: code,
+                created_at: `${finalContinueDate}T00:00:00Z`,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", std.id);
+          }
+        } catch (err) {
+          console.warn("Supabase approve notice for student:", std.id, err);
+        }
       }
 
       // 3. Dispatch Welcome Emails & Notifications to all approved students (non-blocking)
       pendingList.forEach((std) => {
+        const assignedCode = codeUpdates.get(std.id) || std.student_code;
         if (std.email) {
           fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://genius-library-api.geniuslibrary.workers.dev'}/api/students/send-welcome-email`, {
             method: 'POST',
@@ -961,6 +1091,7 @@ function StudentsDirectoryContent() {
             body: JSON.stringify({
               studentEmail: std.email,
               studentName: std.full_name,
+              studentCode: assignedCode,
               membershipPlan: std.membership_plan || 'General',
               shift: std.shift || 'Regular Shift',
               seatNumber: std.seat_number || null,
@@ -973,14 +1104,26 @@ function StudentsDirectoryContent() {
           recipientRole: "student",
           recipientId: std.id,
           title: "🎉 Account Approved & Activated!",
-          message: `Welcome ${std.full_name}! Your student registration has been approved by admin.`,
+          message: `Welcome ${std.full_name}! Your student registration has been approved (${assignedCode}).`,
           type: "general",
           actionUrl: "/student",
         }).catch(() => {});
       });
 
       setStudents((prev) =>
-        prev.map((s) => (s.status === "pending" ? { ...s, status: "active" } : s))
+        prev.map((s) => {
+          if (s.status === "pending") {
+            const assigned = codeUpdates.get(s.id);
+            return {
+              ...s,
+              status: "active",
+              student_code: assigned?.code || s.student_code,
+              join_date: assigned?.join_date || s.join_date,
+              continue_date: assigned?.continue_date || s.continue_date,
+            };
+          }
+          return s;
+        })
       );
       setAlertMsg({
         type: "success",
@@ -1048,50 +1191,76 @@ function StudentsDirectoryContent() {
       const realStudentsList: StudentProfile[] = [];
 
       if (Array.isArray(supabaseProfiles)) {
-        supabaseProfiles.forEach((p: any) => {
-          // Only students who completed admission registration (has compulsory mobile number)
+        // Filter real students first
+        const validProfiles = supabaseProfiles.filter((p: any) => {
           const hasPhone = Boolean(p.phone && String(p.phone).trim().length > 0);
-          if (!isMasterAdminEmail(p.email) && p.role !== "admin" && hasPhone) {
-            const resolvedPlan = (p.membership_plan as any) || "General";
-            const existingCodesSoFar = realStudentsList.map((s) => s.student_code);
-            let rawCode = (p.student_code || p.studentCode || "").trim();
-            // If code is missing, purely numeric (legacy 2610001), doesn't start with SDL-, or already used:
-            const isInvalidOrDuplicate = !rawCode || /^\d+$/.test(rawCode) || existingCodesSoFar.includes(rawCode);
-            const resolvedCode = isInvalidOrDuplicate ? generateStudentCode(existingCodesSoFar) : rawCode;
-
-            // Persist back to Supabase if student_code was missing, legacy, or duplicate
-            if (isInvalidOrDuplicate && p.id) {
-              createClient().from("profiles").update({ student_code: resolvedCode }).eq("id", p.id).then();
-            }
-
-            realStudentsList.push({
-              id: p.id,
-              student_code: resolvedCode,
-              full_name: p.full_name || "Student Member",
-              email: p.email || "",
-              phone: p.phone || "",
-              parent_name: p.parent_name || "",
-              parent_phone: p.parent_phone || "",
-              address: p.address || "Madhupur, Sonbhadra, UP",
-              course: p.course || "General",
-              shift: p.shift || "Morning Shift",
-              membership_plan: resolvedPlan,
-              seat_number: resolvedPlan === "Reserved Seat" ? (p.seat_number || undefined) : undefined,
-              dob: p.dob || undefined,
-              gender: p.gender || undefined,
-              join_date: p.join_date || (p.created_at ? p.created_at.split('T')[0] : undefined),
-              continue_date: p.continue_date || undefined,
-              is_service_stopped: Boolean(p.is_service_stopped),
-              service_stopped_at: p.service_stopped_at || undefined,
-              service_stop_reason: p.service_stop_reason || undefined,
-              status: (p.status as any) || "pending",
-              fee_status: (p.fee_status as any) || "Due",
-              due_amount: Number(p.due_amount !== undefined && p.due_amount !== null ? p.due_amount : 0),
-              avatar_url: p.avatar_url || p.photo_url || p.profile_photo || p.image_url || (p.raw_user_meta_data as any)?.avatar_url || (p.raw_user_meta_data as any)?.picture || null,
-              created_at: p.created_at || new Date().toISOString(),
-            });
-          }
+          return !isMasterAdminEmail(p.email) && p.role !== "admin" && hasPhone;
         });
+
+        // Sort chronologically (oldest first) so established students keep their original sequence
+        const chronologicalProfiles = [...validProfiles].sort((a: any, b: any) => {
+          const timeA = new Date(a.created_at || 0).getTime();
+          const timeB = new Date(b.created_at || 0).getTime();
+          return timeA - timeB;
+        });
+
+        const assignedCodes: string[] = [];
+
+        chronologicalProfiles.forEach((p: any) => {
+          const resolvedPlan = (p.membership_plan as any) || "General";
+          const isPending = (p.status as any) === "pending";
+          let rawCode = (p.student_code || p.studentCode || "").trim().toUpperCase();
+
+          let resolvedCode: string | undefined = undefined;
+
+          if (isPending && !rawCode) {
+            // Pending applicants do NOT get an official student code until Admin approves them!
+            resolvedCode = undefined;
+          } else {
+            const isNumericLegacy = /^\d+$/.test(rawCode);
+            const isDuplicate = Boolean(rawCode && assignedCodes.includes(rawCode));
+            const isInvalidOrDuplicate = !rawCode || isNumericLegacy || isDuplicate;
+
+            const codeToUse = isInvalidOrDuplicate ? generateStudentCode(assignedCodes) : rawCode;
+            assignedCodes.push(codeToUse);
+            resolvedCode = codeToUse;
+
+            // Persist back to Supabase ONLY if student_code was missing, legacy numeric, or duplicate for active students
+            if (isInvalidOrDuplicate && p.id && !isPending) {
+              createClient().from("profiles").update({ student_code: codeToUse }).eq("id", p.id).then();
+            }
+          }
+
+          realStudentsList.push({
+            id: p.id,
+            student_code: resolvedCode,
+            full_name: p.full_name || "Student Member",
+            email: p.email || "",
+            phone: p.phone || "",
+            parent_name: p.parent_name || "",
+            parent_phone: p.parent_phone || "",
+            address: p.address || "Madhupur, Sonbhadra, UP",
+            course: p.course || "General",
+            shift: p.shift || "Morning Shift",
+            membership_plan: resolvedPlan,
+            seat_number: resolvedPlan === "Reserved Seat" ? (p.seat_number || undefined) : undefined,
+            dob: p.dob || undefined,
+            gender: p.gender || undefined,
+            join_date: p.join_date || (p.created_at ? p.created_at.split('T')[0] : undefined),
+            continue_date: p.continue_date || undefined,
+            is_service_stopped: Boolean(p.is_service_stopped),
+            service_stopped_at: p.service_stopped_at || undefined,
+            service_stop_reason: p.service_stop_reason || undefined,
+            status: (p.status as any) || "pending",
+            fee_status: (p.fee_status as any) || "Due",
+            due_amount: Number(p.due_amount !== undefined && p.due_amount !== null ? p.due_amount : 0),
+            avatar_url: p.avatar_url || p.photo_url || p.profile_photo || p.image_url || (p.raw_user_meta_data as any)?.avatar_url || (p.raw_user_meta_data as any)?.picture || null,
+            created_at: p.created_at || new Date().toISOString(),
+          });
+        });
+
+        // Present to admin in newest-first order
+        realStudentsList.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
       }
 
       // Zero mock data! Display authentic real students or clean empty state
@@ -1243,6 +1412,8 @@ function StudentsDirectoryContent() {
     setActionLoadingId(editStudentForm.id);
     try {
       const seatNum = editStudentForm.membership_plan === "Reserved Seat" ? (editStudentForm.seat_number?.trim() || null) : null;
+      const finalJoin = editStudentForm.join_date || (editStudentForm.created_at ? editStudentForm.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
+      const finalContinue = editStudentForm.continue_date || finalJoin;
 
       // 1. Universal update across Supabase profiles, seat cache and broadcast event
       await updateStudentComplete({
@@ -1253,8 +1424,8 @@ function StudentsDirectoryContent() {
         phone: normalizedPhone,
         dob: editStudentForm.dob || null,
         gender: editStudentForm.gender || "Male",
-        join_date: editStudentForm.join_date || null,
-        continue_date: editStudentForm.continue_date || null,
+        join_date: finalJoin,
+        continue_date: finalContinue,
         parent_name: editStudentForm.parent_name,
         parent_phone: normalizedParentPhone,
         course: editStudentForm.course,
@@ -1303,6 +1474,8 @@ function StudentsDirectoryContent() {
         phone: normalizedPhone,
         parent_phone: normalizedParentPhone,
         status: editStudentForm.status || "active",
+        join_date: finalJoin,
+        continue_date: finalContinue,
         seat_number: editStudentForm.membership_plan === "Reserved Seat" ? (editStudentForm.seat_number?.trim() || undefined) : undefined,
       };
 
@@ -2532,9 +2705,15 @@ function StudentsDirectoryContent() {
 
                         {/* ID */}
                         <td className="px-4 py-4 whitespace-nowrap">
-                          <span className="font-mono text-xs font-bold text-[#0A2E5C] dark:text-zinc-200">
-                            {std.student_code || std.id}
-                          </span>
+                          {std.student_code ? (
+                            <span className="font-mono text-xs font-bold text-[#0A2E5C] dark:text-zinc-200">
+                              {std.student_code}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                              Awaiting Approval
+                            </span>
+                          )}
                         </td>
 
                         {/* Mobile */}
@@ -3337,7 +3516,17 @@ function StudentsDirectoryContent() {
                       <input
                         type="date"
                         value={editStudentForm.join_date || (editStudentForm.created_at ? editStudentForm.created_at.split('T')[0] : "")}
-                        onChange={(e) => setEditStudentForm({ ...editStudentForm, join_date: e.target.value })}
+                        onChange={(e) => {
+                          const newJoin = e.target.value;
+                          const currentJoin = editStudentForm.join_date || (editStudentForm.created_at ? editStudentForm.created_at.split('T')[0] : "");
+                          const currentContinue = editStudentForm.continue_date || currentJoin;
+                          const isSynced = !editStudentForm.continue_date || currentContinue === currentJoin;
+                          setEditStudentForm({
+                            ...editStudentForm,
+                            join_date: newJoin,
+                            continue_date: isSynced ? newJoin : editStudentForm.continue_date,
+                          });
+                        }}
                         className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/40 py-2.5 pl-9 pr-3 text-xs font-mono font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-[#FFC107] focus:outline-none"
                       />
                     </div>
@@ -3345,14 +3534,14 @@ function StudentsDirectoryContent() {
 
                   <div>
                     <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1 flex items-center justify-between">
-                      <span>Continue Date (Resume)</span>
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Resets fee cycle</span>
+                      <span>Continue Date (Fee Cycle Anchor)</span>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Billing starts here</span>
                     </label>
                     <div className="relative">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
                       <input
                         type="date"
-                        value={editStudentForm.continue_date || ""}
+                        value={editStudentForm.continue_date || editStudentForm.join_date || (editStudentForm.created_at ? editStudentForm.created_at.split('T')[0] : "")}
                         onChange={(e) => setEditStudentForm({ ...editStudentForm, continue_date: e.target.value })}
                         className="w-full rounded-xl border border-[#E5E7EB] bg-[#F8FAFC]/40 py-2.5 pl-9 pr-3 text-xs font-mono font-bold text-[#0A2E5C] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white focus:border-[#FFC107] focus:outline-none"
                       />

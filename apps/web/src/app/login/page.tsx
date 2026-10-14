@@ -44,6 +44,7 @@ import {
   saveUserRole
 } from "@/lib/authInactivity";
 import { BRAND_CONFIG, isMasterAdminEmail } from "@/lib/config";
+import { TurnstileCaptcha } from "@/components/TurnstileCaptcha";
 
 
 function LoginForm() {
@@ -58,6 +59,7 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   // Modal States for Not Approved / Not Registered / Suspended / Account Locked
   const [showNotApprovedModal, setShowNotApprovedModal] = useState(false);
@@ -220,9 +222,11 @@ function LoginForm() {
       }
     }
 
+    const authOptions = captchaToken ? { captchaToken } : undefined;
     let { data, error } = await supabase.auth.signInWithPassword({
       email: authEmail,
       password: password,
+      options: authOptions,
     });
 
     // If initial sign in fails and it is an admin account or geniuslibrarymadhupur@gmail.com, try fallback to geniuslibrary@gmail.com
@@ -230,6 +234,7 @@ function LoginForm() {
       const fallbackResult = await supabase.auth.signInWithPassword({
         email: "geniuslibrary@gmail.com",
         password: password,
+        options: authOptions,
       });
       if (!fallbackResult.error && fallbackResult.data?.user) {
         data = fallbackResult.data;
@@ -545,6 +550,13 @@ function LoginForm() {
                 </button>
               </div>
             </div>
+
+            {/* Cloudflare Turnstile Bot Verification */}
+            <TurnstileCaptcha
+              onVerify={(token) => setCaptchaToken(token)}
+              onExpire={() => setCaptchaToken(null)}
+              action="login"
+            />
 
             <button
               type="submit"

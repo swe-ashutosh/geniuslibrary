@@ -45,8 +45,11 @@ interface StudentProfile {
   email: string;
   shift: string;
   membershipPlan: string;
+  status?: string;
   feeStatus: "Paid" | "Due";
   dueAmount: number;
+  joinDate?: string;
+  continueDate?: string;
   createdAt: string;
 }
 
@@ -258,8 +261,11 @@ export default function FeesAndExpensesManagement() {
               email: p.email || "",
               shift: p.shift || "Morning Shift",
               membershipPlan: p.membership_plan || "General",
+              status: p.status || "active",
               feeStatus: p.fee_status || (p.due_amount && Number(p.due_amount) > 0 ? "Due" : "Paid"),
               dueAmount: Number(p.due_amount || 0),
+              joinDate: p.join_date || (p.created_at ? p.created_at.split('T')[0] : undefined),
+              continueDate: p.continue_date || undefined,
               createdAt: p.created_at || new Date().toISOString(),
             };
             unifiedStudents.push(stdObj);
@@ -414,17 +420,22 @@ export default function FeesAndExpensesManagement() {
     const currentTime = now.getTime();
 
     students.forEach((s) => {
+      // Pending applicants are not yet approved; billing starts strictly upon approval
+      if (s.status === "pending") return;
+
       const isDue = s.feeStatus === "Due" || (s.dueAmount && s.dueAmount > 0);
       if (isDue) {
         const dueAmt = s.dueAmount && s.dueAmount > 0 ? s.dueAmount : 600;
-        const joinDate = new Date(s.createdAt);
-        const joinTime = joinDate.getTime();
-        const daysOverdue = Math.max(0, Math.floor((currentTime - joinTime) / (1000 * 60 * 60 * 24)));
+        // Billing cycle anchors strictly to continueDate (if set), then joinDate, then createdAt
+        const anchorStr = s.continueDate || s.joinDate || s.createdAt;
+        const anchorDate = new Date(anchorStr);
+        const anchorTime = anchorDate.getTime();
+        const daysOverdue = Math.max(0, Math.floor((currentTime - anchorTime) / (1000 * 60 * 60 * 24)));
         const monthsOverdue = Math.floor(daysOverdue / 30);
         const isDefaulter = daysOverdue >= 60; // 2+ months unpaid
 
         // Status Rule: 
-        // 1. Due date is the admission/billing date
+        // 1. Due date is the billing anchor (continue_date / admission date)
         // 2. Overdue after 15 days of non-payment
         // 3. Defaulter after 2 months (60+ days) continuous non-payment
         let statusText: "Pending" | "Overdue" | "Defaulter (2+ Mo)" = "Pending";
@@ -434,8 +445,8 @@ export default function FeesAndExpensesManagement() {
           statusText = "Overdue";
         }
 
-        // Display the actual due date that student needs to pay (admission/cycle date)
-        const formattedDueDate = joinDate.toLocaleDateString("en-IN", { 
+        // Display the actual due date that student needs to pay (continue_date / cycle date)
+        const formattedDueDate = anchorDate.toLocaleDateString("en-IN", { 
           day: "2-digit", 
           month: "short", 
           year: "numeric" 

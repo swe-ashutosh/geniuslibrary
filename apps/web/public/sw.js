@@ -20,6 +20,7 @@ const CRITICAL_STATIC_ASSETS = [
   "/library-hall.jpg",
   "/library-cubicle.jpg",
   "/library-lounge.jpg",
+  "/hero-banner.webp",
   "/hero-banner.jpg",
 ];
 

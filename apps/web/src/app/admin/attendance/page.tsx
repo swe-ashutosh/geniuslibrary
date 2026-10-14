@@ -316,14 +316,7 @@ export default function AdminAttendancePage() {
       return a.date >= startDate && a.date <= endDate;
     });
 
-    const currentYear = new Date().getFullYear();
-    const studentCode = (std.student_code && !/^\d+$/.test(std.student_code))
-      ? std.student_code
-      : `SDL-${currentYear}-${String(idx + 1).padStart(3, "0")}`;
-
-    if ((!std.student_code || /^\d+$/.test(std.student_code)) && std.id) {
-      createClient().from("profiles").update({ student_code: studentCode }).eq("id", std.id).then();
-    }
+    const studentCode = std.student_code || "—";
 
     // Pure real data: NO demo fallback!
     let sessions: CheckSession[] = [];

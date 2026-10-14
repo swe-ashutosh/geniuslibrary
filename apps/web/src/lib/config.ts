@@ -120,6 +120,13 @@ export const BRAND_CONFIG = {
   /** Base URL of the Cloudflare Worker API (apps/api). */
   apiUrl: process.env.NEXT_PUBLIC_API_URL || WL.cloudflare.apiUrl,
 
+  /** Cloudflare Turnstile Captcha */
+  turnstile: {
+    siteKey:
+      process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY ||
+      "0x4AAAAAAFVrc9ySGNSBNz1-",
+  },
+
   // ═══════════════════════════════════════════════════════════
   // SECTION 8b · SOCIAL LINKS (footer)
   // ═══════════════════════════════════════════════════════════
