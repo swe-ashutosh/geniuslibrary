@@ -109,6 +109,7 @@ export interface StudentRecord {
   fullName: string;
   email: string;
   phone: string;
+  gender?: 'Male' | 'Female' | 'Other' | string;
   parentName?: string;
   parentPhone?: string;
   address?: string;
@@ -2259,6 +2260,28 @@ export async function verifyNfcSerialNumber(scannedSerial: string): Promise<{ au
   return { authorized: false, serial: scannedSerial };
 }
 
+export async function deleteAuthorizedNfcTag(serialNumber: string): Promise<{ success: boolean; message: string }> {
+  const norm = normalizeNfcSerial(serialNumber);
+  if (!norm) return { success: false, message: 'Invalid Serial' };
+
+  try {
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    const { data } = await supabase
+      .from('messages')
+      .select('id, student_name')
+      .eq('student_id', 'SYSTEM_NFC_TAG');
+
+    const matched = (data || []).find((m: any) => normalizeNfcSerial(m.student_name) === norm);
+    if (matched) {
+      await supabase.from('messages').delete().eq('id', matched.id);
+      return { success: true, message: `Tag (${serialNumber}) removed.` };
+    }
+    return { success: true, message: 'Tag removed from active list.' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed to remove tag' };
+  }
+}
 
 export async function createAnnouncement(data: {
   title: string;
@@ -2604,6 +2627,7 @@ export async function getStudents(status?: string): Promise<StudentRecord[]> {
         fullName: p.full_name || 'Student Member',
         email: p.email || '',
         phone: p.phone || '',
+        gender: p.gender || 'Male',
         parentName: p.parent_name || '',
         parentPhone: p.parent_phone || '',
         address: p.address || 'Madhupur, Sonbhadra, UP',
@@ -2662,6 +2686,7 @@ export async function lookupStudent(params: { email?: string; id?: string; phone
         fullName: p.full_name || 'Student Member',
         email: p.email || '',
         phone: p.phone || '',
+        gender: p.gender || 'Male',
         parentName: p.parent_name || '',
         parentPhone: p.parent_phone || '',
         address: p.address || 'Madhupur, Sonbhadra, UP',
@@ -2840,45 +2865,45 @@ export async function updateStudentComplete(student: {
     fee_status: student.fee_status || 'Due',
     due_amount: student.due_amount !== undefined ? Number(student.due_amount) : 0,
     address: student.address || 'Madhupur, Sonbhadra, UP',
+    gender: student.gender || 'Male',
     updated_at: new Date().toISOString(),
   };
 
-  if (student.dob !== undefined) supaPayload.dob = student.dob;
-  if (student.gender !== undefined) supaPayload.gender = student.gender;
-  if (student.join_date !== undefined) supaPayload.join_date = student.join_date;
-  if (student.continue_date !== undefined) supaPayload.continue_date = student.continue_date;
-  if (student.is_service_stopped !== undefined) supaPayload.is_service_stopped = student.is_service_stopped;
-  if (student.service_stopped_at !== undefined) supaPayload.service_stopped_at = student.service_stopped_at;
-  if (student.service_stop_reason !== undefined) supaPayload.service_stop_reason = student.service_stop_reason;
+  if (student.join_date) supaPayload.join_date = student.join_date;
+  if (student.continue_date) supaPayload.continue_date = student.continue_date;
 
   // 2. Primary: Update Supabase profiles by id, student_code and email
   try {
     const { createClient } = await import('@/lib/supabase/client');
     const supabase = createClient();
     
-    // First attempt update with full payload
+    // Direct update to Supabase profiles
     const resId = await supabase.from('profiles').update(supaPayload).eq('id', student.id);
     if (resId.error) {
-      // If demographic / custom date columns don't exist in Supabase schema cache,
-      // fallback to standard base payload and sync created_at
-      console.warn('[updateStudentComplete] Full payload update failed, retrying standard payload:', resId.error.message);
-      const fallbackPayload = { ...supaPayload };
-      delete fallbackPayload.dob;
-      delete fallbackPayload.gender;
-      delete fallbackPayload.join_date;
-      delete fallbackPayload.continue_date;
-      delete fallbackPayload.is_service_stopped;
-      delete fallbackPayload.service_stopped_at;
-      delete fallbackPayload.service_stop_reason;
-      if (student.continue_date || student.join_date) {
-        fallbackPayload.created_at = `${student.continue_date || student.join_date}T00:00:00Z`;
-      }
-      await supabase.from('profiles').update(fallbackPayload).eq('id', student.id);
+      console.warn('[updateStudentComplete] Supabase update warning, retrying with core payload:', resId.error.message);
+      const corePayload: any = {
+        full_name: student.full_name,
+        email: student.email,
+        phone: normalizedPhone,
+        parent_name: student.parent_name || '',
+        parent_phone: normalizedParentPhone,
+        course: student.course || 'General',
+        shift: student.shift || 'Morning Shift',
+        status: student.status || 'active',
+        membership_plan: student.membership_plan || 'General',
+        seat_number: seatNum,
+        fee_status: student.fee_status || 'Due',
+        due_amount: student.due_amount !== undefined ? Number(student.due_amount) : 0,
+        address: student.address || 'Madhupur, Sonbhadra, UP',
+        gender: student.gender || 'Male',
+        updated_at: new Date().toISOString(),
+      };
+      await supabase.from('profiles').update(corePayload).eq('id', student.id);
       if (student.student_code) {
-        await supabase.from('profiles').update(fallbackPayload).eq('student_code', student.student_code);
+        await supabase.from('profiles').update(corePayload).eq('student_code', student.student_code);
       }
       if (student.email) {
-        await supabase.from('profiles').update(fallbackPayload).eq('email', student.email);
+        await supabase.from('profiles').update(corePayload).eq('email', student.email);
       }
     } else {
       if (student.student_code) {

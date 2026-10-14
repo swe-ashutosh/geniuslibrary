@@ -26,7 +26,7 @@ import {
 import { BrandLogo } from "@/components/BrandLogo";
 import { createClient } from "@/lib/supabase/client";
 import { isMasterAdminEmail } from "@/lib/config";
-import { getStudents, getFees, getAttendance, registerAuthorizedNfcTag, getAuthorizedNfcTags } from "@/lib/api";
+import { getStudents, getFees, getAttendance, registerAuthorizedNfcTag, getAuthorizedNfcTags, deleteAuthorizedNfcTag } from "@/lib/api";
 import { matchSeatNumber, parseDeskNum } from "@/lib/seatUtils";
 import { enqueueOfflineMutation } from "@/lib/offlineSync";
 
@@ -125,6 +125,16 @@ export default function SeatManagementPage() {
   const [isMasterStandModalOpen, setIsMasterStandModalOpen] = useState(false);
   const [masterQrDataUrl, setMasterQrDataUrl] = useState<string | null>(null);
   const [isWritingNfc, setIsWritingNfc] = useState(false);
+  const [authorizedNfcList, setAuthorizedNfcList] = useState<{ serial: string; label: string }[]>([]);
+  const [manualSerialInput, setManualSerialInput] = useState("");
+  const [isAddingSerial, setIsAddingSerial] = useState(false);
+
+  const refreshAuthorizedNfcTags = async () => {
+    try {
+      const tags = await getAuthorizedNfcTags();
+      setAuthorizedNfcList(tags);
+    } catch {}
+  };
 
   const [seats, setSeats] = useState<SeatData[]>(defaultSeats134);
 
@@ -568,6 +578,7 @@ export default function SeatManagementPage() {
       });
       setMasterQrDataUrl(dataUrl);
       setIsMasterStandModalOpen(true);
+      refreshAuthorizedNfcTags();
     } catch (err) {
       console.error("Failed to generate master QR:", err);
     }
@@ -598,6 +609,7 @@ export default function SeatManagementPage() {
           const serial = event.serialNumber;
           if (serial) {
             await registerAuthorizedNfcTag(serial, "Entrance Gate NFC Stand Tag");
+            refreshAuthorizedNfcTags();
             setToastMsg(`Tag encoded & authorized in Supabase! (Serial: ${serial})`);
           }
         };
@@ -625,6 +637,7 @@ export default function SeatManagementPage() {
         const serial = event.serialNumber;
         if (serial) {
           const res = await registerAuthorizedNfcTag(serial, "Authorized Library NFC Tag");
+          refreshAuthorizedNfcTags();
           setToastMsg(res.message);
           setIsWritingNfc(false);
         }
@@ -2123,6 +2136,85 @@ export default function SeatManagementPage() {
                 <p className="text-[9px] text-zinc-400 pt-1">
                   Powered by Cloudflare Edge & Supabase Mumbai • Real-Time Desk Sync
                 </p>
+              </div>
+
+              {/* Authorized NFC Serial Numbers Manager */}
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 dark:bg-zinc-800/50 p-4 text-left space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-black text-[#0A2E5C] dark:text-white flex items-center gap-1.5">
+                      <Smartphone className="h-4 w-4 text-emerald-600" />
+                      <span>Authorized NFC Serial Numbers</span>
+                    </h4>
+                    <p className="text-[11px] text-zinc-500">
+                      Only physical tags with these serial numbers can mark attendance.
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    {authorizedNfcList.length} Active
+                  </span>
+                </div>
+
+                {/* List of active serials */}
+                <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                  {authorizedNfcList.map((tag) => (
+                    <div
+                      key={tag.serial}
+                      className="flex items-center justify-between rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-xs"
+                    >
+                      <div>
+                        <span className="font-mono font-bold text-[#0A2E5C] dark:text-white">{tag.serial}</span>
+                        <span className="ml-2 text-[10px] text-zinc-400">({tag.label})</span>
+                      </div>
+                      {tag.serial !== "53:D4:B6:CD:53:00:01" && tag.serial !== "53:98:3A:CD:53:00:01" && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const res = await deleteAuthorizedNfcTag(tag.serial);
+                            if (res.success) {
+                              refreshAuthorizedNfcTags();
+                              setToastMsg(`Tag ${tag.serial} removed.`);
+                            }
+                          }}
+                          className="text-rose-500 hover:text-rose-700 p-1 rounded-md"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Manual Serial Input */}
+                <div className="pt-2 border-t border-zinc-200 dark:border-zinc-700 flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter Serial (e.g. 04:A1:B2:C3:D4:E5:F6)"
+                    value={manualSerialInput}
+                    onChange={(e) => setManualSerialInput(e.target.value)}
+                    className="flex-1 rounded-xl border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white px-3 py-1.5 text-xs font-mono font-medium focus:outline-hidden focus:ring-2 focus:ring-[#0A2E5C]"
+                  />
+                  <button
+                    type="button"
+                    disabled={isAddingSerial || !manualSerialInput.trim()}
+                    onClick={async () => {
+                      if (!manualSerialInput.trim()) return;
+                      setIsAddingSerial(true);
+                      const res = await registerAuthorizedNfcTag(manualSerialInput.trim(), "Official Library NFC Tag");
+                      setIsAddingSerial(false);
+                      if (res.success) {
+                        setManualSerialInput("");
+                        refreshAuthorizedNfcTags();
+                        setToastMsg(res.message);
+                      } else {
+                        setToastMsg(res.message);
+                      }
+                    }}
+                    className="rounded-xl bg-[#0A2E5C] text-[#FFC107] px-3 py-1.5 text-xs font-bold shadow hover:bg-[#141A24] cursor-pointer disabled:opacity-50"
+                  >
+                    {isAddingSerial ? "Adding..." : "Authorize Serial"}
+                  </button>
+                </div>
               </div>
 
               {/* Action Buttons */}

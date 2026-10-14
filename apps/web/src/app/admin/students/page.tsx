@@ -417,6 +417,9 @@ function StudentsDirectoryContent() {
         full_name: newRecord.full_name,
         phone: newRecord.phone,
         email: newRecord.email,
+        gender: newRecord.gender || "Male",
+        join_date: newRecord.join_date || new Date().toISOString().split("T")[0],
+        continue_date: newRecord.join_date || new Date().toISOString().split("T")[0],
         parent_name: newRecord.parent_name,
         parent_phone: newRecord.parent_phone,
         course: newRecord.course,
@@ -432,19 +435,8 @@ function StudentsDirectoryContent() {
         updated_at: newRecord.created_at,
       };
 
-      // Resilient upsert: Try with demographic columns first, fallback to base payload if columns missing in Supabase schema
-      let { error: supaErr } = await supabase.from("profiles").upsert([{
-        ...baseProfilePayload,
-        dob: newRecord.dob || null,
-        gender: newRecord.gender || "Male",
-        join_date: newRecord.join_date || new Date().toISOString().split("T")[0],
-      }]);
-
-      if (supaErr) {
-        console.warn("Profiles upsert with demographic columns failed, retrying standard payload:", supaErr.message);
-        const retryRes = await supabase.from("profiles").upsert([baseProfilePayload]);
-        supaErr = retryRes.error;
-      }
+      // Direct save to Supabase profiles (with gender & join_date)
+      let { error: supaErr } = await supabase.from("profiles").upsert([baseProfilePayload]);
 
       if (supaErr) {
         throw new Error(supaErr.message);

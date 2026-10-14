@@ -340,7 +340,6 @@ function SignupForm() {
                 full_name: studentName,
                 email: user.email,
                 phone: formattedPhone,
-                dob: parsed.dob || null,
                 gender: parsed.gender || "Male",
                 join_date: parsed.joinDate || new Date().toISOString().split("T")[0],
                 continue_date: parsed.joinDate || new Date().toISOString().split("T")[0],
@@ -360,10 +359,7 @@ function SignupForm() {
 
               let { error: oauthErr } = await supabase.from("profiles").upsert(oauthPayload);
               if (oauthErr) {
-                delete oauthPayload.dob;
-                delete oauthPayload.gender;
-                delete oauthPayload.join_date;
-                await supabase.from("profiles").upsert(oauthPayload);
+                console.warn("OAuth registration save notice:", oauthErr.message);
               }
             } catch (err) {
               console.warn("OAuth registration save warning:", err);
@@ -608,6 +604,9 @@ function SignupForm() {
         full_name: name,
         email: cleanEmail,
         phone: fullPhone,
+        gender: gender || "Male",
+        join_date: joinDate || new Date().toISOString().split("T")[0],
+        continue_date: joinDate || new Date().toISOString().split("T")[0],
         parent_name: parentName,
         parent_phone: fullParentPhone,
         address: address,
@@ -622,25 +621,13 @@ function SignupForm() {
         updated_at: new Date().toISOString(),
       };
 
-      // Resilient upsert: Try with demographic columns first, fallback to basePayload if columns missing in Supabase schema
-      let { error: upsertErr } = await supabase.from("profiles").upsert({
-        ...basePayload,
-        dob: dob || null,
-        gender: gender || "Male",
-        join_date: joinDate || new Date().toISOString().split("T")[0],
-        continue_date: joinDate || new Date().toISOString().split("T")[0],
-      });
+      // Direct save to Supabase profiles
+      let { error: upsertErr } = await supabase.from("profiles").upsert(basePayload);
 
-      if (upsertErr) {
-        console.warn("Demographic upsert failed, retrying standard payload:", upsertErr.message);
-        const retry1 = await supabase.from("profiles").upsert(basePayload);
-        upsertErr = retry1.error;
-
-        // Try direct update by id if profile was already inserted by auth trigger
-        if (upsertErr && studentId) {
-          const retry2 = await supabase.from("profiles").update(basePayload).eq("id", studentId);
-          upsertErr = retry2.error;
-        }
+      // Try direct update by id if profile was already inserted by auth trigger
+      if (upsertErr && studentId) {
+        const retry = await supabase.from("profiles").update(basePayload).eq("id", studentId);
+        upsertErr = retry.error;
       }
 
       if (upsertErr && !studentId) {
