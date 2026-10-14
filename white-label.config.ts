@@ -103,6 +103,8 @@ export const WL = {
     "जीनियस लाइब्रेरी",
     "अभिषेक जीनियस लाइब्रेरी",
   ],
+  /** Optional Google Search Console HTML verification code (content attribute value) */
+  googleSiteVerification: "",
 
   // ═══════════════════════════════════════════════════════════════
   // 3. THEME COLORS (keep globals.css @theme in sync when changing)

@@ -45,7 +45,19 @@ export const metadata: Metadata = {
   applicationName: BRAND_CONFIG.fullName,
   alternates: {
     canonical: BRAND_CONFIG.siteUrl,
+    languages: {
+      "en-IN": BRAND_CONFIG.siteUrl,
+      "hi-IN": BRAND_CONFIG.siteUrl,
+      "x-default": BRAND_CONFIG.siteUrl,
+    },
   },
+  ...(BRAND_CONFIG.googleSiteVerification
+    ? {
+        verification: {
+          google: BRAND_CONFIG.googleSiteVerification,
+        },
+      }
+    : {}),
   robots: {
     index: true,
     follow: true,
@@ -124,7 +136,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="en-IN"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>

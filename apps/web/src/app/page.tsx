@@ -53,6 +53,11 @@ export const metadata: Metadata = {
   category: "Education & Public Study Facility",
   alternates: {
     canonical: BRAND_CONFIG.siteUrl + "/",
+    languages: {
+      "en-IN": BRAND_CONFIG.siteUrl + "/",
+      "hi-IN": BRAND_CONFIG.siteUrl + "/",
+      "x-default": BRAND_CONFIG.siteUrl + "/",
+    },
   },
   openGraph: {
     type: "website",
@@ -63,7 +68,7 @@ export const metadata: Metadata = {
     description: BRAND_CONFIG.description,
     images: [
       {
-        url: "/hero-banner.webp",
+        url: `${BRAND_CONFIG.siteUrl}/hero-banner.webp`,
         width: 1200,
         height: 630,
         alt: BRAND_CONFIG.fullName + " Modern 24/7 Study Hall in " + BRAND_CONFIG.location,
@@ -74,7 +79,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: BRAND_CONFIG.seoTitle,
     description: BRAND_CONFIG.description,
-    images: ["/library-hall.jpg"],
+    images: [`${BRAND_CONFIG.siteUrl}/library-hall.jpg`],
   },
   robots: {
     index: true,

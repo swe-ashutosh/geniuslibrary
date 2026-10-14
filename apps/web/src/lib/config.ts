@@ -45,6 +45,7 @@ export const BRAND_CONFIG = {
   // ═══════════════════════════════════════════════════════════
   seoKeywords: [...WL.seoKeywords],
   alternateNames: [...WL.alternateNames],
+  googleSiteVerification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION || WL.googleSiteVerification || "",
 
   // ═══════════════════════════════════════════════════════════
   // SECTION 3 · THEME COLORS
