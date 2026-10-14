@@ -45,11 +45,11 @@ export function HeroBanner() {
           fill
           priority
           quality={90}
-          className="object-cover object-center filter brightness-[0.75] contrast-[1.05]"
+          className="object-cover object-top sm:object-center filter brightness-[0.55] sm:brightness-[0.75] contrast-[1.05]"
         />
         {/* Multilayered Gradients for High Readability and Brand Colors */}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0A2E5C]/95 via-[#0A2E5C]/85 to-[#0A2E5C]/60 dark:from-[#0E131C]/98 dark:via-[#0E131C]/90 dark:to-[#0E131C]/65" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0A2E5C] via-transparent to-black/40 dark:from-[#0E131C]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0A2E5C]/90 via-[#0A2E5C]/85 to-[#0A2E5C] sm:bg-gradient-to-r sm:from-[#0A2E5C]/95 sm:via-[#0A2E5C]/85 sm:to-[#0A2E5C]/60 dark:from-[#0E131C]/98 dark:via-[#0E131C]/90 dark:to-[#0E131C]/65" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0A2E5C] via-transparent to-black/50 dark:from-[#0E131C]" />
       </div>
 
       {/* Content Container */}
@@ -90,6 +90,34 @@ export function HeroBanner() {
               Personal wooden cabins, 300 Mbps dual fiber, ergonomic mesh chairs, 
               and 100% power backup for serious aspirants.
             </p>
+
+            {/* Mobile Hero Banner Showcase (Maintains true un-stretched 16:9 entrance banner) */}
+            <div className="block lg:hidden w-full pt-1">
+              <div 
+                onClick={() => setIsVideoModalOpen(true)}
+                className="relative aspect-[16/9] w-full rounded-2xl overflow-hidden shadow-2xl border-2 border-[#FFC107]/40 ring-4 ring-black/30 group cursor-pointer"
+              >
+                <Image
+                  src="/hero-banner.webp"
+                  alt={`${BRAND_CONFIG.fullName} Front Entrance in ${BRAND_CONFIG.location}`}
+                  fill
+                  priority
+                  sizes="(max-width: 768px) 100vw, 600px"
+                  className="object-cover object-center group-hover:scale-105 transition-transform duration-700"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none" />
+                <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between pointer-events-none">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-black/70 backdrop-blur-md border border-white/20 text-[11px] font-bold text-[#FFC107]">
+                    <Sparkles className="h-3 w-3 text-[#FFC107]" />
+                    <span>Main Entrance • {BRAND_CONFIG.location}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/90 backdrop-blur-md text-[11px] font-extrabold text-white shadow-sm">
+                    <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                    <span>24x7 Open</span>
+                  </span>
+                </div>
+              </div>
+            </div>
 
             {/* Key Value Badges */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1 text-xs text-zinc-200 font-semibold">
