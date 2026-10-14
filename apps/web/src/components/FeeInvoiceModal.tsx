@@ -17,6 +17,7 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { BRAND_CONFIG } from "@/lib/config";
+import { formatInvoiceNumber } from "@/lib/api";
 
 export interface InvoiceData {
   invoiceNo: string;
@@ -96,7 +97,7 @@ export default function FeeInvoiceModal({
 
   if (!invoice) return null;
 
-  const formattedInvoiceNo = (invoice.invoiceNo || "INV-2026-001").toUpperCase();
+  const formattedInvoiceNo = formatInvoiceNumber(invoice.invoiceNo, invoice.date);
   const formattedDate = (!invoice.date || invoice.date.toLowerCase().includes("pending"))
     ? new Date().toLocaleDateString("en-IN", { day: '2-digit', month: 'short', year: 'numeric' })
     : invoice.date;

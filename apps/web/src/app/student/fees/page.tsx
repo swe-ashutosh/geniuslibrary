@@ -27,9 +27,24 @@ import {
   Info
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { getFees, createFee, FeeRecord, sendFeeReceiptEmail, createNotification, sendMessage } from "@/lib/api";
+import { getFees, createFee, FeeRecord, sendFeeReceiptEmail, createNotification, sendMessage, generateInvoiceNumber, formatInvoiceNumber } from "@/lib/api";
 import FeeInvoiceModal, { InvoiceData } from "@/components/FeeInvoiceModal";
 import { BRAND_CONFIG } from "@/lib/config";
+
+export function resolvePlanRate(shift?: string, plan?: string, dueAmount?: number): number {
+  if (plan === "Trial Pass" || (shift || "").toLowerCase().includes("trial")) {
+    return 0;
+  }
+  const s = (shift || "").toLowerCase();
+  if (s.includes("locker") || s.includes("700")) return 700;
+  if (s.includes("reserve big") || s.includes("big") || s.includes("600")) return 600;
+  if (s.includes("reserve mini") || s.includes("mini") || s.includes("prime") || s.includes("pro") || s.includes("6 hour") || s.includes("6hr") || s.includes("night") || s.includes("500") || s.includes("evening")) return 500;
+  if (s.includes("standard") || s.includes("3 hour") || s.includes("300") || s.includes("3hr")) return 300;
+  if (s.includes("full") || s.includes("1100")) return 1100;
+
+  if (dueAmount && Number(dueAmount) > 0) return Number(dueAmount);
+  return 600;
+}
 
 export default function StudentFeesPage() {
   const [fees, setFees] = useState<FeeRecord[]>([]);
@@ -87,19 +102,7 @@ export default function StudentFeesPage() {
       const hasUnpaidFee = feesData.some(f => !f.paid);
       const hasOutstandingDue = isDueInProfile || hasUnpaidFee;
 
-      const planRate = profileData?.membership_plan === "Trial Pass"
-        ? 0
-        : (profileData?.due_amount && Number(profileData.due_amount) > 0)
-        ? Number(profileData.due_amount)
-        : (profileData?.shift || "").toLowerCase().includes("3")
-        ? 300
-        : (profileData?.shift || "").toLowerCase().includes("6") || (profileData?.shift || "").toLowerCase().includes("mini")
-        ? 500
-        : (profileData?.shift || "").toLowerCase().includes("locker")
-        ? 700
-        : (profileData?.shift || "").toLowerCase().includes("big")
-        ? 600
-        : 500;
+      const planRate = resolvePlanRate(profileData?.shift, profileData?.membership_plan, profileData?.due_amount);
 
       const resolvedFeeStatus = hasOutstandingDue ? "Due" : "Paid";
       const unpaidFeesSum = feesData.filter(f => !f.paid).reduce((s, f) => s + (f.amount || 0), 0);
@@ -118,27 +121,13 @@ export default function StudentFeesPage() {
             amount: planRate,
             paid: true,
             paidAt: new Date().toISOString(),
-            receiptNo: `REC-${profileData?.student_code || user.id.slice(-6).toUpperCase()}`,
+            receiptNo: generateInvoiceNumber(),
             description: `${profileData?.membership_plan || "General"} Plan - ${profileData?.shift || "Standard"}`,
             createdAt: new Date().toISOString(),
           }
         ];
-      } else if (feesData.length === 0 && hasOutstandingDue) {
-        // If student has dues, synthesize the pending fee record so it appears in student fee ledger
-        feesData = [
-          {
-            id: `due-${user.id.slice(0, 8)}`,
-            studentId: user.id,
-            studentName: profileData?.full_name || user.user_metadata?.full_name || "Student Member",
-            type: "Monthly Seat & Facility Fee",
-            amount: resolvedDueAmount > 0 ? resolvedDueAmount : planRate,
-            paid: false,
-            dueDate: "Immediate",
-            description: `${profileData?.membership_plan || "General"} Plan - ${profileData?.shift || "Standard"} (Pending Dues)`,
-            createdAt: new Date().toISOString(),
-          }
-        ];
       }
+      // Note: If student has unpaid dues, do NOT synthesize fake invoices. Invoices are generated strictly upon payment.
 
       const mergedProfile = {
         id: user.id,
@@ -167,7 +156,9 @@ export default function StudentFeesPage() {
     loadData();
   }, []);
 
-  const totalPaid = fees.filter((f) => f.paid).reduce((acc, curr) => acc + curr.amount, 0);
+  const paidFees = fees.filter((f) => f.paid);
+  const totalPaid = paidFees.reduce((acc, curr) => acc + curr.amount, 0);
+  const currentPlanRate = resolvePlanRate(profile?.shift, profile?.membership_plan, profile?.due_amount);
   const unpaidFees = fees.filter((f) => !f.paid);
   const feesDueSum = unpaidFees.reduce((acc, curr) => acc + curr.amount, 0);
   const totalUnpaidAmount = Math.max(feesDueSum, profile?.due_amount || 0);
@@ -197,7 +188,7 @@ export default function StudentFeesPage() {
   };
 
   const openPaymentModal = () => {
-    setClaimAmount(totalUnpaidAmount > 0 ? totalUnpaidAmount : 600);
+    setClaimAmount(totalUnpaidAmount > 0 ? totalUnpaidAmount : (currentPlanRate > 0 ? currentPlanRate : 500));
     setClaimSuccessMsg(null);
     setIsQrModalOpen(true);
   };
@@ -317,9 +308,12 @@ export default function StudentFeesPage() {
           </div>
           <p className="text-[10px] sm:text-xs font-bold text-zinc-500 truncate">Plan Rate</p>
           <p className="text-xl sm:text-2xl font-black text-[#0A2E5C] dark:text-white mt-0.5 sm:mt-1 truncate">
-            ₹{profile?.shift === "full_day" ? "1100" : profile?.shift === "evening" ? "500" : "600"}<span className="text-xs font-normal text-zinc-400">/mo</span>
+            {currentPlanRate === 0 ? "FREE" : `₹${currentPlanRate}`}
+            {currentPlanRate > 0 && <span className="text-xs font-normal text-zinc-400">/mo</span>}
           </p>
-          <p className="text-[9px] sm:text-[10px] font-semibold text-zinc-400 mt-1 truncate">{profile?.shift || "Morning"} Shift</p>
+          <p className="text-[9px] sm:text-[10px] font-semibold text-zinc-400 mt-1 truncate">
+            {profile?.shift?.toLowerCase().endsWith("shift") ? profile.shift : `${profile?.shift || "Standard"} Shift`}
+          </p>
         </div>
 
         <div className="rounded-3xl border border-zinc-200 bg-white p-3.5 sm:p-5 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C]">
@@ -350,10 +344,45 @@ export default function StudentFeesPage() {
             <span className="text-[9px] sm:text-[10px] font-bold text-[#0B5ED7] dark:text-[#FFC107] uppercase">Invoices</span>
           </div>
           <p className="text-[10px] sm:text-xs font-bold text-zinc-500 truncate">Receipts</p>
-          <p className="text-xl sm:text-2xl font-black text-[#0A2E5C] dark:text-white mt-0.5 sm:mt-1">{fees.length}</p>
+          <p className="text-xl sm:text-2xl font-black text-[#0A2E5C] dark:text-white mt-0.5 sm:mt-1">{paidFees.length}</p>
           <p className="text-[9px] sm:text-[10px] font-semibold text-zinc-400 mt-1 truncate">Total records</p>
         </div>
       </div>
+
+      {/* Outstanding Due Notice Banner with Direct Pay Button */}
+      {isDue && (
+        <div className="rounded-3xl border border-amber-300 bg-linear-to-r from-amber-50 to-orange-50/60 p-5 shadow-xs dark:border-amber-800 dark:from-amber-950/40 dark:to-orange-950/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-sm">
+              <Receipt className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-amber-900 dark:text-amber-300">
+                  Fee Payment Pending
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 dark:bg-amber-900/80 dark:text-amber-200">
+                  Due Immediate
+                </span>
+              </div>
+              <p className="text-xs text-amber-800 dark:text-amber-300/90 mt-0.5">
+                {profile?.membership_plan || "Library"} • {profile?.shift || "Standard"} — Outstanding balance: <strong className="font-black text-amber-950 dark:text-amber-100">₹{totalUnpaidAmount}</strong>
+              </p>
+              <p className="text-[11px] text-amber-700/80 dark:text-amber-400 mt-0.5">
+                Official tax invoice and payment receipt will be generated automatically once your payment is received and verified.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={openPaymentModal}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl bg-linear-to-r from-[#0A2E5C] to-[#0B5ED7] text-xs font-black text-[#FFC107] hover:opacity-95 shadow-md active:scale-95 transition cursor-pointer shrink-0"
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>Pay ₹{totalUnpaidAmount} via UPI QR</span>
+          </button>
+        </div>
+      )}
 
       {/* Fee History & Receipts */}
       <div className="rounded-3xl border border-[#E5E7EB] bg-white p-6 shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C]">
@@ -372,39 +401,38 @@ export default function StudentFeesPage() {
         </div>
 
         <div className="space-y-3">
-          {fees.length === 0 ? (
-            <div className="py-8 text-center text-xs text-zinc-400 space-y-1">
+          {paidFees.length === 0 ? (
+            <div className="py-8 text-center text-xs text-zinc-400 space-y-2">
               <IndianRupee className="h-7 w-7 mx-auto text-zinc-300 dark:text-zinc-600" />
-              <p className="font-bold text-zinc-600 dark:text-zinc-300">No fee receipts found</p>
-              <p className="text-[11px]">When fee transactions are generated or paid, they will appear here.</p>
+              <p className="font-bold text-zinc-600 dark:text-zinc-300 text-sm">No payment receipts or invoices generated yet</p>
+              <p className="text-[11px] max-w-md mx-auto text-zinc-500 dark:text-zinc-400">
+                Invoices and official receipts are generated upon successful fee payment. Once your payment is verified, your official tax receipt (e.g. <span className="font-mono font-semibold">INV-2610-001</span>) will appear here for download.
+              </p>
             </div>
-          ) : fees.map((fee) => (
-            <div
-              key={fee.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-[#F8FAFC]/50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 gap-3"
-            >
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-xs font-bold text-[#0A2E5C] dark:text-white">{fee.description || `${fee.type} Fee`}</p>
-                  <span className="text-[10px] font-mono bg-zinc-200 dark:bg-zinc-700 px-2 py-0.5 rounded text-zinc-600 dark:text-zinc-300">
-                    {fee.receiptNo ? `Receipt #${fee.receiptNo}` : `Invoice #${fee.id.slice(-8)}`}
-                  </span>
+          ) : paidFees.map((fee) => {
+            const invoiceNum = formatInvoiceNumber(fee.receiptNo, fee.paidAt || fee.createdAt);
+            return (
+              <div
+                key={fee.id}
+                className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl bg-[#F8FAFC]/50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 gap-3"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold text-[#0A2E5C] dark:text-white">{fee.description || `${fee.type} Fee`}</p>
+                    <span className="text-[10px] font-mono bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded font-bold">
+                      {invoiceNum}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
+                    Paid On: {fee.paidAt ? new Date(fee.paidAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "Completed"} • Status: Verified & Paid
+                  </p>
                 </div>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">
-                  Due: {fee.dueDate || "Immediate"} • Status: {fee.paid ? `Paid: ${fee.paidAt || "Completed"}` : "Payment Pending"}
-                </p>
-              </div>
 
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-black text-[#0A2E5C] dark:text-white">₹{fee.amount}</span>
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg ${
-                  fee.paid 
-                    ? "text-emerald-700 bg-emerald-100 dark:bg-emerald-950/70"
-                    : "text-amber-700 bg-amber-100 dark:bg-amber-950/70"
-                }`}>
-                  {fee.paid ? "PAID" : "DUE"}
-                </span>
-                {fee.paid ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-black text-[#0A2E5C] dark:text-white">₹{fee.amount}</span>
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg text-emerald-700 bg-emerald-100 dark:bg-emerald-950/70">
+                    PAID
+                  </span>
                   <button
                     onClick={() => setSelectedReceipt(fee)}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#E5E7EB] bg-white text-xs font-bold text-[#0A2E5C] hover:bg-[#F8FAFC] dark:border-zinc-700 dark:bg-[#0A2E5C] dark:text-white shadow-xs cursor-pointer"
@@ -412,18 +440,10 @@ export default function StudentFeesPage() {
                     <Download className="h-3.5 w-3.5 text-[#0B5ED7]" />
                     <span>Receipt</span>
                   </button>
-                ) : (
-                  <button
-                    onClick={openPaymentModal}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0A2E5C] text-xs font-bold text-[#FFC107] hover:bg-[#141A24] shadow-xs cursor-pointer"
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    <span>Pay Now</span>
-                  </button>
-                )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -564,7 +584,7 @@ export default function StudentFeesPage() {
       {selectedReceipt && (
         <FeeInvoiceModal
           invoice={{
-            invoiceNo: selectedReceipt.receiptNo || `INV-${selectedReceipt.id.slice(-6).toUpperCase()}`,
+            invoiceNo: formatInvoiceNumber(selectedReceipt.receiptNo, selectedReceipt.paidAt),
             date: selectedReceipt.paidAt
               ? new Date(selectedReceipt.paidAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
               : new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }),

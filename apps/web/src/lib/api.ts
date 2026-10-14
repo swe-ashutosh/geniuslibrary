@@ -1703,6 +1703,30 @@ export function generateInvoiceNumber(existingReceipts?: (string | undefined | n
   return `${prefix}${String(maxSeq + 1).padStart(3, "0")}`;
 }
 
+/**
+ * Formats any receipt or invoice number into the canonical INV-YYMM-XXX format (e.g. INV-2610-001).
+ */
+export function formatInvoiceNumber(receiptNo?: string | null, date?: string | null): string {
+  if (receiptNo && /^INV-\d{4}-\d{3,}$/i.test(receiptNo)) {
+    return receiptNo.toUpperCase();
+  }
+  const d = date ? new Date(date) : new Date();
+  const validDate = isNaN(d.getTime()) ? new Date() : d;
+  const yy = validDate.getFullYear().toString().slice(-2);
+  const mm = String(validDate.getMonth() + 1).padStart(2, "0");
+  const prefix = `INV-${yy}${mm}-`;
+
+  if (receiptNo && !receiptNo.startsWith("UTR-") && !receiptNo.startsWith("due-")) {
+    const nums = receiptNo.match(/\d+/g);
+    if (nums && nums.length > 0) {
+      const lastNum = nums[nums.length - 1];
+      const seq = String(parseInt(lastNum.slice(-3), 10) || 1).padStart(3, "0");
+      return `${prefix}${seq}`;
+    }
+  }
+  return `${prefix}001`;
+}
+
 export async function payFee(feeId: string) {
   try {
     return await fetchApi('/api/fees/pay', {
@@ -1826,7 +1850,9 @@ export async function verifyUpiClaim(
   const nowIso = new Date().toISOString();
   const fees = getLocalData<FeeRecord[]>(STORAGE_KEYS.FEES, []);
   const targetFee = fees.find(f => f.id === feeId || f.receiptNo === feeId);
-  const invNo = options?.receiptNo || generateInvoiceNumber(fees.map(f => f.receiptNo));
+  const invNo = (options?.receiptNo && !options.receiptNo.startsWith('UTR-'))
+    ? options.receiptNo
+    : generateInvoiceNumber(fees.map(f => f.receiptNo));
   const studentId = options?.studentId || targetFee?.studentId;
 
   // 1. Update Supabase fees table
@@ -1934,7 +1960,7 @@ export async function clearStudentUpiClaims(studentIdentifier: string) {
         await supabase.from('fees').update({
           paid: true,
           paid_at: new Date().toISOString(),
-          receipt_no: p.receipt_no || generateInvoiceNumber(),
+          receipt_no: (p.receipt_no && !p.receipt_no.startsWith('UTR-')) ? p.receipt_no : generateInvoiceNumber(),
         }).eq('id', p.id);
       }
     }

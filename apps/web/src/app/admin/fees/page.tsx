@@ -297,12 +297,24 @@ export default function FeesAndExpensesManagement() {
           year: "numeric" 
         });
 
-        // Parse payment method from description or fallback to UPI
-        let method: "UPI" | "Cash" | "Card" | "Bank Transfer" = "UPI";
+        // Parse payment method accurately without defaulting unpaid dues to UPI
+        let method: "UPI" | "Cash" | "Card" | "Bank Transfer" = "Cash";
         const desc = (f.description || "").toLowerCase();
-        if (desc.includes("cash")) method = "Cash";
-        else if (desc.includes("card")) method = "Card";
-        else if (desc.includes("bank") || desc.includes("neft")) method = "Bank Transfer";
+        const typeStr = (f.type || "").toLowerCase();
+        const rNoStr = (f.receiptNo || "").toLowerCase();
+        const isExplicitUpi = typeStr === "upi claim" || rNoStr.startsWith("utr-") || desc.includes("utr") || desc.includes("upi payment claim") || desc.includes("upi transfer");
+
+        if (isExplicitUpi) {
+          method = "UPI";
+        } else if (desc.includes("cash")) {
+          method = "Cash";
+        } else if (desc.includes("card")) {
+          method = "Card";
+        } else if (desc.includes("bank") || desc.includes("neft") || desc.includes("transfer")) {
+          method = "Bank Transfer";
+        } else if (f.paid) {
+          method = "UPI"; // Verified paid receipts where method wasn't explicitly logged
+        }
 
         return {
           id: f.id,
@@ -479,11 +491,17 @@ export default function FeesAndExpensesManagement() {
 
   const pendingStudentsCount = studentDuesLedger.length;
 
-  // 3. UPI Claims (Pending UPI transactions & student submitted claims)
+  // 3. UPI Claims (Pending student-submitted claims with UTR only)
   const upiClaimsList = useMemo(() => {
     return transactions.filter(t => 
       t.status === "Pending" && 
-      (t.method === "UPI" || t.type === "UPI Claim" || (t.notes && (t.notes.toLowerCase().includes("upi") || t.notes.toLowerCase().includes("utr"))))
+      (t.type === "UPI Claim" || 
+       (t.receiptNo && t.receiptNo.toUpperCase().startsWith("UTR-")) ||
+       (t.notes && (
+         t.notes.toLowerCase().includes("utr:") || 
+         t.notes.toLowerCase().includes("upi payment claim") ||
+         (t.notes.toLowerCase().includes("upi") && t.notes.toLowerCase().includes("claim"))
+       )))
     );
   }, [transactions]);
 
@@ -667,7 +685,6 @@ export default function FeesAndExpensesManagement() {
         studentId: claim.rawStudentId || claim.studentId,
         studentName: claim.studentName,
         amount: claim.amount,
-        receiptNo: claim.receiptNo,
       });
 
       // Clear any remaining pending claims for this student
