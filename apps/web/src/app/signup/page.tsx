@@ -343,6 +343,7 @@ function SignupForm() {
                 dob: parsed.dob || null,
                 gender: parsed.gender || "Male",
                 join_date: parsed.joinDate || new Date().toISOString().split("T")[0],
+                continue_date: parsed.joinDate || new Date().toISOString().split("T")[0],
                 parent_name: parsed.parentName,
                 parent_phone: formattedParentPhone,
                 address: parsed.address,
@@ -625,6 +626,7 @@ function SignupForm() {
         dob: dob || null,
         gender: gender || "Male",
         join_date: joinDate || new Date().toISOString().split("T")[0],
+        continue_date: joinDate || new Date().toISOString().split("T")[0],
       });
 
       if (upsertErr) {
