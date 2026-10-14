@@ -26,7 +26,7 @@ import {
 import { BrandLogo } from "@/components/BrandLogo";
 import { createClient } from "@/lib/supabase/client";
 import { isMasterAdminEmail } from "@/lib/config";
-import { getStudents, getFees, getAttendance } from "@/lib/api";
+import { getStudents, getFees, getAttendance, registerAuthorizedNfcTag, getAuthorizedNfcTags } from "@/lib/api";
 import { matchSeatNumber, parseDeskNum } from "@/lib/seatUtils";
 import { enqueueOfflineMutation } from "@/lib/offlineSync";
 
@@ -573,7 +573,7 @@ export default function SeatManagementPage() {
     }
   };
 
-  // Web NFC Tag Programmer (Writes Master Gate URL to physical NFC tag)
+  // Web NFC Tag Programmer (Writes Master Gate URL and authorizes tag serial in Supabase)
   const handleProgramNfcTag = async () => {
     if (typeof window === "undefined" || !("NDEFReader" in window)) {
       setToastMsg("Web NFC is only supported on NFC-enabled Android devices running Chrome.");
@@ -586,14 +586,51 @@ export default function SeatManagementPage() {
         records: [
           {
             recordType: "url",
-            data: "https://genius.librarywale.in/attendance",
+            data: "https://genius.librarywale.in/attendance?source=nfc",
           },
         ],
       });
-      setToastMsg("Success! Physical NFC Stand tag encoded with Entrance Attendance Gate.");
+
+      // Try capturing serial to register
+      try {
+        await ndef.scan();
+        ndef.onreading = async (event: any) => {
+          const serial = event.serialNumber;
+          if (serial) {
+            await registerAuthorizedNfcTag(serial, "Entrance Gate NFC Stand Tag");
+            setToastMsg(`Tag encoded & authorized in Supabase! (Serial: ${serial})`);
+          }
+        };
+      } catch {}
+
+      setToastMsg("Success! Physical NFC Stand tag encoded with Entrance Gate URL.");
     } catch (err: any) {
       setToastMsg("NFC Write notice: " + (err.message || "Device timed out"));
     } finally {
+      setIsWritingNfc(false);
+    }
+  };
+
+  const handleScanAndRegisterNfc = async () => {
+    if (typeof window === "undefined" || !("NDEFReader" in window)) {
+      setToastMsg("Web NFC is only supported on NFC-enabled Android devices running Chrome.");
+      return;
+    }
+    try {
+      setIsWritingNfc(true);
+      setToastMsg("Tap library NFC sticker/card to phone back to register its hardware serial...");
+      const ndef = new (window as any).NDEFReader();
+      await ndef.scan();
+      ndef.onreading = async (event: any) => {
+        const serial = event.serialNumber;
+        if (serial) {
+          const res = await registerAuthorizedNfcTag(serial, "Authorized Library NFC Tag");
+          setToastMsg(res.message);
+          setIsWritingNfc(false);
+        }
+      };
+    } catch (err: any) {
+      setToastMsg("NFC notice: " + (err.message || "Failed"));
       setIsWritingNfc(false);
     }
   };
@@ -2156,7 +2193,17 @@ export default function SeatManagementPage() {
                   className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow hover:bg-emerald-700 transition cursor-pointer"
                 >
                   <Smartphone className="h-4 w-4" />
-                  <span>{isWritingNfc ? "Tap NFC Tag to Phone..." : "Program Physical NFC Tag"}</span>
+                  <span>{isWritingNfc ? "Tap Tag..." : "Program NFC Tag"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleScanAndRegisterNfc}
+                  disabled={isWritingNfc}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-indigo-600 text-white font-bold text-xs shadow hover:bg-indigo-700 transition cursor-pointer"
+                >
+                  <Radio className="h-4 w-4" />
+                  <span>{isWritingNfc ? "Reading..." : "Authorize NFC Serial"}</span>
                 </button>
               </div>
             </div>

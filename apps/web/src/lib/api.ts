@@ -2122,7 +2122,7 @@ export async function sendFeeReceiptEmail(feeId: string, email?: string, remaini
   }
 }
 
-// Announcements & Communications (Supabase messages as Primary Source of Truth)
+// Announcements & Communications (Supabase messages as Sole Primary Source of Truth)
 export async function getAnnouncements(): Promise<Announcement[]> {
   try {
     const { createClient } = await import('@/lib/supabase/client');
@@ -2143,18 +2143,122 @@ export async function getAnnouncements(): Promise<Announcement[]> {
         createdAt: m.created_at || new Date().toISOString(),
       }));
     }
+    return [];
   } catch (sbErr) {
     console.warn('[getAnnouncements] Supabase notice:', sbErr);
-  }
-
-  // Fallback to Worker API / D1
-  try {
-    const data = await fetchApi<{ success: boolean; announcements: Announcement[] }>('/api/announcements');
-    return data.announcements || [];
-  } catch {
     return [];
   }
 }
+
+// ══════════════════════════════════════════════════════════════════
+// SECTION: AUTHORIZED NFC HARDWARE TAGS (Supabase Verification)
+// Enforces that only registered physical library NFC tags can mark attendance.
+// ══════════════════════════════════════════════════════════════════
+export const DEFAULT_AUTHORIZED_NFC_SERIALS = [
+  "53:D4:B6:CD:53:00:01",
+  "53:98:3A:CD:53:00:01",
+];
+
+export function normalizeNfcSerial(serial: string): string {
+  return (serial || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
+
+export async function getAuthorizedNfcTags(): Promise<{ serial: string; label: string; createdAt?: string }[]> {
+  const defaultList = DEFAULT_AUTHORIZED_NFC_SERIALS.map(s => ({
+    serial: s,
+    label: 'Official Entrance Gate Stand Tag',
+  }));
+
+  try {
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('student_id', 'SYSTEM_NFC_TAG')
+      .order('created_at', { ascending: false });
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      const dbTags = data.map((m: any) => ({
+        serial: m.student_name || '',
+        label: m.message || 'Registered Library NFC Tag',
+        createdAt: m.created_at,
+      })).filter((t: any) => Boolean(t.serial));
+
+      const combined = [...defaultList];
+      for (const t of dbTags) {
+        if (!combined.some(c => normalizeNfcSerial(c.serial) === normalizeNfcSerial(t.serial))) {
+          combined.push(t);
+        }
+      }
+      return combined;
+    }
+  } catch (err) {
+    console.warn('[getAuthorizedNfcTags] notice:', err);
+  }
+
+  return defaultList;
+}
+
+export async function registerAuthorizedNfcTag(serialNumber: string, label: string = 'Registered Library NFC Tag'): Promise<{ success: boolean; message: string }> {
+  const norm = normalizeNfcSerial(serialNumber);
+  if (!norm) {
+    return { success: false, message: 'Invalid NFC Serial Number' };
+  }
+
+  try {
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+
+    const { data: existing } = await supabase
+      .from('messages')
+      .select('id, student_name')
+      .eq('student_id', 'SYSTEM_NFC_TAG');
+
+    const alreadyExists = (existing || []).some((m: any) => normalizeNfcSerial(m.student_name) === norm);
+    if (alreadyExists) {
+      return { success: true, message: `NFC Tag (${serialNumber}) is already registered and authorized.` };
+    }
+
+    const tagId = `nfc-tag-${Date.now()}`;
+    const { error } = await supabase.from('messages').insert({
+      id: tagId,
+      student_id: 'SYSTEM_NFC_TAG',
+      student_name: serialNumber.trim().toUpperCase(),
+      message: label || 'Official Library NFC Tag',
+      sender_role: 'admin',
+      sender_name: 'Library Admin',
+      recipient_role: 'all',
+      is_read: true,
+      created_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      return { success: false, message: error.message };
+    }
+
+    return { success: true, message: `NFC Tag (${serialNumber}) successfully registered and authorized!` };
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Failed to register tag' };
+  }
+}
+
+export async function verifyNfcSerialNumber(scannedSerial: string): Promise<{ authorized: boolean; serial: string; label?: string }> {
+  const normScanned = normalizeNfcSerial(scannedSerial);
+  if (!normScanned) {
+    return { authorized: false, serial: scannedSerial };
+  }
+
+  const authorizedTags = await getAuthorizedNfcTags();
+  const matched = authorizedTags.find(t => normalizeNfcSerial(t.serial) === normScanned);
+
+  if (matched) {
+    return { authorized: true, serial: matched.serial, label: matched.label };
+  }
+
+  return { authorized: false, serial: scannedSerial };
+}
+
 
 export async function createAnnouncement(data: {
   title: string;

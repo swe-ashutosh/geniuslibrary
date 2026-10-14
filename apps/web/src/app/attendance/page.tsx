@@ -31,7 +31,12 @@ import {
   Sparkles
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { smartQrScanAttendance, sanitizeSeatNumber } from "@/lib/api";
+import { 
+  smartQrScanAttendance, 
+  sanitizeSeatNumber, 
+  verifyNfcSerialNumber, 
+  registerAuthorizedNfcTag 
+} from "@/lib/api";
 import { BRAND_CONFIG } from "@/lib/config";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LiveAttendanceCameraModal } from "@/components/LiveAttendanceCameraModal";
@@ -63,10 +68,11 @@ function AttendanceGateContent() {
     method?: "nfc" | "qr";
   } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [unregisteredSerial, setUnregisteredSerial] = useState<string | null>(null);
+  const [isRegisteringTag, setIsRegisteringTag] = useState(false);
   const [nfcListening, setNfcListening] = useState(false);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [externalScanDetected, setExternalScanDetected] = useState(false);
-  const hasAutoMarkedRef = useRef(false);
 
   // Detect if opened from external scanner via query param
   useEffect(() => {
@@ -101,6 +107,7 @@ function AttendanceGateContent() {
           email: user.email,
           seatNumber: profile?.seat_number || null,
           shift: profile?.shift || "General Shift",
+          role: profile?.role || "student",
         };
         setCurrentUser(studentInfo);
       } catch (err: any) {
@@ -119,10 +126,12 @@ function AttendanceGateContent() {
     studentId: string, 
     studentName: string, 
     verificationMethod: "nfc" | "qr" = "nfc",
-    photoUrl?: string
+    photoUrl?: string,
+    verifiedSerial?: string
   ) => {
     setIsProcessing(true);
     setErrorMsg(null);
+    setUnregisteredSerial(null);
 
     // Haptic feedback
     if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
@@ -153,7 +162,7 @@ function AttendanceGateContent() {
         seatNumber: res.seatNumber,
         time: res.checkInTime || res.checkOutTime || new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
         message: verificationMethod === "nfc"
-          ? `✓ NFC Tap Verified (Tag: 53:D4:B6:CD:53:00:01). No picture required.`
+          ? `✓ Official Library NFC Verified${verifiedSerial ? ` (Tag Serial: ${verifiedSerial})` : ""}. No picture required.`
           : `✓ Gate QR Verified. Attendance logged successfully.`,
         method: verificationMethod,
       });
@@ -175,15 +184,7 @@ function AttendanceGateContent() {
     }
   };
 
-  // Direct auto-mark when scanned from external scanner and student is already logged in
-  useEffect(() => {
-    if (externalScanDetected && currentUser && !loading && !hasAutoMarkedRef.current && !result && !isProcessing) {
-      hasAutoMarkedRef.current = true;
-      processAttendance(currentUser.id, currentUser.name, "qr");
-    }
-  }, [externalScanDetected, currentUser, loading, result, isProcessing]);
-
-  // Method 1: Web NFC Tap (Serial: 53:D4:B6:CD:53:00:01) -> NO PICTURE NEEDED!
+  // Method 1: Web NFC Tap (Strictly Verified with Supabase Registered Tags) -> NO PICTURE NEEDED!
   const startNfcTap = async () => {
     if (typeof window === "undefined" || !("NDEFReader" in window)) {
       setErrorMsg("Web NFC is only available on compatible devices (such as Chrome on Android). On other devices, please use Camera QR Scan.");
@@ -193,30 +194,27 @@ function AttendanceGateContent() {
     try {
       setNfcListening(true);
       setErrorMsg(null);
+      setUnregisteredSerial(null);
       const ndef = new (window as any).NDEFReader();
       await ndef.scan();
       
       ndef.onreading = async (event: any) => {
         const rawSerial = event.serialNumber || "";
-        const normalize = (s: string) => (s || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
         
-        const ALLOWED_SERIALS = [
-          "53:D4:B6:CD:53:00:01",
-          "53:98:3A:CD:53:00:01"
-        ];
-
-        const isMatch = ALLOWED_SERIALS.some(
-          (allowed) => normalize(allowed) === normalize(rawSerial)
-        );
-
-        if (!isMatch) {
-          setErrorMsg(`Unrecognized NFC Tag! Serial: ${rawSerial}. Allowed Tag: 53:D4:B6:CD:53:00:01`);
+        // Strict NFC hardware serial check against Supabase
+        const check = await verifyNfcSerialNumber(rawSerial);
+        if (!check.authorized) {
+          if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+            try { window.navigator.vibrate([200, 100, 200]); } catch {}
+          }
+          setUnregisteredSerial(rawSerial || "UNKNOWN");
+          setErrorMsg(`❌ Unauthorized NFC Tag! Serial: "${rawSerial || "Empty"}". This tag is NOT registered with Genius Library. Attendance rejected.`);
           setNfcListening(false);
           return;
         }
 
         if (currentUser) {
-          await processAttendance(currentUser.id, currentUser.name, "nfc");
+          await processAttendance(currentUser.id, currentUser.name, "nfc", undefined, check.serial);
           setNfcListening(false);
         }
       };
@@ -226,6 +224,14 @@ function AttendanceGateContent() {
       setNfcListening(false);
     }
   };
+
+  // Auto-activate NFC scanner if opened via NFC tap parameter
+  useEffect(() => {
+    const isNfcIntent = searchParams.get("source") === "nfc" || searchParams.get("method") === "nfc";
+    if (isNfcIntent && currentUser && !nfcListening && !result && !isProcessing) {
+      startNfcTap().catch(() => {});
+    }
+  }, [searchParams, currentUser]);
 
   return (
     <div className="min-h-screen bg-[#FDFCF7] text-[#0A2E5C] flex flex-col justify-between selection:bg-[#FFC107]/30">
@@ -293,9 +299,35 @@ function AttendanceGateContent() {
 
           {/* Error Notice */}
           {errorMsg && (
-            <div className="flex items-center gap-2 rounded-2xl bg-rose-50 p-4 text-xs font-bold text-rose-700 border border-rose-200 text-left">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{errorMsg}</span>
+            <div className="rounded-2xl bg-rose-50 p-4 text-xs font-bold text-rose-700 border border-rose-200 text-left space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{errorMsg}</span>
+              </div>
+              {unregisteredSerial && currentUser?.role === "admin" && (
+                <div className="pt-2 border-t border-rose-200/60">
+                  <button
+                    type="button"
+                    disabled={isRegisteringTag}
+                    onClick={async () => {
+                      setIsRegisteringTag(true);
+                      const res = await registerAuthorizedNfcTag(unregisteredSerial, `Gate Stand Tag (${unregisteredSerial})`);
+                      setIsRegisteringTag(false);
+                      if (res.success) {
+                        setErrorMsg(null);
+                        setUnregisteredSerial(null);
+                        alert(`Success: Tag (${unregisteredSerial}) registered as official library tag! Tap again to mark attendance.`);
+                      } else {
+                        setErrorMsg(`Failed to register tag: ${res.message}`);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0A2E5C] text-[#FFC107] text-xs font-bold shadow hover:bg-[#141A24] cursor-pointer"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    <span>{isRegisteringTag ? "Authorizing Tag..." : `Admin: Authorize NFC Tag (${unregisteredSerial})`}</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -332,7 +364,7 @@ function AttendanceGateContent() {
                 <div className="pt-2 border-t border-emerald-200/60 text-[11px] text-emerald-900 flex items-center justify-between">
                   <span>Student: <strong>{currentUser.name}</strong></span>
                   <span className="text-[10px] text-emerald-700 font-semibold">
-                    {result.method === "nfc" ? "NFC 53:D4:B6:CD:53:00:01" : "Silent Photo Saved"}
+                    {result.method === "nfc" ? "Official Library NFC Verified" : "Silent Photo Saved"}
                   </span>
                 </div>
               )}

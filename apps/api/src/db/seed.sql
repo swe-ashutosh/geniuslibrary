@@ -244,10 +244,9 @@ INSERT OR IGNORE INTO books (id, title, author, isbn, category, total_copies, av
 ('book-3', 'Concepts of Physics (Vol 1 & 2)', 'H.C. Verma', '978-8177091878', 'JEE / Engineering', 6, 5, 'Foundational physics textbook for JEE aspirants.'),
 ('book-4', 'Certificate Physical and Human Geography', 'G.C. Leong', '978-0195628166', 'Geography', 3, 2, 'Essential geography manual for UPSC and state civil services.');
 
--- Seed Announcements
-INSERT OR IGNORE INTO announcements (id, title, message, priority, target_audience) VALUES
-('ann-1', 'High-Speed 5G Wi-Fi Upgrade', 'New dedicated Wi-Fi router installed in Silent Zone A.', 'normal', 'all'),
-('ann-2', 'Library Timing Update', 'Full Day pass holders can now access the 24-hr study lounge on Sundays.', 'high', 'all');
+-- Seed Announcements (Managed dynamically via Supabase messages)
+-- No hardcoded dummy announcements
+
 
 -- 8. Messages Table
 CREATE TABLE IF NOT EXISTS messages (

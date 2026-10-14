@@ -51,7 +51,8 @@ import {
   deleteNotification,
   NotificationRecord,
   smartQrScanAttendance,
-  sanitizeSeatNumber
+  sanitizeSeatNumber,
+  verifyNfcSerialNumber
 } from "@/lib/api";
 import { LiveAttendanceCameraModal } from "@/components/LiveAttendanceCameraModal";
 import { recordUserActivity, checkInactivityExpiry, clearInactivityTracking, getSavedUserRole, saveUserRole } from "@/lib/authInactivity";
@@ -215,11 +216,18 @@ export default function StudentLayout({
           if (!isSubscribed) return;
           
           const rawSerial = event.serialNumber || "";
-          const normalize = (s: string) => (s || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-          const ALLOWED = ["53:D4:B6:CD:53:00:01", "53:98:3A:CD:53:00:01"];
-          const isMatch = ALLOWED.some(a => normalize(a) === normalize(rawSerial));
-          if (!isMatch) {
-            console.warn("[NFC Background] Non-library tag tapped:", rawSerial);
+          const verifyResult = await verifyNfcSerialNumber(rawSerial);
+          if (!verifyResult.authorized) {
+            console.warn("[NFC Background] Unauthorized tag tapped:", rawSerial);
+            if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
+              try { window.navigator.vibrate([200, 100, 200]); } catch {}
+            }
+            triggerNativeNotification({
+              title: "❌ Unauthorized NFC Tag",
+              body: `Tag Serial (${rawSerial || "Unknown"}) is not registered with Genius Library. Attendance rejected.`,
+              url: "/student/attendance",
+              tag: `nfc-err-${Date.now()}`,
+            }).catch(() => {});
             return;
           }
 
@@ -419,21 +427,28 @@ export default function StudentLayout({
       });
 
       let readAnnIds: string[] = [];
+      let clearedAnnIds: string[] = [];
       if (typeof window !== "undefined") {
         try {
           readAnnIds = JSON.parse(localStorage.getItem("genius_read_announcements") || "[]");
+          const clearedKey = targetId ? `genius_cleared_announcements_${targetId}` : "genius_cleared_announcements";
+          const clearedSpecific = JSON.parse(localStorage.getItem(clearedKey) || "[]");
+          const clearedGlobal = JSON.parse(localStorage.getItem("genius_cleared_announcements") || "[]");
+          clearedAnnIds = Array.from(new Set([...clearedSpecific, ...clearedGlobal]));
         } catch {}
       }
 
-      const annItems = (liveAnn || []).map((a: any) => ({
-        id: a.id,
-        title: a.title,
-        desc: a.message,
-        time: a.createdAt ? formatRelativeTime(a.createdAt) : "Recent",
-        unread: !readAnnIds.includes(a.id) && (a.priority === "high" || a.priority === "urgent"),
-        actionUrl: "/student/messages",
-        isDbNotif: false,
-      }));
+      const annItems = (liveAnn || [])
+        .filter((a: any) => !clearedAnnIds.includes(a.id))
+        .map((a: any) => ({
+          id: a.id,
+          title: a.title,
+          desc: a.message,
+          time: a.createdAt ? formatRelativeTime(a.createdAt) : "Recent",
+          unread: !readAnnIds.includes(a.id) && (a.priority === "high" || a.priority === "urgent"),
+          actionUrl: "/student/messages",
+          isDbNotif: false,
+        }));
 
       setNotifications([...notifItems, ...annItems]);
     } catch (err) {
@@ -674,6 +689,12 @@ export default function StudentLayout({
     }
     if (typeof window !== "undefined") {
       try {
+        const clearedKey = currentStudentId ? `genius_cleared_announcements_${currentStudentId}` : "genius_cleared_announcements";
+        const prevCleared: string[] = JSON.parse(localStorage.getItem(clearedKey) || "[]");
+        const allAnnIds = notifications.filter((n) => !n.isDbNotif).map((n) => n.id);
+        const nextCleared = Array.from(new Set([...prevCleared, ...allAnnIds]));
+        localStorage.setItem(clearedKey, JSON.stringify(nextCleared));
+        localStorage.setItem("genius_cleared_announcements", JSON.stringify(nextCleared));
         localStorage.removeItem("genius_read_announcements");
       } catch {}
     }
@@ -683,7 +704,20 @@ export default function StudentLayout({
 
   const handleDeleteStudentNotification = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    await deleteNotification(id);
+    const targetItem = notifications.find((n) => n.id === id);
+    if (targetItem?.isDbNotif) {
+      await deleteNotification(id);
+    } else {
+      if (typeof window !== "undefined") {
+        try {
+          const clearedKey = currentStudentId ? `genius_cleared_announcements_${currentStudentId}` : "genius_cleared_announcements";
+          const prevCleared: string[] = JSON.parse(localStorage.getItem(clearedKey) || "[]");
+          const nextCleared = Array.from(new Set([...prevCleared, id]));
+          localStorage.setItem(clearedKey, JSON.stringify(nextCleared));
+          localStorage.setItem("genius_cleared_announcements", JSON.stringify(nextCleared));
+        } catch {}
+      }
+    }
     setStudentNotifications((prev) => prev.filter((n) => n.id !== id));
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
