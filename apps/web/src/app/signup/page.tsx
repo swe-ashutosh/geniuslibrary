@@ -549,6 +549,8 @@ function SignupForm() {
             full_name: name,
             ...(generatedStudentCode ? { student_code: generatedStudentCode } : {}),
             phone: fullPhone,
+            gender: gender || "Male",
+            dob: dob || null,
             parent_name: parentName,
             parent_phone: fullParentPhone,
             address: address,
@@ -1186,7 +1188,7 @@ function SignupForm() {
                       <span className="font-bold text-[#0A2E5C] dark:text-white truncate">
                         {membershipPlan === "General" && "General Desk (Flexible Seating)"}
                         {membershipPlan === "Reserved Seat" && "Reserved Dedicated Desk"}
-                        {membershipPlan === "Trial Pass" && "3-Day Free Trial Pass (FREE)"}
+                        {membershipPlan === "Trial Pass" && "3-Day Free Trial Pass"}
                       </span>
                     </div>
 
@@ -1197,8 +1199,8 @@ function SignupForm() {
                   {isPlanDropdownOpen && (
                     <div className="absolute z-[60] left-0 right-0 top-full mt-1.5 rounded-2xl border border-[#E5E7EB] bg-white dark:bg-[#0A2E5C] dark:border-zinc-700 shadow-2xl p-1.5 space-y-1 max-h-56 overflow-y-auto">
                       {[
-                        { id: "General" as MembershipPlan, name: "General Desk", sub: "Flexible seating in 24/7 study zone", tag: "From ₹300", icon: BookOpen },
-                        { id: "Reserved Seat" as MembershipPlan, name: "Reserved Seat", sub: "Dedicated desk (Mini / Big / Locker)", tag: "From ₹500", icon: Crown },
+                        { id: "General" as MembershipPlan, name: "General Desk", sub: "Flexible seating in 24/7 study zone", icon: BookOpen },
+                        { id: "Reserved Seat" as MembershipPlan, name: "Reserved Seat", sub: "Dedicated desk (Mini / Big / Locker)", icon: Crown },
                         { id: "Trial Pass" as MembershipPlan, name: "3-Day Free Trial", sub: "100% Free 3-day test drive pass", tag: "FREE", icon: Sparkles },
                       ].map((plan) => {
                         const isSelected = membershipPlan === plan.id;
@@ -1243,15 +1245,17 @@ function SignupForm() {
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md font-mono ${
-                                isSelected
-                                  ? "bg-[#FFC107] text-[#0A2E5C]"
-                                  : plan.tag === "FREE"
-                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
-                                  : "bg-zinc-100 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300"
-                              }`}>
-                                {plan.tag}
-                              </span>
+                              {plan.tag && (
+                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md font-mono ${
+                                  isSelected
+                                    ? "bg-[#FFC107] text-[#0A2E5C]"
+                                    : plan.tag === "FREE"
+                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                    : "bg-zinc-100 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300"
+                                }`}>
+                                  {plan.tag}
+                                </span>
+                              )}
                               {isSelected && <Check className="h-3.5 w-3.5 text-[#FFC107]" />}
                             </div>
                           </div>

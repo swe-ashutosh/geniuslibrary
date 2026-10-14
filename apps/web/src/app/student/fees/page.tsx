@@ -87,29 +87,39 @@ export default function StudentFeesPage() {
       const hasUnpaidFee = feesData.some(f => !f.paid);
       const hasOutstandingDue = isDueInProfile || hasUnpaidFee;
 
+      const planRate = profileData?.membership_plan === "Trial Pass"
+        ? 0
+        : (profileData?.due_amount && Number(profileData.due_amount) > 0)
+        ? Number(profileData.due_amount)
+        : (profileData?.shift || "").toLowerCase().includes("3")
+        ? 300
+        : (profileData?.shift || "").toLowerCase().includes("6") || (profileData?.shift || "").toLowerCase().includes("mini")
+        ? 500
+        : (profileData?.shift || "").toLowerCase().includes("locker")
+        ? 700
+        : (profileData?.shift || "").toLowerCase().includes("big")
+        ? 600
+        : 500;
+
       const resolvedFeeStatus = hasOutstandingDue ? "Due" : "Paid";
+      const unpaidFeesSum = feesData.filter(f => !f.paid).reduce((s, f) => s + (f.amount || 0), 0);
       const resolvedDueAmount = hasOutstandingDue
-        ? Math.max(
-            Number(profileData?.due_amount || 0), 
-            feesData.filter(f => !f.paid).reduce((s, f) => s + (f.amount || 0), 0), 
-            600
-          )
+        ? (unpaidFeesSum > 0 ? unpaidFeesSum : planRate)
         : 0;
 
       // If feesData is empty, but student's operational status is "Paid", synthesize the official enrollment receipt
       if (feesData.length === 0 && !hasOutstandingDue) {
-        const shiftRate = (profileData?.shift || "").toLowerCase().includes("full") ? 1100 : ((profileData?.shift || "").toLowerCase().includes("evening") ? 500 : 600);
         feesData = [
           {
             id: `fee-${user.id.slice(0, 8)}`,
             studentId: user.id,
             studentName: profileData?.full_name || user.user_metadata?.full_name || "Student Member",
             type: "Monthly Seat Fee",
-            amount: shiftRate,
+            amount: planRate,
             paid: true,
             paidAt: new Date().toISOString(),
             receiptNo: `REC-${profileData?.student_code || user.id.slice(-6).toUpperCase()}`,
-            description: `${profileData?.membership_plan || "General"} Plan - ${profileData?.shift || "Morning Shift"}`,
+            description: `${profileData?.membership_plan || "General"} Plan - ${profileData?.shift || "Standard"}`,
             createdAt: new Date().toISOString(),
           }
         ];
@@ -121,10 +131,10 @@ export default function StudentFeesPage() {
             studentId: user.id,
             studentName: profileData?.full_name || user.user_metadata?.full_name || "Student Member",
             type: "Monthly Seat & Facility Fee",
-            amount: resolvedDueAmount > 0 ? resolvedDueAmount : 600,
+            amount: resolvedDueAmount > 0 ? resolvedDueAmount : planRate,
             paid: false,
             dueDate: "Immediate",
-            description: `${profileData?.membership_plan || "General"} Plan - ${profileData?.shift || "Morning Shift"} (Pending Dues)`,
+            description: `${profileData?.membership_plan || "General"} Plan - ${profileData?.shift || "Standard"} (Pending Dues)`,
             createdAt: new Date().toISOString(),
           }
         ];

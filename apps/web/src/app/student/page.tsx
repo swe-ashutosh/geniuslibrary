@@ -116,6 +116,7 @@ export default function StudentDashboard() {
     address: string;
     course: string;
     shift: string;
+    membership_plan?: string;
     role: string;
     status: "active" | "pending" | "suspended";
     avatar_url?: string | null;
@@ -137,6 +138,7 @@ export default function StudentDashboard() {
     address: "Madhupur, Sonbhadra, UP",
     course: "Civil Services / Competitive Exams",
     shift: "morning",
+    membership_plan: "General",
     role: "student",
     status: "active",
     avatar_url: null,
@@ -328,8 +330,8 @@ export default function StudentDashboard() {
         seat_number: realSeat || null,
         fee_status: rawFeeStatus,
         due_amount: rawDueAmount,
-        dob: profileData?.dob || null,
-        gender: profileData?.gender || "Male",
+        dob: profileData?.dob || meta.dob || null,
+        gender: profileData?.gender || meta.gender || "Male",
         join_date: profileData?.join_date || (profileData?.created_at ? profileData.created_at.split('T')[0] : null),
         continue_date: profileData?.continue_date || null,
         is_service_stopped: isServiceStopped,
@@ -416,7 +418,7 @@ export default function StudentDashboard() {
         setProfile((prev) => ({
           ...prev,
           fee_status: "Due",
-          due_amount: Math.max(totalUnpaidFeeAmount, rawDueAmount, 600),
+          due_amount: totalUnpaidFeeAmount > 0 ? totalUnpaidFeeAmount : rawDueAmount,
         }));
       } else {
         setProfile((prev) => ({
@@ -737,7 +739,9 @@ export default function StudentDashboard() {
     name: getCleanShiftDisplay(profile.shift || matchedShift?.name || "Morning Shift"),
     startTime: matchedShift?.startTime || "06:00 AM",
     endTime: matchedShift?.endTime || "12:00 PM",
-    fee: matchedShift?.fee || 600,
+    fee: profile.membership_plan === "Trial Pass" 
+      ? 0 
+      : (matchedShift?.fee || (profile.due_amount && profile.due_amount > 0 ? profile.due_amount : 500)),
   };
 
   // Generate dynamic QR pass
