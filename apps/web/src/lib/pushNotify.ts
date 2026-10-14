@@ -74,6 +74,9 @@ export async function playNotificationChime() {
 // SECTION 2 · NATIVE NOTIFICATION TRIGGER
 // Shows the OS popup via Service Worker (fallback when FCM is off).
 // ══════════════════════════════════════════════════════════════
+// Global in-memory debounce cache to prevent duplicate notification bursts
+const recentNotificationsCache = new Map<string, number>();
+
 export async function triggerNativeNotification(options: NativeNotificationOptions): Promise<boolean> {
   if (typeof window === "undefined") return false;
 
@@ -81,7 +84,32 @@ export async function triggerNativeNotification(options: NativeNotificationOptio
   const body = options.body || "";
   const icon = options.icon || "/icon-192.png";
   const url = options.url || "/";
-  const tag = options.tag || `genius-${Date.now()}`;
+
+  // Strict deduplication: attendance check-in/out and identical popups within 5s are dropped
+  const titleLower = title.toLowerCase();
+  const bodyLower = body.toLowerCase();
+  const isAttendanceNotif = titleLower.includes("check-in") || 
+                            titleLower.includes("check-out") || 
+                            titleLower.includes("attendance") ||
+                            bodyLower.includes("attendance recorded") ||
+                            bodyLower.includes("checked in") ||
+                            bodyLower.includes("checked out");
+
+  const dedupeKey = isAttendanceNotif 
+    ? "genius-attendance-single-popup" 
+    : `${title}:${body.slice(0, 40)}`;
+
+  const now = Date.now();
+  const lastFired = recentNotificationsCache.get(dedupeKey);
+  const dedupeWindow = isAttendanceNotif ? 5000 : 3000; // 5s debounce for attendance!
+
+  if (lastFired && (now - lastFired) < dedupeWindow) {
+    // Silently drop duplicate popup burst
+    return false;
+  }
+  recentNotificationsCache.set(dedupeKey, now);
+
+  const tag = options.tag || (isAttendanceNotif ? "genius-attendance-tag" : `genius-${Date.now()}`);
 
   // Audio & Haptic feedback
   if (!options.silent) {

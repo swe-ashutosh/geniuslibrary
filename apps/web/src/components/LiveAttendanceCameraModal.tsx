@@ -281,16 +281,6 @@ function playScanBeep() {
       // Dispatch global attendance updated event
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("attendance_updated"));
-        try {
-          const { triggerNativeNotification } = await import("@/lib/pushNotify");
-          const actionText = result.action === "checked_out" ? "Check-Out Confirmed" : "Check-In Confirmed";
-          triggerNativeNotification({
-            title: `✓ ${actionText}`,
-            body: result.message || `Attendance ${actionText.toLowerCase()} recorded successfully.`,
-            url: "/student/attendance",
-            tag: `modal-att-${Date.now()}`,
-          }).catch(() => {});
-        } catch {}
       }
 
       // Notify parent and auto-close after 1.8s

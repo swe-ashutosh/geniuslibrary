@@ -102,7 +102,7 @@ export function FullscreenStampAttendance({
           body: isOut
             ? `Goodbye ${studentName}! Your check-out at ${result.seatNumber || defaultSeat || "Desk"} is recorded.`
             : `Welcome ${studentName}! Attendance successfully verified with physical stamp at ${result.seatNumber || defaultSeat || "Desk"}.`,
-          tag: `stamp-attendance-${Date.now()}`,
+          tag: "genius-attendance-single-popup",
         }).catch(() => {});
 
         // Broadcast global update

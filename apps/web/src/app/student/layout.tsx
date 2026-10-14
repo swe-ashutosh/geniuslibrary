@@ -218,15 +218,15 @@ export default function StudentLayout({
           const rawSerial = event.serialNumber || "";
           const verifyResult = await verifyNfcSerialNumber(rawSerial);
           if (!verifyResult.authorized) {
-            console.warn("[NFC Background] Unauthorized tag tapped:", rawSerial);
+            console.warn("[NFC Background] Unauthorized tag tapped");
             if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
               try { window.navigator.vibrate([200, 100, 200]); } catch {}
             }
             triggerNativeNotification({
               title: "❌ Unauthorized NFC Tag",
-              body: `Tag Serial (${rawSerial || "Unknown"}) is not registered with Genius Library. Attendance rejected.`,
+              body: "This NFC tag is not registered with Genius Library. Attendance rejected.",
               url: "/student/attendance",
-              tag: `nfc-err-${Date.now()}`,
+              tag: "nfc-err-unauthorized",
             }).catch(() => {});
             return;
           }
@@ -341,11 +341,14 @@ export default function StudentLayout({
       setTimeout(() => recentNotifKeys.current.delete(alertData.dedupeKey!), 8000);
     }
 
-    triggerNativeNotification({
-      title: alertData.title,
-      body: alertData.body,
-      url: alertData.url,
-    });
+    // If attendance notification, skip native popup here to avoid duplicate with gate confirmation
+    if (alertData.type !== "attendance") {
+      triggerNativeNotification({
+        title: alertData.title,
+        body: alertData.body,
+        url: alertData.url,
+      });
+    }
 
     setLivePopupAlert({
       title: alertData.title,

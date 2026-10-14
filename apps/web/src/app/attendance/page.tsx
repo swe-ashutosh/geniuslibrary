@@ -40,6 +40,7 @@ import {
 import { BRAND_CONFIG } from "@/lib/config";
 import { BrandLogo } from "@/components/BrandLogo";
 import { LiveAttendanceCameraModal } from "@/components/LiveAttendanceCameraModal";
+import { triggerNativeNotification } from "@/lib/pushNotify";
 
 export default function AttendanceGatePage() {
   return (
@@ -90,8 +91,14 @@ function AttendanceGateContent() {
           setExternalScanDetected(true);
           setErrorMsg(null);
         } else {
-          setUnregisteredSerial(scannedSerial);
-          setErrorMsg(`❌ Unauthorized Gate QR/Tag! Serial "${scannedSerial}" is NOT registered with Genius Library.`);
+          setUnregisteredSerial(null);
+          setErrorMsg("❌ Unauthorized Gate QR/Tag! This tag is not registered with Genius Library.");
+          triggerNativeNotification({
+            title: "❌ Unauthorized Gate Tag",
+            body: "This QR/NFC tag is not registered with Genius Library. Attendance rejected.",
+            url: "/student/attendance",
+            tag: "gate-err-unauthorized",
+          }).catch(() => {});
           setExternalScanDetected(false);
         }
       } else if (source === "standee_qr" || source === "master_turnstile") {
@@ -185,21 +192,10 @@ function AttendanceGateContent() {
         seatNumber: res.seatNumber,
         time: res.checkInTime || res.checkOutTime || new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
         message: verificationMethod === "nfc"
-          ? `✓ Official Library NFC Verified${verifiedSerial ? ` (Tag Serial: ${verifiedSerial})` : ""}. No picture required.`
-          : `✓ Gate QR Verified. Attendance logged successfully.`,
+          ? "✓ Official Library NFC Verified. Attendance logged successfully."
+          : "✓ Gate QR Verified. Attendance logged successfully.",
         method: verificationMethod,
       });
-
-      try {
-        const { triggerNativeNotification } = await import("@/lib/pushNotify");
-        const actionLabel = res.action === "checked_out" ? "Check-Out Confirmed" : "Check-In Confirmed";
-        triggerNativeNotification({
-          title: `✓ ${actionLabel}, ${BRAND_CONFIG.shortName}`,
-          body: res.message || `${studentName} attendance recorded at ${res.checkInTime || res.checkOutTime}.`,
-          url: "/student/attendance",
-          tag: `gate-att-${Date.now()}`,
-        }).catch(() => {});
-      } catch {}
     } catch (err: any) {
       setErrorMsg(err.message || "Could not record attendance. Please try again.");
     } finally {
@@ -230,8 +226,14 @@ function AttendanceGateContent() {
           if (typeof window !== "undefined" && window.navigator && window.navigator.vibrate) {
             try { window.navigator.vibrate([200, 100, 200]); } catch {}
           }
-          setUnregisteredSerial(rawSerial || "UNKNOWN");
-          setErrorMsg(`❌ Unauthorized NFC Tag! Serial: "${rawSerial || "Empty"}". This tag is NOT registered with Genius Library. Attendance rejected.`);
+          setUnregisteredSerial(null);
+          setErrorMsg("❌ Unauthorized NFC Tag! This tag is not registered with Genius Library. Attendance rejected.");
+          triggerNativeNotification({
+            title: "❌ Unauthorized NFC Tag",
+            body: "This NFC tag is not registered with Genius Library. Attendance rejected.",
+            url: "/student/attendance",
+            tag: "nfc-err-unauthorized",
+          }).catch(() => {});
           setNfcListening(false);
           return;
         }

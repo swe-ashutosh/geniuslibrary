@@ -1180,7 +1180,7 @@ export async function smartQrScanAttendance(params: {
         title: notifTitle,
         body: notifBody,
         url: '/student/attendance',
-        tag: `att-out-${params.studentId}-${dateStr}`,
+        tag: 'genius-attendance-single-popup',
       }).catch(() => {});
     } catch {}
 
@@ -1331,7 +1331,7 @@ export async function smartQrScanAttendance(params: {
       title: notifTitle,
       body: notifBody,
       url: '/student/attendance',
-      tag: `att-in-${params.studentId}-${dateStr}`,
+      tag: 'genius-attendance-single-popup',
     }).catch(() => {});
   } catch {}
 
@@ -3752,11 +3752,11 @@ export async function createNotification(
   const cached = getLocalData<NotificationRecord[]>(STORAGE_KEYS.NOTIFICATIONS, []);
   setLocalData(STORAGE_KEYS.NOTIFICATIONS, [payload, ...cached.filter((c) => c.id !== payload.id)]);
 
-  // 3. Cross-tab real-time broadcast and instant native popup
+  // 3. Cross-tab real-time broadcast and instant native popup (attendance native popup handled directly by smartQrScanAttendance)
   try {
     const { broadcastNotification, triggerNativeNotification } = await import('./pushNotify');
     broadcastNotification(payload);
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && payload.type !== 'attendance') {
       triggerNativeNotification({
         title: payload.title,
         body: payload.message,
