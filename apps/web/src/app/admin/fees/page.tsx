@@ -1912,6 +1912,15 @@ export default function FeesAndExpensesManagement() {
                           {/* 🧾 Bill Icon: Open A4 Invoice Modal */}
                           <button
                             onClick={() => {
+                              const feeRate = (tx.shift || "").toLowerCase().includes("full") ? 1100 : (tx.shift || "").toLowerCase().includes("evening") ? 500 : ((tx.shift || "").toLowerCase().includes("locker") ? 700 : 600);
+                              const monthsCount = Math.max(1, Math.round(tx.amount / feeRate));
+                              const d = tx.date ? new Date(tx.date) : new Date();
+                              const period = !isNaN(d.getTime())
+                                ? (monthsCount <= 1 
+                                    ? d.toLocaleDateString("en-IN", { month: "long", year: "numeric" })
+                                    : `${d.toLocaleDateString("en-IN", { month: "short", year: "numeric" })} – ${new Date(new Date(d).setMonth(d.getMonth() + monthsCount - 1)).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}`)
+                                : "Monthly Fee";
+
                               setSelectedInvoice({
                                 invoiceNo: tx.receiptNo,
                                 date: tx.date,
@@ -1927,6 +1936,8 @@ export default function FeesAndExpensesManagement() {
                                 paymentMode: tx.method,
                                 status: "Paid",
                                 remarks: tx.notes || "Official Student Seat Fee",
+                                billingPeriod: period,
+                                monthsPaid: monthsCount,
                               });
                             }}
                             className="h-7 w-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 flex items-center justify-center transition active:scale-95 cursor-pointer shadow-2xs"
@@ -2038,6 +2049,15 @@ export default function FeesAndExpensesManagement() {
                       {/* Bill */}
                       <button
                         onClick={() => {
+                          const feeRate = (tx.shift || "").toLowerCase().includes("full") ? 1100 : (tx.shift || "").toLowerCase().includes("evening") ? 500 : ((tx.shift || "").toLowerCase().includes("locker") ? 700 : 600);
+                          const monthsCount = Math.max(1, Math.round(tx.amount / feeRate));
+                          const d = tx.date ? new Date(tx.date) : new Date();
+                          const period = !isNaN(d.getTime())
+                            ? (monthsCount <= 1 
+                                ? d.toLocaleDateString("en-IN", { month: "long", year: "numeric" })
+                                : `${d.toLocaleDateString("en-IN", { month: "short", year: "numeric" })} – ${new Date(new Date(d).setMonth(d.getMonth() + monthsCount - 1)).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}`)
+                            : "Monthly Fee";
+
                           setSelectedInvoice({
                             invoiceNo: tx.receiptNo,
                             date: tx.date,
@@ -2053,6 +2073,8 @@ export default function FeesAndExpensesManagement() {
                             paymentMode: tx.method,
                             status: "Paid",
                             remarks: tx.notes || "Official Student Seat Fee",
+                            billingPeriod: period,
+                            monthsPaid: monthsCount,
                           });
                         }}
                         className="h-7 w-7 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 flex items-center justify-center transition active:scale-95 cursor-pointer shadow-2xs"

@@ -873,6 +873,17 @@ export default function StudentDashboard() {
   const dueFeeAmount = profile.due_amount || 0;
   const isFeePaid = dueFeeAmount <= 0 && profile.fee_status !== "Due";
 
+  const planRate = activeShiftInfo.fee > 0 ? activeShiftInfo.fee : 600;
+  const pendingMonthsCount = dueFeeAmount > 0 ? Math.max(1, Math.ceil(dueFeeAmount / planRate)) : 0;
+  const anchorDateStr = profile.continue_date || profile.join_date || (profile as any).created_at || new Date().toISOString();
+  const anchorDate = new Date(anchorDateStr);
+  const currentMonthName = !isNaN(anchorDate.getTime())
+    ? anchorDate.toLocaleDateString("en-IN", { month: "short", year: "numeric" })
+    : new Date().toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+  const pendingMonthsSummary = pendingMonthsCount <= 1
+    ? `1 Mo Due (${currentMonthName})`
+    : `${pendingMonthsCount} Mos Due`;
+
   // Helper: parse time string ("06:30 AM", "14:00", etc.) to minutes
   const parseTimeStrToMinutes = (timeStr?: string | null): number | null => {
     if (!timeStr) return null;
@@ -1393,7 +1404,13 @@ export default function StudentDashboard() {
               <span className="text-[11px] font-bold text-zinc-400">{dueFeeAmount > 0 ? "due" : "✓"}</span>
             </div>
             <p className="mt-1.5 text-[10px] text-zinc-500 dark:text-zinc-400 truncate">
-              Plan: ₹{activeShiftInfo.fee}/mo ({activeShiftInfo.name})
+              {dueFeeAmount > 0 ? (
+                <span className="font-semibold text-amber-600 dark:text-amber-400">
+                  {pendingMonthsSummary} • Plan: ₹{activeShiftInfo.fee}/mo
+                </span>
+              ) : (
+                `Plan: ₹${activeShiftInfo.fee}/mo (${activeShiftInfo.name})`
+              )}
             </p>
           </div>
         </Link>

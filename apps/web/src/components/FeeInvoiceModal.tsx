@@ -38,6 +38,8 @@ export interface InvoiceData {
   transactionId?: string;
   status: "Paid" | "Pending" | "Overdue" | "Partial";
   remarks?: string;
+  billingPeriod?: string;
+  monthsPaid?: number;
 }
 
 interface FeeInvoiceModalProps {
@@ -104,7 +106,34 @@ export default function FeeInvoiceModal({
 
   const hasRemainingDue = invoice.remainingDue !== undefined && invoice.remainingDue > 0;
   const billedTotal = invoice.totalDue || (hasRemainingDue ? invoice.amount + (invoice.remainingDue || 0) : invoice.amount);
-  const amountInWords = `${numberToWordsINR(invoice.amount)} Rupees Only${hasRemainingDue ? ` (Received - Remaining Due: ₹${invoice.remainingDue})` : ''}`;
+  const amountInWords = `${numberToWordsINR(invoice.amount)}${hasRemainingDue ? ` (Received - Remaining Due: ₹${invoice.remainingDue})` : ''}`;
+
+  // Resolve fee coverage / duration for invoice
+  const planRate = invoice.planName?.toLowerCase().includes("full") 
+    ? 1100 
+    : invoice.planName?.toLowerCase().includes("evening") 
+      ? 500 
+      : (invoice.shift?.toLowerCase().includes("locker") || invoice.feeType?.toLowerCase().includes("locker") ? 700 : 600);
+
+  const resolvedMonthsPaid = invoice.monthsPaid || Math.max(1, Math.round(invoice.amount / (planRate || 600)));
+
+  let resolvedBillingPeriod = invoice.billingPeriod;
+  if (!resolvedBillingPeriod) {
+    const d = new Date(invoice.date);
+    if (!isNaN(d.getTime())) {
+      if (resolvedMonthsPaid <= 1) {
+        resolvedBillingPeriod = d.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+      } else {
+        const startM = d.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+        const endD = new Date(d);
+        endD.setMonth(endD.getMonth() + resolvedMonthsPaid - 1);
+        const endM = endD.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+        resolvedBillingPeriod = `${startM} – ${endM}`;
+      }
+    } else {
+      resolvedBillingPeriod = "Monthly Fee";
+    }
+  }
 
   /**
    * Generates a guaranteed, self-contained, CSS-styled single A4 sheet.
@@ -438,7 +467,7 @@ export default function FeeInvoiceModal({
             </div>
 
             <div class="invoice-badge-box">
-              <span class="invoice-tag">Tax Invoice / Receipt</span>
+              <span class="invoice-tag">INVOICE / RECEIPT</span>
               <div class="invoice-meta">
                 <div>Invoice: <strong>${formattedInvoiceNo}</strong></div>
                 <div>Date: <strong>${formattedDate}</strong></div>
@@ -460,6 +489,7 @@ export default function FeeInvoiceModal({
             <div class="info-col">
               <div class="info-label">Desk &amp; Payment Details</div>
               <div class="info-row"><span>Shift:</span><span>${invoice.shift || "Morning Shift (06:00 AM - 12:00 PM)"}</span></div>
+              <div class="info-row"><span>Paid Period:</span><span style="font-weight: 700; color: #0A2E5C;">${resolvedMonthsPaid} Month${resolvedMonthsPaid > 1 ? "s" : ""} (${resolvedBillingPeriod})</span></div>
               ${invoice.seatNo ? `<div class="info-row"><span>Seat / Desk:</span><span>${invoice.seatNo}</span></div>` : ""}
               <div class="info-row"><span>Payment Mode:</span><span>${invoice.paymentMode || "Digital Transfer / Online"}</span></div>
               ${invoice.transactionId ? `<div class="info-row"><span>Ref / Txn ID:</span><span>${invoice.transactionId}</span></div>` : ""}
@@ -478,7 +508,7 @@ export default function FeeInvoiceModal({
               <tr>
                 <th style="width: 30px;">#</th>
                 <th>Description of Service &amp; Facilities</th>
-                <th class="text-center" style="width: 140px;">Period / Shift</th>
+                <th class="text-center" style="width: 140px;">Coverage / Shift</th>
                 <th class="text-right" style="width: 80px;">Amount</th>
               </tr>
             </thead>
@@ -489,7 +519,11 @@ export default function FeeInvoiceModal({
                   <strong>${invoice.feeType || "General Plan - Monthly Seat Fee"}</strong>
                   <div class="sub-text">High-speed Wi-Fi, Air Conditioned Reading Hall, Power Backup, Dedicated Desk, RO Water</div>
                 </td>
-                <td class="text-center">${invoice.shift || "Morning Shift"}</td>
+                <td class="text-center">
+                  <div style="font-weight: 700; color: #0A2E5C;">${resolvedMonthsPaid} Month${resolvedMonthsPaid > 1 ? "s" : ""} Paid</div>
+                  <div style="font-size: 9.5px; color: #0B5ED7; font-weight: 600;">${resolvedBillingPeriod}</div>
+                  <div style="font-size: 8.5px; color: #666666; margin-top: 2px;">${invoice.shift || "Regular Shift"}</div>
+                </td>
                 <td class="text-right" style="font-weight: 700;">₹${invoice.amount.toLocaleString("en-IN")}.00</td>
               </tr>
               <tr>
@@ -656,7 +690,7 @@ export default function FeeInvoiceModal({
                 {/* Invoice Tag & Metadata */}
                 <div className="flex sm:flex-col justify-between items-center sm:items-end border-t sm:border-t-0 pt-2 sm:pt-0 border-zinc-100 shrink-0">
                   <span className="inline-block rounded-md bg-[#0A2E5C] px-2.5 py-1 text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-[#FFC107]">
-                    Tax Invoice / Receipt
+                    INVOICE / RECEIPT
                   </span>
                   <div className="mt-1 sm:mt-1.5 text-[10.5px] sm:text-[11px] space-y-0.5 text-right">
                     <p className="text-zinc-500">Invoice: <span className="font-mono font-black text-zinc-900">{formattedInvoiceNo}</span></p>
@@ -706,6 +740,10 @@ export default function FeeInvoiceModal({
                   <span className="text-zinc-500">Shift:</span>
                   <span className="font-bold text-zinc-900">{invoice.shift || "Morning Shift"}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Paid Period:</span>
+                  <span className="font-bold text-[#0A2E5C]">{resolvedMonthsPaid} Month{resolvedMonthsPaid > 1 ? "s" : ""} ({resolvedBillingPeriod})</span>
+                </div>
                 {invoice.seatNo && (
                   <div className="flex justify-between">
                     <span className="text-zinc-500">Seat / Desk:</span>
@@ -744,7 +782,7 @@ export default function FeeInvoiceModal({
                   <tr className="bg-[#0A2E5C] text-white text-[10px] font-bold uppercase tracking-wider">
                     <th className="py-2 px-3">#</th>
                     <th className="py-2 px-3">Description of Service & Facilities</th>
-                    <th className="py-2 px-3 text-center">Period / Shift</th>
+                    <th className="py-2 px-3 text-center">Coverage / Shift</th>
                     <th className="py-2 px-3 text-right">Amount</th>
                   </tr>
                 </thead>
@@ -757,8 +795,10 @@ export default function FeeInvoiceModal({
                         High-speed Wi-Fi, Air Conditioned Reading Hall, Power Backup, Dedicated Desk, RO Water
                       </p>
                     </td>
-                    <td className="py-2 px-3 text-center font-medium text-zinc-600">
-                      {invoice.shift || "Monthly Membership"}
+                    <td className="py-2 px-3 text-center">
+                      <p className="font-bold text-[#0A2E5C] text-[10.5px]">{resolvedMonthsPaid} Month{resolvedMonthsPaid > 1 ? "s" : ""} Paid</p>
+                      <p className="text-[9.5px] font-semibold text-[#0B5ED7]">{resolvedBillingPeriod}</p>
+                      <p className="text-[9px] text-zinc-500">{invoice.shift || "Monthly Membership"}</p>
                     </td>
                     <td className="py-2 px-3 text-right font-black text-zinc-900">
                       ₹{invoice.amount.toLocaleString("en-IN")}.00

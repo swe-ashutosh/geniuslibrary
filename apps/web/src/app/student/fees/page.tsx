@@ -24,7 +24,8 @@ import {
   Mail,
   Copy,
   Check,
-  Info
+  Info,
+  AlertTriangle
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getFees, createFee, FeeRecord, sendFeeReceiptEmail, createNotification, sendMessage, generateInvoiceNumber, formatInvoiceNumber } from "@/lib/api";
@@ -164,6 +165,38 @@ export default function StudentFeesPage() {
   const totalUnpaidAmount = Math.max(feesDueSum, profile?.due_amount || 0);
   const pendingFee = unpaidFees[0] || null;
   const isDue = totalUnpaidAmount > 0 || profile?.fee_status === "Due";
+
+  // Calculate pending months count & month breakdown
+  const planRateForCalc = currentPlanRate > 0 ? currentPlanRate : 600;
+  const pendingMonthsCount = totalUnpaidAmount > 0 
+    ? Math.max(1, Math.ceil(totalUnpaidAmount / planRateForCalc))
+    : 0;
+
+  const anchorDateStr = profile?.continue_date || profile?.join_date || (profile as any)?.created_at || new Date().toISOString();
+  const anchorDate = new Date(anchorDateStr);
+  const pendingMonthsList: string[] = [];
+
+  if (unpaidFees.length > 0) {
+    unpaidFees.forEach((uf) => {
+      const fDate = (uf as any).date || uf.createdAt || uf.dueDate;
+      if (fDate) {
+        const d = new Date(fDate);
+        if (!isNaN(d.getTime())) {
+          pendingMonthsList.push(d.toLocaleDateString("en-IN", { month: "long", year: "numeric" }));
+        }
+      }
+    });
+  }
+
+  while (pendingMonthsList.length < pendingMonthsCount) {
+    const nextD = new Date(anchorDate);
+    nextD.setMonth(nextD.getMonth() + pendingMonthsList.length);
+    pendingMonthsList.push(nextD.toLocaleDateString("en-IN", { month: "long", year: "numeric" }));
+  }
+
+  const pendingMonthsText = pendingMonthsCount <= 1
+    ? `1 Month (${pendingMonthsList[0] || "Current Month"})`
+    : `${pendingMonthsCount} Months (${pendingMonthsList.join(", ")})`;
 
   const handleEmailReceipt = async (receipt: FeeRecord) => {
     const email = profile?.email;
@@ -328,11 +361,18 @@ export default function StudentFeesPage() {
             </span>
           </div>
           <p className="text-[10px] sm:text-xs font-bold text-zinc-500 truncate">{isDue ? "Outstanding Due" : "Fee Status"}</p>
-          <p className={`text-sm sm:text-xl font-black mt-0.5 sm:mt-1 truncate ${isDue ? "text-amber-600 dark:text-amber-400" : "text-[#0A2E5C] dark:text-white"}`}>
-            {isDue ? `₹${totalUnpaidAmount}` : "All Clear"}
-          </p>
-          <p className={`text-[9px] sm:text-[10px] font-semibold mt-1 truncate ${isDue ? "text-amber-600" : "text-emerald-600"}`}>
-            {isDue ? (pendingFee?.dueDate ? `Due: ${pendingFee.dueDate}` : "Payment Pending") : "All dues cleared"}
+          <div className="flex items-baseline gap-1.5 mt-0.5 sm:mt-1">
+            <p className={`text-lg sm:text-2xl font-black truncate ${isDue ? "text-amber-600 dark:text-amber-400" : "text-[#0A2E5C] dark:text-white"}`}>
+              {isDue ? `₹${totalUnpaidAmount}` : "All Clear"}
+            </p>
+            {isDue && (
+              <span className="text-[9px] sm:text-[10px] font-bold text-amber-700 bg-amber-100 dark:bg-amber-900/60 dark:text-amber-300 px-1.5 py-0.5 rounded shrink-0">
+                {pendingMonthsCount} Mo Due
+              </span>
+            )}
+          </div>
+          <p className={`text-[9px] sm:text-[10px] font-semibold mt-1 truncate ${isDue ? "text-amber-600 dark:text-amber-300" : "text-emerald-600"}`}>
+            {isDue ? pendingMonthsText : "All dues cleared"}
           </p>
         </div>
 
@@ -362,14 +402,14 @@ export default function StudentFeesPage() {
                   Fee Payment Pending
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 dark:bg-amber-900/80 dark:text-amber-200">
-                  Due Immediate
+                  {pendingMonthsCount} Month{pendingMonthsCount > 1 ? "s" : ""} Due
                 </span>
               </div>
               <p className="text-xs text-amber-800 dark:text-amber-300/90 mt-0.5">
-                {profile?.membership_plan || "Library"} • {profile?.shift || "Standard"} — Outstanding balance: <strong className="font-black text-amber-950 dark:text-amber-100">₹{totalUnpaidAmount}</strong>
+                {profile?.membership_plan || "Library"} • {profile?.shift || "Standard"} — Outstanding balance: <strong className="font-black text-amber-950 dark:text-amber-100">₹{totalUnpaidAmount}</strong> ({pendingMonthsText})
               </p>
               <p className="text-[11px] text-amber-700/80 dark:text-amber-400 mt-0.5">
-                Official tax invoice and payment receipt will be generated automatically once your payment is received and verified.
+                Official fee invoice and payment receipt will be generated automatically once your payment is received and verified.
               </p>
             </div>
           </div>
@@ -381,6 +421,82 @@ export default function StudentFeesPage() {
             <Sparkles className="h-4 w-4" />
             <span>Pay ₹{totalUnpaidAmount} via UPI QR</span>
           </button>
+        </div>
+      )}
+
+      {/* Itemized Pending Fee Invoices Card */}
+      {isDue && (
+        <div className="rounded-3xl border border-amber-200 bg-white p-5 shadow-xs dark:border-amber-900/60 dark:bg-[#0A2E5C]">
+          <div className="flex items-center justify-between pb-3 border-b border-amber-100 dark:border-amber-900/40 mb-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <h3 className="text-sm font-bold text-[#0A2E5C] dark:text-white">
+                Pending Monthly Invoices ({pendingMonthsCount} Month{pendingMonthsCount > 1 ? "s" : ""} Due)
+              </h3>
+            </div>
+            <span className="text-xs font-black text-amber-600 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-900/60 px-2.5 py-0.5 rounded-full">
+              Total Due: ₹{totalUnpaidAmount}
+            </span>
+          </div>
+
+          <div className="space-y-2.5">
+            {unpaidFees.length > 0 ? (
+              unpaidFees.map((fee, idx) => {
+                const mName = pendingMonthsList[idx] || "Monthly Cycle";
+                return (
+                  <div key={fee.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/40 gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-[#0A2E5C] dark:text-white">
+                          {fee.description || `${fee.type || "Monthly Seat Fee"} - ${mName}`}
+                        </span>
+                        <span className="text-[10px] font-mono font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/80 dark:text-amber-200 px-2 py-0.5 rounded">
+                          Month {idx + 1} of {pendingMonthsCount}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                        Billing Period: <strong className="text-zinc-700 dark:text-zinc-300">{mName}</strong> • Due Date: {fee.dueDate || "Upon Admission / Renewal"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-base font-black text-amber-950 dark:text-amber-100">₹{fee.amount}</span>
+                      <button
+                        onClick={openPaymentModal}
+                        className="px-3.5 py-1.5 rounded-xl bg-linear-to-r from-[#0A2E5C] to-[#0B5ED7] text-[#FFC107] text-xs font-bold shadow-xs hover:opacity-95 transition cursor-pointer"
+                      >
+                        Pay ₹{fee.amount}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/40 gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#0A2E5C] dark:text-white">
+                      {profile?.membership_plan || "General"} Plan Fee • {pendingMonthsText}
+                    </span>
+                    <span className="text-[10px] font-mono font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/80 dark:text-amber-200 px-2 py-0.5 rounded">
+                      {pendingMonthsCount} Month{pendingMonthsCount > 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Shift: {profile?.shift || "Standard Shift"} • Rate: ₹{planRateForCalc}/mo
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-base font-black text-amber-950 dark:text-amber-100">₹{totalUnpaidAmount}</span>
+                  <button
+                    onClick={openPaymentModal}
+                    className="px-3.5 py-1.5 rounded-xl bg-linear-to-r from-[#0A2E5C] to-[#0B5ED7] text-[#FFC107] text-xs font-bold shadow-xs hover:opacity-95 transition cursor-pointer"
+                  >
+                    Pay ₹{totalUnpaidAmount}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -406,7 +522,7 @@ export default function StudentFeesPage() {
               <IndianRupee className="h-7 w-7 mx-auto text-zinc-300 dark:text-zinc-600" />
               <p className="font-bold text-zinc-600 dark:text-zinc-300 text-sm">No payment receipts or invoices generated yet</p>
               <p className="text-[11px] max-w-md mx-auto text-zinc-500 dark:text-zinc-400">
-                Invoices and official receipts are generated upon successful fee payment. Once your payment is verified, your official tax receipt (e.g. <span className="font-mono font-semibold">INV-2610-001</span>) will appear here for download.
+                Invoices and official receipts are generated upon successful fee payment. Once your payment is verified, your official receipt (e.g. <span className="font-mono font-semibold">INV-2610-001</span>) will appear here for download.
               </p>
             </div>
           ) : paidFees.map((fee) => {
@@ -605,6 +721,10 @@ export default function StudentFeesPage() {
             paymentMode: "Digital Transfer / Online",
             transactionId: selectedReceipt.id,
             status: ((selectedReceipt.remainingDue != null && selectedReceipt.remainingDue > 0) || (profile?.due_amount && profile.due_amount > 0)) ? "Partial" : "Paid",
+            monthsPaid: Math.max(1, Math.round(selectedReceipt.amount / (currentPlanRate || 600))),
+            billingPeriod: selectedReceipt.paidAt 
+              ? new Date(selectedReceipt.paidAt).toLocaleDateString("en-IN", { month: "long", year: "numeric" })
+              : new Date().toLocaleDateString("en-IN", { month: "long", year: "numeric" }),
           }}
           onClose={() => {
             setSelectedReceipt(null);
