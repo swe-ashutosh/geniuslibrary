@@ -1121,8 +1121,11 @@ export async function smartQrScanAttendance(params: {
       console.warn('Supabase checkout update error:', updErr);
     }
 
-    // 2. Release seat in seats table (Supabase primary store)
-    await markSeatVacantInSupabase(supabase, params.studentId, seatToRelease);
+    // 2. Only release seat in seats table for non-reserved (General / Flexible) students!
+    // Reserved seat holders keep their dedicated seat permanently even when checked out!
+    if (!isStudentReserved) {
+      await markSeatVacantInSupabase(supabase, params.studentId, seatToRelease);
+    }
 
     // 3. Update local cache
     try {
@@ -1134,19 +1137,23 @@ export async function smartQrScanAttendance(params: {
       );
       setLocalData(STORAGE_KEYS.ATTENDANCE, updatedCache);
 
-      const cachedSeats = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
-      if (cachedSeats.length > 0) {
-        const updatedSeats = cachedSeats.map(s => {
-          const match = (seatToRelease && matchSeatNumber(s.seatNumber, seatToRelease)) || s.currentStudentId === params.studentId;
-          return match ? { ...s, isAvailable: true, currentStudentId: null, currentStudentName: null, occupiedAt: null } : s;
-        });
-        setLocalData(STORAGE_KEYS.SEATS, updatedSeats);
+      if (!isStudentReserved) {
+        const cachedSeats = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
+        if (cachedSeats.length > 0) {
+          const updatedSeats = cachedSeats.map(s => {
+            const match = (seatToRelease && matchSeatNumber(s.seatNumber, seatToRelease)) || s.currentStudentId === params.studentId;
+            return match ? { ...s, isAvailable: true, currentStudentId: null, currentStudentName: null, occupiedAt: null } : s;
+          });
+          setLocalData(STORAGE_KEYS.SEATS, updatedSeats);
+        }
       }
     } catch {}
 
     // 4. Notifications & WhatsApp
     const notifTitle = '✓ Attendance Check-Out Confirmed';
-    const notifBody = `Checked out at ${timeStr}${seatToRelease ? ` from Desk #${seatToRelease}` : ''}. Desk is now free. Have a great study day!`;
+    const notifBody = isStudentReserved
+      ? `Checked out at ${timeStr}. Your reserved Desk #${seatToRelease || reservedDesk} remains exclusively yours. Have a great study day!`
+      : `Checked out at ${timeStr}${seatToRelease ? ` from Desk #${seatToRelease}` : ''}. Desk is now free. Have a great study day!`;
 
     createNotification({
       recipientRole: 'student',
@@ -1451,8 +1458,24 @@ export async function recordCheckOut(studentId: string, studentName?: string) {
       .eq('student_id', studentId)
       .eq('date', dateStr);
 
-    // Free the seat in Supabase seats table
-    await markSeatVacantInSupabase(supabase, studentId, seatToRelease);
+    // Check if student has a dedicated/reserved seat
+    const { data: stProfile } = await supabase
+      .from('profiles')
+      .select('membership_plan, seat_number, is_reserved')
+      .eq('id', studentId)
+      .maybeSingle();
+
+    const planStr = String(stProfile?.membership_plan || '').toLowerCase();
+    const isReservedStudent = Boolean(
+      stProfile?.seat_number &&
+      (planStr.includes('reserved') || stProfile?.is_reserved === true || (!planStr.includes('general') && !planStr.includes('trial')))
+    );
+
+    // Free the seat in Supabase seats table ONLY for non-reserved members
+    // Reserved seat holders keep their dedicated seat permanently even when checked out!
+    if (!isReservedStudent) {
+      await markSeatVacantInSupabase(supabase, studentId, seatToRelease);
+    }
   } catch (sbErr) {
     console.warn('Supabase checkout update notice:', sbErr);
   }
@@ -1466,23 +1489,12 @@ export async function recordCheckOut(studentId: string, studentName?: string) {
   } : r);
   setLocalData(STORAGE_KEYS.ATTENDANCE, updated);
 
-  try {
-    const cachedSeats = getLocalData<Seat[]>(STORAGE_KEYS.SEATS, []);
-    if (cachedSeats.length > 0) {
-      const updatedSeats = cachedSeats.map(s => {
-        const match = (seatToRelease && matchSeatNumber(s.seatNumber, seatToRelease)) || s.currentStudentId === studentId;
-        return match ? { ...s, isAvailable: true, currentStudentId: null, currentStudentName: null, occupiedAt: null } : s;
-      });
-      setLocalData(STORAGE_KEYS.SEATS, updatedSeats);
-    }
-  } catch {}
-
   // 3. Notification & WhatsApp
   createNotification({
     recipientRole: 'student',
     recipientId: studentId,
     title: '✓ Attendance Check-Out Confirmed',
-    message: `Checked out successfully at ${timeStr}${seatToRelease ? ` from Desk #${seatToRelease}` : ''}. Desk is now free. Have a great study day!`,
+    message: `Checked out successfully at ${timeStr}. Have a great study day!`,
     type: 'attendance',
     actionUrl: '/student/attendance',
   }).catch(() => {});
