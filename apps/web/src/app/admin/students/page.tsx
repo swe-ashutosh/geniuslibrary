@@ -269,6 +269,7 @@ function StudentsDirectoryContent() {
   // Resume / Continue Service Modal State
   const [resumeServiceStudent, setResumeServiceStudent] = useState<StudentProfile | null>(null);
   const [continueDateInput, setContinueDateInput] = useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [resumeSeatInput, setResumeSeatInput] = useState<string>("");
   const [isResumingService, setIsResumingService] = useState(false);
 
   const [showPrintCardsModal, setShowPrintCardsModal] = useState(false);
@@ -1486,7 +1487,9 @@ function StudentsDirectoryContent() {
 
     setActionLoadingId(editStudentForm.id);
     try {
-      const seatNum = editStudentForm.membership_plan === "Reserved Seat" ? (editStudentForm.seat_number?.trim() || null) : null;
+      const existingStudent = students.find((s) => s.id === editStudentForm.id);
+      const isReservedPlan = editStudentForm.membership_plan === "Reserved Seat" || String(editStudentForm.membership_plan || "").toLowerCase().includes("reserved");
+      const seatNum = isReservedPlan ? (editStudentForm.seat_number?.trim() || existingStudent?.seat_number || null) : null;
       const finalJoin = editStudentForm.join_date || (editStudentForm.created_at ? editStudentForm.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
       const finalContinue = editStudentForm.continue_date || finalJoin;
 
@@ -1540,6 +1543,14 @@ function StudentsDirectoryContent() {
           // If dob column not added yet, retry without dob
           delete supaDirectPayload.dob;
           await supabase.from("profiles").update(supaDirectPayload).eq("id", editStudentForm.id);
+        }
+
+        if (seatNum && editStudentForm.id) {
+          try {
+            await allocateSeat(seatNum, editStudentForm.id, editStudentForm.full_name, editStudentForm.shift);
+          } catch (alErr) {
+            console.warn("Seat allocation notice:", alErr);
+          }
         }
       } catch (directErr) {
         console.warn("Direct Supabase update notice:", directErr);
@@ -1625,10 +1636,9 @@ function StudentsDirectoryContent() {
       const supabase = createClient();
       const currentSeatNumber = student.seat_number;
 
-      // 1. Update Supabase profiles: strictly only existing columns (status, seat_number, updated_at)
+      // 1. Update Supabase profiles: strictly only existing columns (status, updated_at) - preserve assigned seat!
       const { error: profileErr } = await supabase.from("profiles").update({
         status: "suspended",
-        seat_number: null,
         updated_at: new Date().toISOString(),
       }).eq("id", student.id);
 
@@ -1637,13 +1647,12 @@ function StudentsDirectoryContent() {
         if (student.email) {
           await supabase.from("profiles").update({
             status: "suspended",
-            seat_number: null,
             updated_at: new Date().toISOString(),
           }).eq("email", student.email);
         }
       }
 
-      // 2. If they had an occupied seat, mark it vacant in seats table
+      // 2. Clear temporary seat occupancy in seats table while keeping profile seat
       try {
         const { markSeatVacantInSupabase } = await import("@/lib/api");
         await markSeatVacantInSupabase(supabase, student.id, currentSeatNumber);
@@ -1651,12 +1660,12 @@ function StudentsDirectoryContent() {
         console.warn("Notice releasing seat:", seatErr);
       }
 
-      // 3. Update React local state
+      // 3. Update React local state - preserve seat_number!
       const updatedRecord: StudentProfile = {
         ...student,
         is_service_stopped: true,
         status: "suspended",
-        seat_number: undefined,
+        seat_number: student.seat_number,
         service_stopped_at: new Date().toISOString(),
       };
 
@@ -1669,7 +1678,7 @@ function StudentsDirectoryContent() {
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("library_seat_update"));
         window.dispatchEvent(new CustomEvent("student_service_status_changed", {
-          detail: { id: student.id, status: "suspended", seat_number: null }
+          detail: { id: student.id, status: "suspended", seat_number: student.seat_number }
         }));
         if (typeof BroadcastChannel !== "undefined") {
           try {
@@ -1691,10 +1700,11 @@ function StudentsDirectoryContent() {
     }
   };
 
-  // Open Resume Service Modal (Prompts for Continue Date)
+  // Open Resume Service Modal (Prompts for Continue Date & Dedicated Seat)
   const handleOpenResumeServiceModal = (student: StudentProfile) => {
     setResumeServiceStudent(student);
     setContinueDateInput(new Date().toISOString().split("T")[0]);
+    setResumeSeatInput(student.seat_number || "");
   };
 
   // Confirm Resume Service with selected Continue Date
@@ -1766,22 +1776,34 @@ function StudentsDirectoryContent() {
         finalFeeStatus = "Due";
       }
 
-      const { error: resErr } = await supabase.from("profiles").update({
+      const isReservedPlan = resumeServiceStudent.membership_plan === "Reserved Seat" || String(resumeServiceStudent.membership_plan || "").toLowerCase().includes("reserved");
+      const finalSeatNumber = isReservedPlan
+        ? (resumeSeatInput?.trim() || resumeServiceStudent.seat_number || null)
+        : null;
+
+      const profileUpdatePayload: any = {
         status: "active",
         continue_date: chosenContinueDate,
         due_amount: finalDueAmount,
         fee_status: finalFeeStatus,
         updated_at: new Date().toISOString(),
-      }).eq("id", resumeServiceStudent.id);
+      };
+      if (finalSeatNumber) {
+        profileUpdatePayload.seat_number = finalSeatNumber;
+      }
+
+      const { error: resErr } = await supabase.from("profiles").update(profileUpdatePayload).eq("id", resumeServiceStudent.id);
 
       if (resErr && resumeServiceStudent.email) {
-        await supabase.from("profiles").update({
-          status: "active",
-          continue_date: chosenContinueDate,
-          due_amount: finalDueAmount,
-          fee_status: finalFeeStatus,
-          updated_at: new Date().toISOString(),
-        }).eq("email", resumeServiceStudent.email);
+        await supabase.from("profiles").update(profileUpdatePayload).eq("email", resumeServiceStudent.email);
+      }
+
+      if (finalSeatNumber) {
+        try {
+          await allocateSeat(finalSeatNumber, resumeServiceStudent.id, resumeServiceStudent.full_name, resumeServiceStudent.shift);
+        } catch (alErr) {
+          console.warn("Resume seat allocation notice:", alErr);
+        }
       }
 
       const updatedRecord: StudentProfile = {
@@ -1789,6 +1811,7 @@ function StudentsDirectoryContent() {
         is_service_stopped: false,
         status: "active",
         continue_date: chosenContinueDate,
+        seat_number: finalSeatNumber || resumeServiceStudent.seat_number,
         due_amount: finalDueAmount,
         fee_status: finalFeeStatus as any,
       };
@@ -2979,9 +3002,17 @@ function StudentsDirectoryContent() {
                                   Seat #{std.seat_number}
                                 </p>
                               ) : (
-                                <p className="text-[10px] text-amber-500 font-bold mt-0.5 ml-1">
-                                  Seat Unassigned
-                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedStudentForEdit(std);
+                                    setEditStudentForm(std);
+                                  }}
+                                  className="text-[10px] text-amber-600 dark:text-amber-400 hover:underline font-bold mt-0.5 ml-1 inline-flex items-center gap-0.5 cursor-pointer"
+                                  title="Click to assign seat number"
+                                >
+                                  Seat Unassigned (Assign)
+                                </button>
                               )}
                             </div>
                           ) : std.membership_plan === "Trial Pass" ? (
@@ -3216,8 +3247,25 @@ function StudentsDirectoryContent() {
                   <div className="mt-3 space-y-1 text-xs text-zinc-600 dark:text-zinc-300">
                     <p><strong className="text-zinc-400 font-semibold">Course:</strong> {std.course || "General"}</p>
                     <p><strong className="text-zinc-400 font-semibold">Shift:</strong> {std.shift || "Morning"}</p>
-                    <p><strong className="text-zinc-400 font-semibold">Plan:</strong> {std.membership_plan === "Reserved Seat" ? "Reserved Seat" : "General Desk"}</p>
-                    {std.membership_plan === "Reserved Seat" && std.seat_number && <p><strong className="text-purple-600 font-bold">Seat:</strong> #{std.seat_number}</p>}
+                    {std.membership_plan === "Reserved Seat" && (
+                      <p>
+                        <strong className="text-purple-600 font-bold">Seat:</strong>{" "}
+                        {std.seat_number ? (
+                          `#${std.seat_number}`
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedStudentForEdit(std);
+                              setEditStudentForm(std);
+                            }}
+                            className="text-amber-600 dark:text-amber-400 font-bold underline cursor-pointer"
+                          >
+                            Unassigned (Assign)
+                          </button>
+                        )}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -5519,6 +5567,25 @@ function StudentsDirectoryContent() {
                   />
                 </div>
               </div>
+
+              {(resumeServiceStudent.membership_plan === "Reserved Seat" || String(resumeServiceStudent.membership_plan || "").toLowerCase().includes("reserved")) && (
+                <div>
+                  <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-200 mb-1.5 flex items-center justify-between">
+                    <span>Dedicated Seat Number</span>
+                    <span className="text-[10px] text-purple-600 font-bold">Reserved Seat Plan</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. S-01 or 106"
+                    value={resumeSeatInput}
+                    onChange={(e) => setResumeSeatInput(e.target.value.toUpperCase())}
+                    className="w-full rounded-xl border border-purple-300 bg-white py-2.5 px-3 text-xs font-mono font-bold text-purple-700 dark:border-purple-700 dark:bg-zinc-800 dark:text-purple-300 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+                  />
+                  <p className="text-[10px] text-zinc-400 mt-1">
+                    Student's reserved desk will be restored and allocated upon resumption.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="pt-3 border-t border-[#E5E7EB]/60 dark:border-zinc-800 flex items-center justify-end gap-2">

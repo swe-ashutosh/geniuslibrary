@@ -561,10 +561,9 @@ export default function StudentDashboard() {
       const supabase = createClient();
       const currentSeatNumber = profile.seat_number;
 
-      // 1. Update Supabase profiles: strictly only existing columns (status, seat_number, updated_at)
+      // 1. Update Supabase profiles: strictly only existing columns (status, updated_at) - preserve seat_number!
       const { error: profileErr } = await supabase.from("profiles").update({
         status: "suspended",
-        seat_number: null,
         updated_at: new Date().toISOString(),
       }).eq("id", profile.id);
 
@@ -573,7 +572,6 @@ export default function StudentDashboard() {
         if (profile.email) {
           await supabase.from("profiles").update({
             status: "suspended",
-            seat_number: null,
             updated_at: new Date().toISOString(),
           }).eq("email", profile.email);
         }
@@ -592,7 +590,7 @@ export default function StudentDashboard() {
         ...prev,
         is_service_stopped: true,
         status: "suspended",
-        seat_number: null,
+        seat_number: profile.seat_number,
         service_stopped_at: new Date().toISOString(),
       }));
 
@@ -600,7 +598,7 @@ export default function StudentDashboard() {
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("library_seat_update"));
         window.dispatchEvent(new CustomEvent("student_service_status_changed", {
-          detail: { id: profile.id, status: "suspended", seat_number: null }
+          detail: { id: profile.id, status: "suspended", seat_number: profile.seat_number }
         }));
         if (typeof BroadcastChannel !== "undefined") {
           try {
@@ -704,6 +702,15 @@ export default function StudentDashboard() {
           fee_status: finalFeeStatus,
           updated_at: new Date().toISOString(),
         }).eq("email", profile.email);
+      }
+
+      if (profile.seat_number) {
+        try {
+          const { allocateSeat } = await import("@/lib/api");
+          await allocateSeat(profile.seat_number, profile.id, profile.full_name, profile.shift);
+        } catch (alErr) {
+          console.warn("Notice allocating seat on resume:", alErr);
+        }
       }
 
       setProfile((prev) => ({

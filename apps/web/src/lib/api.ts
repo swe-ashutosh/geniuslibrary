@@ -607,18 +607,9 @@ export async function markSeatVacantInSupabase(
           occupied_at: null,
         })
         .eq('current_student_id', studentId);
-
-      // Also ensure profiles table has seat_number set to null
-      await supabase
-        .from('profiles')
-        .update({
-          seat_number: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', studentId);
     }
 
-    // 2. Release by seat number variants in both seats and profiles tables
+    // 2. Release by seat number variants in seats table
     if (seatNumber) {
       const deskNum = parseDeskNum(seatNumber);
       const variants = Array.from(
@@ -640,14 +631,6 @@ export async function markSeatVacantInSupabase(
             current_student_id: null,
             current_student_name: null,
             occupied_at: null,
-          })
-          .eq('seat_number', v);
-
-        await supabase
-          .from('profiles')
-          .update({
-            seat_number: null,
-            updated_at: new Date().toISOString(),
           })
           .eq('seat_number', v);
       }
