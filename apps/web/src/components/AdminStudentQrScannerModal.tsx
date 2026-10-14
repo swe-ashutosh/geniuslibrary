@@ -263,7 +263,7 @@ export function AdminStudentQrScannerModal({
         ? window.location.origin 
         : "https://genius.librarywale.in";
 
-      const payload = `${baseOrigin}/attendance/?source=master_turnstile`;
+      const payload = `${baseOrigin}/attendance/?serial=53:D4:B6:CD:53:00:01&source=master_turnstile`;
 
       try {
         const url = await QRCode.toDataURL(payload, {

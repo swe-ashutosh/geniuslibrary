@@ -113,6 +113,8 @@ function playScanBeep() {
     // 1. Official Library Gate / Entrance QR
     // Matches "GENIUS_ATTENDANCE_MASTER", "master_turnstile", or official library entrance attendance URL
     const isLibraryGate =
+      text.includes("53:D4:B6:CD:53:00:01") ||
+      text.includes("53D4B6CD530001") ||
       text.includes("GENIUS_ATTENDANCE_MASTER") ||
       text.includes("master_turnstile") ||
       ((text.includes("geniuslibrary") || text.includes("librarywale.in") || (typeof window !== "undefined" && text.includes(window.location.host))) &&

@@ -2157,7 +2157,6 @@ export async function getAnnouncements(): Promise<Announcement[]> {
 // ══════════════════════════════════════════════════════════════════
 export const DEFAULT_AUTHORIZED_NFC_SERIALS = [
   "53:D4:B6:CD:53:00:01",
-  "53:98:3A:CD:53:00:01",
 ];
 
 export function normalizeNfcSerial(serial: string): string {
@@ -2869,8 +2868,12 @@ export async function updateStudentComplete(student: {
     updated_at: new Date().toISOString(),
   };
 
+  if (student.dob !== undefined) supaPayload.dob = student.dob;
   if (student.join_date) supaPayload.join_date = student.join_date;
   if (student.continue_date) supaPayload.continue_date = student.continue_date;
+  if (student.is_service_stopped !== undefined) supaPayload.is_service_stopped = student.is_service_stopped;
+  if (student.service_stopped_at !== undefined) supaPayload.service_stopped_at = student.service_stopped_at;
+  if (student.service_stop_reason !== undefined) supaPayload.service_stop_reason = student.service_stop_reason;
 
   // 2. Primary: Update Supabase profiles by id, student_code and email
   try {
@@ -2880,7 +2883,8 @@ export async function updateStudentComplete(student: {
     // Direct update to Supabase profiles
     const resId = await supabase.from('profiles').update(supaPayload).eq('id', student.id);
     if (resId.error) {
-      console.warn('[updateStudentComplete] Supabase update warning, retrying with core payload:', resId.error.message);
+      console.warn('[updateStudentComplete] Supabase primary update warning:', resId.error.message);
+      // Fallback: If dob or service columns do not exist yet in schema cache, update core columns with gender
       const corePayload: any = {
         full_name: student.full_name,
         email: student.email,
@@ -2898,6 +2902,9 @@ export async function updateStudentComplete(student: {
         gender: student.gender || 'Male',
         updated_at: new Date().toISOString(),
       };
+      if (student.join_date) corePayload.join_date = student.join_date;
+      if (student.continue_date) corePayload.continue_date = student.continue_date;
+
       await supabase.from('profiles').update(corePayload).eq('id', student.id);
       if (student.student_code) {
         await supabase.from('profiles').update(corePayload).eq('student_code', student.student_code);

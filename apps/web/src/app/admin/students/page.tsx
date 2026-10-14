@@ -435,8 +435,17 @@ function StudentsDirectoryContent() {
         updated_at: newRecord.created_at,
       };
 
-      // Direct save to Supabase profiles (with gender & join_date)
+      if (newStudentForm.dob) {
+        baseProfilePayload.dob = newStudentForm.dob;
+      }
+
+      // Direct save to Supabase profiles (with gender & join_date & dob)
       let { error: supaErr } = await supabase.from("profiles").upsert([baseProfilePayload]);
+      if (supaErr && supaErr.message?.includes("dob")) {
+        delete baseProfilePayload.dob;
+        const retryRes = await supabase.from("profiles").upsert([baseProfilePayload]);
+        supaErr = retryRes.error;
+      }
 
       if (supaErr) {
         throw new Error(supaErr.message);
@@ -1487,6 +1496,38 @@ function StudentsDirectoryContent() {
         address: editStudentForm.address,
       });
 
+      // Direct explicit Supabase profiles update for gender and core attributes
+      try {
+        const supabase = createClient();
+        const supaDirectPayload: any = {
+          gender: editStudentForm.gender || "Male",
+          full_name: editStudentForm.full_name,
+          phone: normalizedPhone,
+          parent_name: editStudentForm.parent_name || "",
+          parent_phone: normalizedParentPhone,
+          address: editStudentForm.address || "Madhupur, Sonbhadra, UP",
+          course: editStudentForm.course || "General",
+          shift: editStudentForm.shift || "Morning Shift",
+          membership_plan: editStudentForm.membership_plan || "General",
+          fee_status: editStudentForm.fee_status || "Due",
+          due_amount: editStudentForm.due_amount !== undefined ? Number(editStudentForm.due_amount) : 0,
+          join_date: finalJoin,
+          continue_date: finalContinue,
+          seat_number: seatNum,
+          updated_at: new Date().toISOString(),
+        };
+        if (editStudentForm.dob) supaDirectPayload.dob = editStudentForm.dob;
+
+        const { error: supaErr } = await supabase.from("profiles").update(supaDirectPayload).eq("id", editStudentForm.id);
+        if (supaErr && supaErr.message?.includes("dob")) {
+          // If dob column not added yet, retry without dob
+          delete supaDirectPayload.dob;
+          await supabase.from("profiles").update(supaDirectPayload).eq("id", editStudentForm.id);
+        }
+      } catch (directErr) {
+        console.warn("Direct Supabase update notice:", directErr);
+      }
+
       // 2. Also create an official fee record if marked Paid or Due
       try {
         if (editStudentForm.fee_status === "Paid") {
@@ -1522,6 +1563,8 @@ function StudentsDirectoryContent() {
         ...editStudentForm,
         phone: normalizedPhone,
         parent_phone: normalizedParentPhone,
+        gender: editStudentForm.gender || "Male",
+        dob: editStudentForm.dob || undefined,
         status: editStudentForm.status || "active",
         join_date: finalJoin,
         continue_date: finalContinue,

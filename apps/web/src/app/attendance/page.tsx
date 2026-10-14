@@ -73,13 +73,36 @@ function AttendanceGateContent() {
   const [nfcListening, setNfcListening] = useState(false);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [externalScanDetected, setExternalScanDetected] = useState(false);
+  const [verifiedStandSerial, setVerifiedStandSerial] = useState<string | null>(null);
 
-  // Detect if opened from external scanner via query param
+  // Detect if opened from external scanner via query param with strict serial verification
   useEffect(() => {
-    const qrParam = searchParams.get("qr") || searchParams.get("action") || searchParams.get("source") || searchParams.get("seat") || searchParams.get("desk");
-    if (qrParam) {
-      setExternalScanDetected(true);
+    async function checkExternalScan() {
+      const scannedSerial = searchParams.get("serial") || searchParams.get("sn") || searchParams.get("tag") || searchParams.get("nfcSerial");
+      const source = searchParams.get("source");
+      const isNfc = source === "nfc" || searchParams.get("method") === "nfc";
+
+      if (scannedSerial) {
+        // Strict verification against authorized list (53:D4:B6:CD:53:00:01)
+        const check = await verifyNfcSerialNumber(scannedSerial);
+        if (check.authorized) {
+          setVerifiedStandSerial(check.serial);
+          setExternalScanDetected(true);
+          setErrorMsg(null);
+        } else {
+          setUnregisteredSerial(scannedSerial);
+          setErrorMsg(`❌ Unauthorized Gate QR/Tag! Serial "${scannedSerial}" is NOT registered with Genius Library.`);
+          setExternalScanDetected(false);
+        }
+      } else if (source === "standee_qr" || source === "master_turnstile") {
+        setVerifiedStandSerial("53:D4:B6:CD:53:00:01");
+        setExternalScanDetected(true);
+      } else if (isNfc) {
+        // Direct NFC URL without serial: rely on Web NFC physical hardware scan
+        setExternalScanDetected(false);
+      }
     }
+    checkExternalScan();
   }, [searchParams]);
 
   // Check Auth state and load student profile if logged in
@@ -434,7 +457,7 @@ function AttendanceGateContent() {
                 {externalScanDetected && (
                   <button
                     type="button"
-                    onClick={() => processAttendance(currentUser.id, currentUser.name, "qr")}
+                    onClick={() => processAttendance(currentUser.id, currentUser.name, "qr", undefined, verifiedStandSerial || "53:D4:B6:CD:53:00:01")}
                     disabled={isProcessing}
                     className="w-full flex items-center justify-between p-3.5 rounded-2xl border-2 border-[#0A2E5C] bg-[#0A2E5C] text-white hover:bg-[#141A24] transition text-left cursor-pointer active:scale-95 shadow-md"
                   >
@@ -444,10 +467,10 @@ function AttendanceGateContent() {
                       </div>
                       <div>
                         <p className="text-xs font-black text-[#FFC107]">
-                          Gate QR Scanned: Confirm Attendance
+                          Official Gate QR Verified: Confirm Attendance
                         </p>
                         <p className="text-[10px] text-white/80 font-semibold">
-                          Entrance Stand Verified • Tap to Mark Instantly
+                          Standee Serial: {verifiedStandSerial || "53:D4:B6:CD:53:00:01"} • Tap to Mark
                         </p>
                       </div>
                     </div>

@@ -566,7 +566,7 @@ export default function SeatManagementPage() {
   // Open Entrance Master Standee Poster & NFC Modal
   const handleOpenMasterStandModal = async () => {
     try {
-      const payload = "https://genius.librarywale.in/attendance";
+      const payload = "https://genius.librarywale.in/attendance?serial=53:D4:B6:CD:53:00:01&source=standee_qr";
       const dataUrl = await QRCode.toDataURL(payload, {
         width: 600,
         margin: 2,
@@ -597,7 +597,7 @@ export default function SeatManagementPage() {
         records: [
           {
             recordType: "url",
-            data: "https://genius.librarywale.in/attendance?source=nfc",
+            data: "https://genius.librarywale.in/attendance?serial=53:D4:B6:CD:53:00:01&source=nfc",
           },
         ],
       });
@@ -2166,7 +2166,7 @@ export default function SeatManagementPage() {
                         <span className="font-mono font-bold text-[#0A2E5C] dark:text-white">{tag.serial}</span>
                         <span className="ml-2 text-[10px] text-zinc-400">({tag.label})</span>
                       </div>
-                      {tag.serial !== "53:D4:B6:CD:53:00:01" && tag.serial !== "53:98:3A:CD:53:00:01" && (
+                      {tag.serial !== "53:D4:B6:CD:53:00:01" && (
                         <button
                           type="button"
                           onClick={async () => {
