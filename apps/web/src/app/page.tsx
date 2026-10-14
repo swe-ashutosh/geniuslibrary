@@ -63,7 +63,7 @@ export const metadata: Metadata = {
     description: BRAND_CONFIG.description,
     images: [
       {
-        url: "/library-hall.jpg",
+        url: "/hero-banner.webp",
         width: 1200,
         height: 630,
         alt: BRAND_CONFIG.fullName + " Modern 24/7 Study Hall in " + BRAND_CONFIG.location,
@@ -388,7 +388,7 @@ export default function HomePage() {
                 </p>
                 <p>
                   Built specifically for candidates preparing for <strong>UPSC, State PCS, SSC CGL, Banking,
-                  NEET, JEE, and Board Examinations</strong>, our facility eliminates ambient distractions.
+                    NEET, JEE, and Board Examinations</strong>, our facility eliminates ambient distractions.
                   With high-speed dual optical fiber, ergonomic lumbar-support chairs, and individual desk
                   charging points, you can study comfortably for 10 to 12 hours every day.
                 </p>
@@ -633,13 +633,12 @@ export default function HomePage() {
                   return (
                     <div
                       key={shift.id}
-                      className={`relative flex flex-col justify-between rounded-2xl border p-6 transition-all ${
-                        isBest
+                      className={`relative flex flex-col justify-between rounded-2xl border p-6 transition-all ${isBest
                           ? "border-[#FFC107] bg-white shadow-xl shadow-[#FFC107]/10 dark:bg-[#0A2E5C] ring-2 ring-[#FFC107]"
                           : isLocker
-                          ? "border-purple-300 dark:border-purple-800 bg-white shadow-xs dark:bg-[#0A2E5C]"
-                          : "border-[#E5E7EB] bg-white shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] hover:shadow-md"
-                      }`}
+                            ? "border-purple-300 dark:border-purple-800 bg-white shadow-xs dark:bg-[#0A2E5C]"
+                            : "border-[#E5E7EB] bg-white shadow-xs dark:border-zinc-800 dark:bg-[#0A2E5C] hover:shadow-md"
+                        }`}
                     >
                       {isBest && (
                         <span className="absolute -top-3 right-6 rounded-full bg-[#0A2E5C] px-3 py-0.5 text-[11px] font-bold text-[#FFC107] border border-[#FFC107] shadow-xs">
@@ -700,11 +699,10 @@ export default function HomePage() {
                       <div className="mt-6">
                         <Link
                           href="/login/?role=student"
-                          className={`w-full inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold transition ${
-                            isBest
+                          className={`w-full inline-flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-xs font-bold transition ${isBest
                               ? "bg-[#0A2E5C] text-[#FFC107] border border-[#FFC107] hover:bg-[#141A24]"
                               : "bg-[#F8FAFC] text-[#0A2E5C] border border-[#E5E7EB] hover:bg-[#E5E7EB]/30 dark:bg-zinc-800 dark:text-zinc-200"
-                          }`}
+                            }`}
                         >
                           <span>Reserve {shift.name}</span>
                           <ChevronRight className="h-3.5 w-3.5" />
@@ -830,7 +828,7 @@ export default function HomePage() {
                   <span className="flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400">
                     <KeyRound className="h-3.5 w-3.5" /> {ex.status}
                   </span>
-                  <Link 
+                  <Link
                     href="/login/?role=student"
                     className="font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400"
                   >
