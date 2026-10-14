@@ -222,6 +222,12 @@ function LoginForm() {
       }
     }
 
+    if (BRAND_CONFIG.turnstile?.siteKey && !captchaToken) {
+      setErrorMsg("Please complete the Cloudflare security verification before signing in.");
+      setIsLoading(false);
+      return;
+    }
+
     const authOptions = captchaToken ? { captchaToken } : undefined;
     let { data, error } = await supabase.auth.signInWithPassword({
       email: authEmail,
@@ -244,6 +250,17 @@ function LoginForm() {
 
     if (error) {
       console.error("[Login] signInWithPassword error:", error);
+
+      // Check for captcha error
+      if (
+        error.message.toLowerCase().includes("captcha") ||
+        (error as any).code === "captcha_failed"
+      ) {
+        setErrorMsg("Security verification failed or expired. Please tick the Cloudflare checkbox again.");
+        setCaptchaToken(null);
+        setIsLoading(false);
+        return;
+      }
 
       // NEVER show student not-approved, suspended, or unregistered modals to admin!
       if (isMasterAdmin || isMasterAdminEmail(authEmail) || isMasterAdminEmail(targetVal)) {
