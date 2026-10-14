@@ -25,6 +25,7 @@ import {
   getAttendanceHistory,
   recordCheckOut, 
   getFees,
+  createFee,
   lookupStudent,
   Shift,
   AttendanceRecord,
@@ -629,9 +630,69 @@ export default function StudentDashboard() {
       const chosenContinueDate = studentContinueDateInput || new Date().toISOString().split("T")[0];
       const supabase = createClient();
 
+      // 1. Intelligent Check on Continue Date before creating any fee:
+      const { data: existingFees } = await supabase
+        .from("fees")
+        .select("id, amount, paid, date, created_at, type")
+        .or(`student_id.eq.${profile.id},student_email.eq.${profile.email}`)
+        .order("created_at", { ascending: false });
+
+      const latestFee = existingFees && existingFees.length > 0 ? existingFees[0] : null;
+      const latestDateStr = latestFee?.date || (latestFee?.created_at ? latestFee.created_at.split("T")[0] : null) || profile.join_date || ((profile as any).created_at ? (profile as any).created_at.split("T")[0] : null);
+
+      let shouldGenerateNewCycleFee = false;
+      const resumeD = new Date(chosenContinueDate);
+
+      if (latestDateStr) {
+        const lastCycleD = new Date(latestDateStr);
+        const daysDiff = Math.floor((resumeD.getTime() - lastCycleD.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Gap must be >= 25 days to constitute a new billing month
+        if (daysDiff >= 25) {
+          const alreadyBilledForResumeCycle = (existingFees || []).some(f => {
+            if (!f.date) return false;
+            const feeD = new Date(f.date);
+            return Math.abs(Math.floor((resumeD.getTime() - feeD.getTime()) / (1000 * 60 * 60 * 24))) < 20;
+          });
+          if (!alreadyBilledForResumeCycle) {
+            shouldGenerateNewCycleFee = true;
+          }
+        }
+      }
+
+      // Shift monthly fee calculation
+      const shiftName = (profile.shift || "").toLowerCase();
+      const monthlyFee = shiftName.includes("full") 
+        ? 1100 
+        : shiftName.includes("evening") 
+          ? 500 
+          : (profile.membership_plan === "Reserved Seat" ? 700 : 600);
+
+      let finalDueAmount = profile.due_amount || 0;
+      let finalFeeStatus = profile.fee_status || (finalDueAmount > 0 ? "Due" : "Paid");
+
+      if (shouldGenerateNewCycleFee && monthlyFee > 0) {
+        await createFee({
+          studentId: profile.id,
+          studentName: profile.full_name,
+          studentEmail: profile.email,
+          type: "Monthly Seat & Facility Fee",
+          amount: monthlyFee,
+          paid: false,
+          date: chosenContinueDate,
+          dueDate: new Date(new Date(chosenContinueDate).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+          description: `Resumed Monthly Fee (${chosenContinueDate}) for ${profile.shift || "Regular Plan"}`,
+        });
+
+        finalDueAmount = (profile.due_amount || 0) + monthlyFee;
+        finalFeeStatus = "Due";
+      }
+
       const { error: resumeErr } = await supabase.from("profiles").update({
         status: "active",
         continue_date: chosenContinueDate,
+        due_amount: finalDueAmount,
+        fee_status: finalFeeStatus,
         updated_at: new Date().toISOString(),
       }).eq("id", profile.id);
 
@@ -639,6 +700,8 @@ export default function StudentDashboard() {
         await supabase.from("profiles").update({
           status: "active",
           continue_date: chosenContinueDate,
+          due_amount: finalDueAmount,
+          fee_status: finalFeeStatus,
           updated_at: new Date().toISOString(),
         }).eq("email", profile.email);
       }
@@ -648,6 +711,8 @@ export default function StudentDashboard() {
         is_service_stopped: false,
         status: "active",
         continue_date: chosenContinueDate,
+        due_amount: finalDueAmount,
+        fee_status: finalFeeStatus as any,
       }));
 
       if (typeof window !== "undefined") {

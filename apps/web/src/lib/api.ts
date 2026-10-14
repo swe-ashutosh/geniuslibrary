@@ -1759,6 +1759,7 @@ export async function createFee(data: {
   remainingDue?: number;
   paid?: boolean;
   paidAt?: string;
+  date?: string;
   dueDate?: string;
   description?: string;
   receiptNo?: string;
@@ -1767,7 +1768,7 @@ export async function createFee(data: {
   const invNo = data.receiptNo || generateInvoiceNumber(fees.map(f => f.receiptNo));
   const feeId = data.id || `fee-${Date.now()}`;
   const isPaid = data.paid ?? false;
-  const nowIso = new Date().toISOString();
+  const nowIso = data.date ? new Date(data.date).toISOString() : new Date().toISOString();
 
   const newFee: FeeRecord = {
     id: feeId,

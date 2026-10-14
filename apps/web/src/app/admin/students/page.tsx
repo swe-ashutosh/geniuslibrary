@@ -451,6 +451,23 @@ function StudentsDirectoryContent() {
         throw new Error(supaErr.message);
       }
 
+      // Initial Admission / Registration Fee Invoice in fees table
+      try {
+        await createFee({
+          studentId: authUserId,
+          studentName: newRecord.full_name,
+          studentEmail: newRecord.email,
+          type: "Monthly Seat & Facility Fee",
+          amount: initialShiftFee,
+          paid: false,
+          date: newRecord.join_date || new Date().toISOString().split("T")[0],
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+          description: `Initial Admission Fee for ${newRecord.shift || "Regular Shift"}`,
+        });
+      } catch (fErr) {
+        console.warn("Initial admission fee generation notice:", fErr);
+      }
+
       setStudents((prev) => [newRecord, ...prev]);
       setShowAddStudentModal(false);
       setNewStudentForm({
@@ -1528,32 +1545,44 @@ function StudentsDirectoryContent() {
         console.warn("Direct Supabase update notice:", directErr);
       }
 
-      // 2. Also create an official fee record if marked Paid or Due
+      // 2. Profile Update: NEVER create new fee invoices on profile edits!
+      // Only sync status/amount to existing records if admin modified them.
       try {
+        const supabase = createClient();
         if (editStudentForm.fee_status === "Paid") {
-          await createFee({
-            studentId: editStudentForm.id,
-            studentName: editStudentForm.full_name,
-            studentEmail: editStudentForm.email,
-            type: "Monthly Seat Fee",
-            amount: (editStudentForm.shift || "").toLowerCase().includes("full") ? 1100 : ((editStudentForm.shift || "").toLowerCase().includes("evening") ? 500 : 600),
-            paid: true,
-            receiptNo: generateInvoiceNumber(),
-            description: `${editStudentForm.membership_plan || "General"} Plan - ${editStudentForm.shift || "Morning Shift"}`,
-          });
-          // Auto-clear any pending UPI payment claims
+          // If admin marked student as Paid in edit profile modal, mark existing unpaid fees as paid
+          await supabase
+            .from("fees")
+            .update({
+              paid: true,
+              paid_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("student_id", editStudentForm.id)
+            .eq("paid", false);
+
           await clearStudentUpiClaims(editStudentForm.id);
-          await clearStudentUpiClaims(editStudentForm.full_name);
-        } else if (editStudentForm.fee_status === "Due" && (editStudentForm.due_amount || 0) > 0) {
-          await createFee({
-            studentId: editStudentForm.id,
-            studentName: editStudentForm.full_name,
-            studentEmail: editStudentForm.email,
-            type: "Monthly Seat & Facility Fee",
-            amount: editStudentForm.due_amount || 600,
-            paid: false,
-            description: `Pending fee for ${editStudentForm.shift || "Regular Shift"}`,
-          });
+          if (editStudentForm.full_name) {
+            await clearStudentUpiClaims(editStudentForm.full_name);
+          }
+        } else if (editStudentForm.fee_status === "Due") {
+          // If admin edited the due amount in the form, update existing unpaid fee record amount instead of creating a duplicate row!
+          const { data: unpaidFees } = await supabase
+            .from("fees")
+            .select("id")
+            .eq("student_id", editStudentForm.id)
+            .eq("paid", false)
+            .order("created_at", { ascending: false });
+
+          if (unpaidFees && unpaidFees.length > 0) {
+            await supabase
+              .from("fees")
+              .update({
+                amount: editStudentForm.due_amount || 0,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", unpaidFees[0].id);
+          }
         }
       } catch (fErr) {
         console.warn("Fee record sync notice:", fErr);
@@ -1676,9 +1705,72 @@ function StudentsDirectoryContent() {
       const chosenContinueDate = continueDateInput || new Date().toISOString().split("T")[0];
       const supabase = createClient();
 
+      // 1. Intelligent Check on Continue Date before creating any fee:
+      // Fetch student's existing fee history from Supabase
+      const { data: existingFees } = await supabase
+        .from("fees")
+        .select("id, amount, paid, date, created_at, type")
+        .or(`student_id.eq.${resumeServiceStudent.id},student_email.eq.${resumeServiceStudent.email}`)
+        .order("created_at", { ascending: false });
+
+      // Determine latest cycle date (most recent invoice date or admission/continue date)
+      const latestFee = existingFees && existingFees.length > 0 ? existingFees[0] : null;
+      const latestDateStr = latestFee?.date || (latestFee?.created_at ? latestFee.created_at.split("T")[0] : null) || resumeServiceStudent.join_date || (resumeServiceStudent.created_at ? resumeServiceStudent.created_at.split("T")[0] : null);
+
+      let shouldGenerateNewCycleFee = false;
+      const resumeD = new Date(chosenContinueDate);
+
+      if (latestDateStr) {
+        const lastCycleD = new Date(latestDateStr);
+        const daysDiff = Math.floor((resumeD.getTime() - lastCycleD.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Only generate a new fee invoice if gap from previous billing cycle is >= 25 days (new monthly cycle)
+        // If paused & resumed within same cycle (< 25 days), do NOT create a new fee!
+        if (daysDiff >= 25) {
+          // Double check if already billed for this exact cycle/month
+          const alreadyBilledForResumeCycle = (existingFees || []).some(f => {
+            if (!f.date) return false;
+            const feeD = new Date(f.date);
+            return Math.abs(Math.floor((resumeD.getTime() - feeD.getTime()) / (1000 * 60 * 60 * 24))) < 20;
+          });
+          if (!alreadyBilledForResumeCycle) {
+            shouldGenerateNewCycleFee = true;
+          }
+        }
+      }
+
+      // Calculate monthly shift fee for student's plan
+      const allShifts = [...GENERAL_SHIFT_OPTIONS, ...RESERVED_SHIFT_OPTIONS, ...TRIAL_PASS_OPTIONS];
+      const matchedShift = allShifts.find(s => s.name === resumeServiceStudent.shift || s.id === resumeServiceStudent.shift);
+      const monthlyFee = matchedShift?.price ?? (resumeServiceStudent.membership_plan === "Reserved Seat" ? 700 : 500);
+
+      let finalDueAmount = resumeServiceStudent.due_amount || 0;
+      let finalFeeStatus = resumeServiceStudent.fee_status || (finalDueAmount > 0 ? "Due" : "Paid");
+
+      if (shouldGenerateNewCycleFee && monthlyFee > 0) {
+        // Create 1 new cycle fee invoice on continue date
+        await createFee({
+          studentId: resumeServiceStudent.id,
+          studentName: resumeServiceStudent.full_name,
+          studentEmail: resumeServiceStudent.email,
+          type: "Monthly Seat & Facility Fee",
+          amount: monthlyFee,
+          paid: false,
+          date: chosenContinueDate,
+          dueDate: new Date(new Date(chosenContinueDate).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+          description: `Resumed Monthly Fee (${chosenContinueDate}) for ${resumeServiceStudent.shift || "Regular Plan"}`,
+        });
+
+        // Add to existing due amount (preserving past unpaid months without duplicating)
+        finalDueAmount = (resumeServiceStudent.due_amount || 0) + monthlyFee;
+        finalFeeStatus = "Due";
+      }
+
       const { error: resErr } = await supabase.from("profiles").update({
         status: "active",
         continue_date: chosenContinueDate,
+        due_amount: finalDueAmount,
+        fee_status: finalFeeStatus,
         updated_at: new Date().toISOString(),
       }).eq("id", resumeServiceStudent.id);
 
@@ -1686,6 +1778,8 @@ function StudentsDirectoryContent() {
         await supabase.from("profiles").update({
           status: "active",
           continue_date: chosenContinueDate,
+          due_amount: finalDueAmount,
+          fee_status: finalFeeStatus,
           updated_at: new Date().toISOString(),
         }).eq("email", resumeServiceStudent.email);
       }
@@ -1695,6 +1789,8 @@ function StudentsDirectoryContent() {
         is_service_stopped: false,
         status: "active",
         continue_date: chosenContinueDate,
+        due_amount: finalDueAmount,
+        fee_status: finalFeeStatus as any,
       };
 
       setStudents((prev) => prev.map((s) => (s.id === resumeServiceStudent.id ? updatedRecord : s)));
