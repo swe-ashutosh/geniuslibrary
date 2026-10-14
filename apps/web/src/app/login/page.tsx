@@ -380,12 +380,24 @@ function LoginForm() {
     // Student: Strictly verify active status BEFORE navigating to /student/
     let studentProfile: any = null;
     try {
-      const { data: pData } = await supabase
+      const byId = await supabase
         .from("profiles")
         .select("id, status, phone, full_name, role")
         .eq("id", user.id)
         .maybeSingle();
-      studentProfile = pData;
+      if (byId.data) {
+        studentProfile = byId.data;
+      } else if (user.email) {
+        const byEmail = await supabase
+          .from("profiles")
+          .select("id, status, phone, full_name, role")
+          .eq("email", user.email)
+          .maybeSingle();
+        if (byEmail.data) {
+          studentProfile = byEmail.data;
+          void supabase.from("profiles").update({ id: user.id }).eq("email", user.email);
+        }
+      }
     } catch {}
 
     if (studentProfile?.role === "admin") {

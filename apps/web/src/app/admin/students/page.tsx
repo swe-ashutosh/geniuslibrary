@@ -935,16 +935,24 @@ function StudentsDirectoryContent() {
           continue_date: finalContinueDate,
           updated_at: new Date().toISOString(),
         };
+        const targetStudent = students.find((s) => s.id === studentId);
         const { error: updErr } = await supabase.from("profiles").update(updatePayload).eq("id", studentId);
+        if (targetStudent?.email) {
+          await supabase.from("profiles").update(updatePayload).eq("email", targetStudent.email);
+        }
         if (updErr) {
-          await supabase.from("profiles").update({
+          const fallbackUpd = {
             status: "active",
             student_code: finalStudentCode,
             membership_plan: studentPlan,
             seat_number: seatNumber || null,
             created_at: `${finalContinueDate}T00:00:00Z`,
             updated_at: new Date().toISOString(),
-          }).eq("id", studentId);
+          };
+          await supabase.from("profiles").update(fallbackUpd).eq("id", studentId);
+          if (targetStudent?.email) {
+            await supabase.from("profiles").update(fallbackUpd).eq("email", targetStudent.email);
+          }
         }
       } catch (err) {
         console.warn("Supabase profile update notice:", err);

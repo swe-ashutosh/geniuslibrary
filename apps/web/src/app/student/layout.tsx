@@ -734,11 +734,27 @@ export default function StudentLayout({
 
       // 1. Fetch live student profile directly from Supabase (Single source of truth)
       try {
-        const { data: profile } = await supabase
+        let profile: any = null;
+        const byId = await supabase
           .from("profiles")
-          .select("full_name, email, phone, parent_name, parent_phone, address, avatar_url, shift, course, membership_plan, status, role, student_code, seat_number, due_amount, created_at")
+          .select("*")
           .eq("id", activeUser.id)
           .maybeSingle();
+
+        if (byId.data) {
+          profile = byId.data;
+        } else if (activeUser.email) {
+          const byEmail = await supabase
+            .from("profiles")
+            .select("*")
+            .eq("email", activeUser.email)
+            .maybeSingle();
+          if (byEmail.data) {
+            profile = byEmail.data;
+            // Sync auth user id to profile for permanent resolution
+            void supabase.from("profiles").update({ id: activeUser.id }).eq("email", activeUser.email);
+          }
+        }
 
         // Verification check 1: Student profile exists
         if (!profile) {

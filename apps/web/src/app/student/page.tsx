@@ -166,7 +166,7 @@ export default function StudentDashboard() {
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [assignedSeat, setAssignedSeat] = useState<string>("");
@@ -254,15 +254,35 @@ export default function StudentDashboard() {
       const primaryId = authUser.id;
 
       // 1. PRIMARY LIVE DATA: Supabase profiles (Single Source of Truth)
-      // 2. LIVE OPERATIONAL: shifts, attendance, fees, holidays
-      const [profileRes, shiftsData, attPrimary, feesPrimary, holidaysData] = await Promise.all([
-        Promise.resolve(
-          supabase
+      // Resilient: Query by authUser.id first, fallback to email if id lookup returns null
+      let profileData: any = null;
+      try {
+        const byId = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", authUser.id)
+          .maybeSingle();
+
+        if (byId.data) {
+          profileData = byId.data;
+        } else if (authUser.email) {
+          const byEmail = await supabase
             .from("profiles")
-            .select("full_name, email, phone, parent_name, parent_phone, address, course, shift, membership_plan, avatar_url, status, role, fee_status, due_amount, student_code, seat_number, created_at, dob, gender, join_date, continue_date, is_service_stopped, service_stopped_at")
-            .eq("id", authUser.id)
-            .maybeSingle()
-        ).then(r => r.data).catch(() => null),
+            .select("*")
+            .eq("email", authUser.email)
+            .maybeSingle();
+          if (byEmail.data) {
+            profileData = byEmail.data;
+            // Sync auth user id to profile for permanent lookup
+            void supabase.from("profiles").update({ id: authUser.id }).eq("email", authUser.email);
+          }
+        }
+      } catch (pErr) {
+        console.warn("Supabase profile fetch notice:", pErr);
+      }
+
+      // 2. LIVE OPERATIONAL: shifts, attendance, fees, holidays
+      const [shiftsData, attPrimary, feesPrimary, holidaysData] = await Promise.all([
         getShifts().catch(() => []),
         getAttendance(primaryId).catch(() => []),
         getFees(primaryId).catch(() => []),
@@ -271,16 +291,14 @@ export default function StudentDashboard() {
 
       setHolidays(holidaysData || []);
 
-      const profileData = profileRes;
-
       const isAdmin = isMasterAdminEmail(authUser.email) || meta.role === "admin";
-      const hasValidPhone = Boolean(profileData?.phone && String(profileData.phone).trim().length > 0);
       const isServiceStopped = Boolean(profileData?.is_service_stopped);
+      // Strictly respect database profile approval: if DB status is "active", student is active!
       const determinedStatus = isAdmin
         ? "active"
         : isServiceStopped
         ? "suspended"
-        : (hasValidPhone && profileData?.status === "active" ? "active" : (profileData?.status || "pending"));
+        : (profileData?.status === "active" ? "active" : (profileData?.status || "pending"));
 
       // Student face photo: prioritize custom uploaded photo from localStorage/profile over Google OAuth picture
       const cachedAvatar = typeof window !== "undefined" ? localStorage.getItem(`genius_custom_avatar_${authUser.id}`) : null;
@@ -701,20 +719,21 @@ export default function StudentDashboard() {
 
   // Gate check
   useEffect(() => {
-    if (isInitialLoading) return;
+    if (isInitialLoading || isRefreshing) return;
+    if (!profile.id) return;
     if (profile.status !== "active" && profile.role !== "admin") {
       const supabase = createClient();
       supabase.auth.signOut().then(() => {
-        if (!profile.id || !profile.phone) {
-          router.replace(`/login?error=not_registered&email=${encodeURIComponent(profile.email || "")}`);
-        } else if (profile.status === "suspended") {
+        if (profile.status === "suspended") {
           router.replace(`/login?error=suspended&email=${encodeURIComponent(profile.email || "")}`);
-        } else {
+        } else if (profile.status === "pending") {
           router.replace(`/login?error=pending_approval&email=${encodeURIComponent(profile.email || "")}`);
+        } else {
+          router.replace(`/login?error=not_registered&email=${encodeURIComponent(profile.email || "")}`);
         }
       });
     }
-  }, [profile.status, profile.role, profile.id, profile.phone, profile.email, isInitialLoading, router]);
+  }, [profile.status, profile.role, profile.id, profile.email, isInitialLoading, isRefreshing, router]);
 
   // Today Date String
   const todayDateFormatted = new Date().toLocaleDateString("en-IN", {
