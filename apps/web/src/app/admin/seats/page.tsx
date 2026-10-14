@@ -142,10 +142,11 @@ export default function SeatManagementPage() {
       }
     } catch (e) {}
 
+    const supabase = createClient();
+
     const fetchLiveSeats = async () => {
       try {
         const todayStr = new Date().toISOString().split("T")[0];
-        const supabase = createClient();
 
         // 1. Fetch Students, Fees, Attendance, and Seats Table in parallel
         const [enrolledStudents, feesList, attendanceList, seatsDbRes] = await Promise.all([
@@ -392,14 +393,49 @@ export default function SeatManagementPage() {
       );
     };
 
+    let bc: BroadcastChannel | null = null;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const triggerDebouncedFetch = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        if (document.visibilityState === "visible") {
+          fetchLiveSeats();
+        }
+      }, 1000);
+    };
+
     if (typeof window !== "undefined") {
       window.addEventListener("student_profile_updated", handleProfileUpdated);
+      window.addEventListener("library_seat_update", fetchLiveSeats);
+      window.addEventListener("student_service_status_changed", fetchLiveSeats);
+      window.addEventListener("seats_updated", fetchLiveSeats);
+
+      if (typeof BroadcastChannel !== "undefined") {
+        try {
+          bc = new BroadcastChannel("genius_library_sync");
+          bc.onmessage = () => {
+            fetchLiveSeats();
+          };
+        } catch {}
+      }
     }
+
+    const realtimeChannel = supabase
+      .channel("admin_seats_live_sync")
+      .on("postgres_changes", { event: "*", schema: "public", table: "seats" }, triggerDebouncedFetch)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, triggerDebouncedFetch)
+      .subscribe();
 
     return () => {
       if (typeof window !== "undefined") {
         window.removeEventListener("student_profile_updated", handleProfileUpdated);
+        window.removeEventListener("library_seat_update", fetchLiveSeats);
+        window.removeEventListener("student_service_status_changed", fetchLiveSeats);
+        window.removeEventListener("seats_updated", fetchLiveSeats);
       }
+      if (bc) bc.close();
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(realtimeChannel);
     };
   }, []);
 

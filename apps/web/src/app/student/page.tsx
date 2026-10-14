@@ -292,7 +292,7 @@ export default function StudentDashboard() {
       setHolidays(holidaysData || []);
 
       const isAdmin = isMasterAdminEmail(authUser.email) || meta.role === "admin";
-      const isServiceStopped = Boolean(profileData?.is_service_stopped);
+      const isServiceStopped = profileData?.status === "suspended" || Boolean(profileData?.is_service_stopped);
       // Strictly respect database profile approval: if DB status is "active", student is active!
       const determinedStatus = isAdmin
         ? "active"
@@ -556,26 +556,57 @@ export default function StudentDashboard() {
     setIsUpdatingServiceStatus(true);
     try {
       const supabase = createClient();
-      await supabase.from("profiles").update({
-        is_service_stopped: true,
+      const currentSeatNumber = profile.seat_number;
+
+      // 1. Update Supabase profiles: strictly only existing columns (status, seat_number, updated_at)
+      const { error: profileErr } = await supabase.from("profiles").update({
         status: "suspended",
-        service_stopped_at: new Date().toISOString(),
+        seat_number: null,
         updated_at: new Date().toISOString(),
       }).eq("id", profile.id);
 
-      if (profile.seat_number) {
-        try {
-          const { markSeatVacantInSupabase } = await import("@/lib/api");
-          await markSeatVacantInSupabase(supabase, profile.id, profile.seat_number);
-        } catch {}
+      if (profileErr) {
+        console.error("Error setting profile to suspended:", profileErr);
+        if (profile.email) {
+          await supabase.from("profiles").update({
+            status: "suspended",
+            seat_number: null,
+            updated_at: new Date().toISOString(),
+          }).eq("email", profile.email);
+        }
       }
 
+      // 2. Clear seat occupancy in seats table
+      try {
+        const { markSeatVacantInSupabase } = await import("@/lib/api");
+        await markSeatVacantInSupabase(supabase, profile.id, currentSeatNumber);
+      } catch (seatErr) {
+        console.warn("Notice clearing seat:", seatErr);
+      }
+
+      // 3. Update React local profile state
       setProfile((prev) => ({
         ...prev,
         is_service_stopped: true,
         status: "suspended",
+        seat_number: null,
         service_stopped_at: new Date().toISOString(),
       }));
+
+      // 4. Instant multi-tab and window broadcast
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("library_seat_update"));
+        window.dispatchEvent(new CustomEvent("student_service_status_changed", {
+          detail: { id: profile.id, status: "suspended", seat_number: null }
+        }));
+        if (typeof BroadcastChannel !== "undefined") {
+          try {
+            const bc = new BroadcastChannel("genius_library_sync");
+            bc.postMessage({ type: "STUDENT_SERVICE_PAUSED", studentId: profile.id, seatNumber: currentSeatNumber });
+            bc.close();
+          } catch {}
+        }
+      }
 
       setFeedbackMsg({
         type: "success",
@@ -595,12 +626,20 @@ export default function StudentDashboard() {
     try {
       const chosenContinueDate = studentContinueDateInput || new Date().toISOString().split("T")[0];
       const supabase = createClient();
-      await supabase.from("profiles").update({
-        is_service_stopped: false,
+
+      const { error: resumeErr } = await supabase.from("profiles").update({
         status: "active",
         continue_date: chosenContinueDate,
         updated_at: new Date().toISOString(),
       }).eq("id", profile.id);
+
+      if (resumeErr && profile.email) {
+        await supabase.from("profiles").update({
+          status: "active",
+          continue_date: chosenContinueDate,
+          updated_at: new Date().toISOString(),
+        }).eq("email", profile.email);
+      }
 
       setProfile((prev) => ({
         ...prev,
@@ -608,6 +647,20 @@ export default function StudentDashboard() {
         status: "active",
         continue_date: chosenContinueDate,
       }));
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("library_seat_update"));
+        window.dispatchEvent(new CustomEvent("student_service_status_changed", {
+          detail: { id: profile.id, status: "active", continue_date: chosenContinueDate }
+        }));
+        if (typeof BroadcastChannel !== "undefined") {
+          try {
+            const bc = new BroadcastChannel("genius_library_sync");
+            bc.postMessage({ type: "STUDENT_SERVICE_RESUMED", studentId: profile.id, continueDate: chosenContinueDate });
+            bc.close();
+          } catch {}
+        }
+      }
 
       setShowResumeModal(false);
       setFeedbackMsg({
@@ -1006,7 +1059,7 @@ export default function StudentDashboard() {
                 {todayDateFormatted}
               </span>
 
-              {profile.is_service_stopped ? (
+              {profile.is_service_stopped || profile.status === "suspended" ? (
                 <div className="flex items-center gap-2">
                   <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-950/60 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />

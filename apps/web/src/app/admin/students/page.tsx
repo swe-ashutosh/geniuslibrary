@@ -1251,12 +1251,12 @@ function StudentsDirectoryContent() {
             course: p.course || "General",
             shift: p.shift || "Morning Shift",
             membership_plan: resolvedPlan,
-            seat_number: resolvedPlan === "Reserved Seat" ? (p.seat_number || undefined) : undefined,
+            seat_number: p.seat_number || undefined,
             dob: p.dob || undefined,
             gender: p.gender || undefined,
             join_date: p.join_date || (p.created_at ? p.created_at.split('T')[0] : undefined),
             continue_date: p.continue_date || undefined,
-            is_service_stopped: Boolean(p.is_service_stopped),
+            is_service_stopped: (p.status as any) === "suspended" || Boolean(p.is_service_stopped),
             service_stopped_at: p.service_stopped_at || undefined,
             service_stop_reason: p.service_stop_reason || undefined,
             status: (p.status as any) || "pending",
@@ -1357,7 +1357,53 @@ function StudentsDirectoryContent() {
     };
     window.addEventListener("student_profile_updated", handleProfileUpdated);
 
-    // Supabase Realtime — DEBOUNCED to prevent API flood on signup
+    // Instant sync when student pauses/resumes service or seat is vacated
+    const handleServiceStatusChanged = (event: any) => {
+      const detail = event.detail;
+      if (detail?.id) {
+        setStudents((prev) =>
+          prev.map((s) => {
+            if (s.id === detail.id) {
+              const isSuspended = detail.status === "suspended";
+              return {
+                ...s,
+                status: detail.status,
+                is_service_stopped: isSuspended,
+                seat_number: isSuspended ? undefined : (detail.seat_number ?? s.seat_number),
+                continue_date: detail.continue_date || s.continue_date,
+              };
+            }
+            return s;
+          })
+        );
+      }
+      fetchStudents();
+    };
+    window.addEventListener("student_service_status_changed", handleServiceStatusChanged);
+
+    const handleSeatUpdate = () => {
+      fetchStudents();
+    };
+    window.addEventListener("library_seat_update", handleSeatUpdate);
+
+    // Cross-tab broadcast sync
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        bc = new BroadcastChannel("genius_library_sync");
+        bc.onmessage = (msg) => {
+          if (
+            msg.data?.type === "STUDENT_SERVICE_PAUSED" ||
+            msg.data?.type === "STUDENT_SERVICE_RESUMED" ||
+            msg.data?.type === "SEAT_VACATED"
+          ) {
+            fetchStudents();
+          }
+        };
+      } catch {}
+    }
+
+    // Supabase Realtime for live updates across devices
     const supabase = createClient();
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     const channel = supabase
@@ -1371,13 +1417,16 @@ function StudentsDirectoryContent() {
             if (document.visibilityState === "visible") {
               fetchStudents();
             }
-          }, 8000);
+          }, 1500);
         }
       )
       .subscribe();
 
     return () => {
       window.removeEventListener("student_profile_updated", handleProfileUpdated);
+      window.removeEventListener("student_service_status_changed", handleServiceStatusChanged);
+      window.removeEventListener("library_seat_update", handleSeatUpdate);
+      if (bc) bc.close();
       if (debounceTimer) clearTimeout(debounceTimer);
       supabase.removeChannel(channel);
     };
@@ -1510,25 +1559,40 @@ function StudentsDirectoryContent() {
     setActionLoadingId(student.id);
     try {
       const supabase = createClient();
-      await supabase.from("profiles").update({
-        is_service_stopped: true,
+      const currentSeatNumber = student.seat_number;
+
+      // 1. Update Supabase profiles: strictly only existing columns (status, seat_number, updated_at)
+      const { error: profileErr } = await supabase.from("profiles").update({
         status: "suspended",
-        service_stopped_at: new Date().toISOString(),
+        seat_number: null,
         updated_at: new Date().toISOString(),
       }).eq("id", student.id);
 
-      // If they had an occupied seat, mark it vacant
-      if (student.seat_number) {
-        try {
-          const { markSeatVacantInSupabase } = await import("@/lib/api");
-          await markSeatVacantInSupabase(supabase, student.id, student.seat_number);
-        } catch {}
+      if (profileErr) {
+        console.error("Error setting status suspended:", profileErr);
+        if (student.email) {
+          await supabase.from("profiles").update({
+            status: "suspended",
+            seat_number: null,
+            updated_at: new Date().toISOString(),
+          }).eq("email", student.email);
+        }
       }
 
+      // 2. If they had an occupied seat, mark it vacant in seats table
+      try {
+        const { markSeatVacantInSupabase } = await import("@/lib/api");
+        await markSeatVacantInSupabase(supabase, student.id, currentSeatNumber);
+      } catch (seatErr) {
+        console.warn("Notice releasing seat:", seatErr);
+      }
+
+      // 3. Update React local state
       const updatedRecord: StudentProfile = {
         ...student,
         is_service_stopped: true,
         status: "suspended",
+        seat_number: undefined,
         service_stopped_at: new Date().toISOString(),
       };
 
@@ -1536,9 +1600,25 @@ function StudentsDirectoryContent() {
       if (selectedStudentForView?.id === student.id) {
         setSelectedStudentForView(updatedRecord);
       }
+
+      // 4. Instant multi-tab and window broadcast
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("library_seat_update"));
+        window.dispatchEvent(new CustomEvent("student_service_status_changed", {
+          detail: { id: student.id, status: "suspended", seat_number: null }
+        }));
+        if (typeof BroadcastChannel !== "undefined") {
+          try {
+            const bc = new BroadcastChannel("genius_library_sync");
+            bc.postMessage({ type: "STUDENT_SERVICE_PAUSED", studentId: student.id, seatNumber: currentSeatNumber });
+            bc.close();
+          } catch {}
+        }
+      }
+
       setAlertMsg({
         type: "success",
-        text: `✓ Library service paused for "${student.full_name}". Membership is now On Hold.`,
+        text: `✓ Library service paused for "${student.full_name}". Membership is now On Hold and desk is released.`,
       });
     } catch (err: any) {
       setAlertMsg({ type: "error", text: `Failed to pause service: ${err.message}` });
@@ -1560,12 +1640,20 @@ function StudentsDirectoryContent() {
     try {
       const chosenContinueDate = continueDateInput || new Date().toISOString().split("T")[0];
       const supabase = createClient();
-      await supabase.from("profiles").update({
-        is_service_stopped: false,
+
+      const { error: resErr } = await supabase.from("profiles").update({
         status: "active",
         continue_date: chosenContinueDate,
         updated_at: new Date().toISOString(),
       }).eq("id", resumeServiceStudent.id);
+
+      if (resErr && resumeServiceStudent.email) {
+        await supabase.from("profiles").update({
+          status: "active",
+          continue_date: chosenContinueDate,
+          updated_at: new Date().toISOString(),
+        }).eq("email", resumeServiceStudent.email);
+      }
 
       const updatedRecord: StudentProfile = {
         ...resumeServiceStudent,
@@ -1578,6 +1666,22 @@ function StudentsDirectoryContent() {
       if (selectedStudentForView?.id === resumeServiceStudent.id) {
         setSelectedStudentForView(updatedRecord);
       }
+
+      // Broadcast sync
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("library_seat_update"));
+        window.dispatchEvent(new CustomEvent("student_service_status_changed", {
+          detail: { id: resumeServiceStudent.id, status: "active", continue_date: chosenContinueDate }
+        }));
+        if (typeof BroadcastChannel !== "undefined") {
+          try {
+            const bc = new BroadcastChannel("genius_library_sync");
+            bc.postMessage({ type: "STUDENT_SERVICE_RESUMED", studentId: resumeServiceStudent.id, continueDate: chosenContinueDate });
+            bc.close();
+          } catch {}
+        }
+      }
+
       setAlertMsg({
         type: "success",
         text: `✓ Service resumed for "${resumeServiceStudent.full_name}"! Continue Date set to ${chosenContinueDate}. Billing starts from this date, saving inactive gap.`,

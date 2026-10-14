@@ -595,7 +595,7 @@ export async function markSeatVacantInSupabase(
   seatNumber?: string | null
 ) {
   try {
-    // 1. Release any seat held by this student ID
+    // 1. Release any seat held by this student ID in seats table
     if (studentId) {
       await supabase
         .from('seats')
@@ -606,9 +606,18 @@ export async function markSeatVacantInSupabase(
           occupied_at: null,
         })
         .eq('current_student_id', studentId);
+
+      // Also ensure profiles table has seat_number set to null
+      await supabase
+        .from('profiles')
+        .update({
+          seat_number: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', studentId);
     }
 
-    // 2. Release by seat number variants
+    // 2. Release by seat number variants in both seats and profiles tables
     if (seatNumber) {
       const deskNum = parseDeskNum(seatNumber);
       const variants = Array.from(
@@ -632,6 +641,14 @@ export async function markSeatVacantInSupabase(
             occupied_at: null,
           })
           .eq('seat_number', v);
+
+        await supabase
+          .from('profiles')
+          .update({
+            seat_number: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('seat_number', v);
       }
 
       if (deskNum) {
@@ -644,6 +661,19 @@ export async function markSeatVacantInSupabase(
             occupied_at: null,
           })
           .eq('id', `seat-${deskNum}`);
+      }
+    }
+
+    // 3. Instant cross-tab & window notification
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('seats_updated'));
+      window.dispatchEvent(new CustomEvent('library_seat_update', { detail: { studentId, seatNumber } }));
+      if (typeof BroadcastChannel !== 'undefined') {
+        try {
+          const bc = new BroadcastChannel('genius_library_sync');
+          bc.postMessage({ type: 'SEAT_VACATED', studentId, seatNumber });
+          bc.close();
+        } catch {}
       }
     }
   } catch (err) {
