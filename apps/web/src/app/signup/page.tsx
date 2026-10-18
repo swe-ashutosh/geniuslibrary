@@ -42,7 +42,6 @@ import { triggerNativeNotification } from "@/lib/pushNotify";
 import { uploadAvatar, fileToDataUrl, compressAndResizeImage } from "@/lib/supabase/storage";
 import { checkSignupRateLimit, recordSignupAttempt } from "@/lib/security";
 import { TurnstileCaptcha } from "@/components/TurnstileCaptcha";
-import { BRAND_CONFIG } from "@/lib/config";
 
 type MembershipPlan = "General" | "Reserved Seat" | "Trial Pass";
 
@@ -538,12 +537,6 @@ function SignupForm() {
 
     if (!studentId) {
       // 2. Perform Supabase Auth Sign Up for brand new applicant
-      if (BRAND_CONFIG.turnstile?.siteKey && !captchaToken) {
-        setIsLoading(false);
-        setErrorMsg("Please complete the Cloudflare security verification before signing up.");
-        return;
-      }
-
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: cleanEmail,
         password: password,
@@ -571,12 +564,6 @@ function SignupForm() {
       if (authError) {
         setIsLoading(false);
         if (
-          authError.message.toLowerCase().includes("captcha") ||
-          (authError as any).code === "captcha_failed"
-        ) {
-          setErrorMsg("Security verification failed or expired. Please tick the Cloudflare checkbox again.");
-          setCaptchaToken(null);
-        } else if (
           authError.message.toLowerCase().includes("already registered") ||
           authError.message.toLowerCase().includes("user already exists") ||
           authError.message.toLowerCase().includes("unique")
